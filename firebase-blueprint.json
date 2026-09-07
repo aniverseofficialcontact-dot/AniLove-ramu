@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with viewing preferences, account information, and statistics",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Display name of user" },
+        "email": { "type": "string", "description": "Email address" },
+        "photoURL": { "type": "string", "description": "Avatar URL" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" },
+        "preferences": {
+          "type": "object",
+          "description": "User playback and UI preferences"
+        },
+        "stats": {
+          "type": "object",
+          "description": "Quiz scores and watch stats"
+        }
+      },
+      "required": ["userId", "email"]
+    },
+    "LibraryItem": {
+      "title": "Anime Library Entry",
+      "description": "Saved anime in user library with status, score, and progress",
+      "type": "object",
+      "properties": {
+        "animeId": { "type": "number", "description": "AniList Anime ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "title": { "type": "string", "description": "Anime Title" },
+        "coverImage": { "type": "string", "description": "Poster URL" },
+        "status": { "type": "string", "description": "Watching/Completed/Plan to Watch/Dropped" },
+        "progress": { "type": "number", "description": "Episodes watched" },
+        "score": { "type": "number", "description": "User rating 1-10" },
+        "updatedAt": { "type": "string", "description": "Timestamp" }
+      },
+      "required": ["animeId", "userId", "status"]
+    },
+    "QuizScore": {
+      "title": "Quiz Score Record",
+      "description": "Record of user quiz attempt and results",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Score record ID" },
+        "userId": { "type": "string", "description": "User ID" },
+        "animeId": { "type": "number", "description": "Anime ID" },
+        "animeTitle": { "type": "string", "description": "Anime Title" },
+        "score": { "type": "number", "description": "Correct answers out of 5" },
+        "total": { "type": "number", "description": "Total questions (5)" },
+        "timestamp": { "type": "string", "description": "When quiz was taken" }
+      },
+      "required": ["userId", "animeId", "score"]
+    },
+    "WatchHistoryItem": {
+      "title": "Watch History Entry",
+      "description": "User cross-device watch progress and episode resume timestamps",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Composite key animeId_episodeNumber" },
+        "userId": { "type": "string", "description": "Owner User ID" },
+        "animeId": { "type": "number", "description": "AniList Anime ID" },
+        "episodeNumber": { "type": "number", "description": "Episode Number" },
+        "episodeTitle": { "type": "string", "description": "Episode Title" },
+        "seasonTitle": { "type": "string", "description": "Season Title" },
+        "currentTime": { "type": "number", "description": "Current playback seconds" },
+        "duration": { "type": "number", "description": "Episode total seconds" },
+        "lastWatchedAt": { "type": "number", "description": "Timestamp ms" },
+        "completed": { "type": "boolean", "description": "Whether episode finished" },
+        "thumbnailStyle": { "type": "string", "description": "Appearance style" }
+      },
+      "required": ["userId", "animeId", "episodeNumber", "currentTime"]
+    },
+    "GameData": {
+      "title": "Arcade & Game State",
+      "description": "User arcade coins balance, collected cards vault, card awakenings, and daily challenges",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "coins": { "type": "number", "description": "Arcade coins" },
+        "characterCards": { "type": "array", "description": "Collected gacha cards" },
+        "cardAwakenings": { "type": "object", "description": "Card awakening levels" },
+        "activeCompanion": { "type": "object", "description": "Selected chibi companion" },
+        "dailyGameRecords": { "type": "object", "description": "Daily game completion tracker" },
+        "updatedAt": { "type": "string", "description": "Last updated" }
+      },
+      "required": ["userId", "coins"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user document storing profile and settings"
+    },
+    "/users/{userId}/library/{animeId}": {
+      "schema": "LibraryItem",
+      "description": "User private anime watchlist and progress"
+    },
+    "/users/{userId}/watchHistory/{historyId}": {
+      "schema": "WatchHistoryItem",
+      "description": "User cross-device watch history and resume timestamps"
+    },
+    "/users/{userId}/quizScores/{scoreId}": {
+      "schema": "QuizScore",
+      "description": "User anime trivia quiz score history"
+    },
+    "/users/{userId}/gameData/{docId}": {
+      "schema": "GameData",
+      "description": "User arcade coins, character gacha cards, and daily mini-game progression"
+    }
+  }
+}
