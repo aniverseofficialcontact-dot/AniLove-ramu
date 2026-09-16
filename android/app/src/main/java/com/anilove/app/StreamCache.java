@@ -32,30 +32,11 @@ public class StreamCache {
 
     public static String get(int anilistId, int episodeNumber, String audio) {
         String key = makeKey(anilistId, episodeNumber, audio);
-        String url = videoCache.get(key);
-        if (url == null) {
-            // Check fallback without matching audio tag
-            String prefix = anilistId + "_ep" + episodeNumber + "_";
-            for (Map.Entry<String, String> entry : videoCache.entrySet()) {
-                if (entry.getKey().startsWith(prefix)) {
-                    return entry.getValue();
-                }
-            }
-        }
-        return url;
+        return videoCache.get(key);
     }
 
     public static String getSubtitle(int anilistId, int episodeNumber, String audio) {
         String key = makeKey(anilistId, episodeNumber, audio);
-        String url = subCache.get(key);
-        if (url == null) {
-            String prefix = anilistId + "_ep" + episodeNumber + "_";
-            for (Map.Entry<String, String> entry : subCache.entrySet()) {
-                if (entry.getKey().startsWith(prefix)) {
-                    return entry.getValue();
-                }
-            }
-        }
-        return url;
+        return subCache.get(key);
     }
 }

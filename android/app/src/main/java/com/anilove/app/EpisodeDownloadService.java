@@ -285,12 +285,14 @@ public class EpisodeDownloadService extends Service {
                     item.subtitleUrl = serverResult[1];
                 }
                 boolean isDirect = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".mp4")
-                        || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u");
-                if (isDirect && !resolvedUrl.contains("zephyrix")) {
-                    item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u");
+                        || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u")
+                        || resolvedUrl.contains(".txt") || resolvedUrl.contains("nexabloom.top")
+                        || resolvedUrl.contains("zephyrix.org/cdn/hls");
+                if (isDirect) {
+                    item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u") || resolvedUrl.contains(".txt") || resolvedUrl.contains("nexabloom") || resolvedUrl.contains("zephyrix");
                     Log.i(TAG, "Direct stream from backend — skipping VideoSniffer");
                 } else {
-                    // Embed URL or IP-locked stream — run VideoSniffer on device
+                    // Embed URL — run VideoSniffer on device
                     Log.i(TAG, "Running on-device VideoSniffer for resolved embed: " + item.streamUrl);
                     sniffVideoStream(item);
                 }
@@ -464,8 +466,8 @@ public class EpisodeDownloadService extends Service {
                 String embedUrl = resObj.optString("embedUrl", "");
                 String subtitleUrl = resObj.optString("subtitleUrl", "");
 
-                // Check if directStreamUrl is usable directly (skip Zephyrix because of IP locks)
-                if (directStreamUrl != null && !directStreamUrl.isEmpty() && !directStreamUrl.contains("zephyrix")) {
+                // Check if directStreamUrl is usable directly
+                if (directStreamUrl != null && !directStreamUrl.isEmpty()) {
                     return new String[]{ directStreamUrl, subtitleUrl };
                 }
 
