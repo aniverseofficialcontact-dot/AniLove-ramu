@@ -14,7 +14,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -125,7 +124,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private Handler updateHandler = new Handler(Looper.getMainLooper());
     private Handler hideHandler = new Handler(Looper.getMainLooper());
     private GestureDetector gestureDetector;
-    private long lastScrubberTime = 0;
 
     private BroadcastReceiver pipReceiver = new BroadcastReceiver() {
         @Override
@@ -180,20 +178,16 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        // INSTANT EPISODE / SERVER / LANGUAGE SWITCH: No sliding animations
         overridePendingTransition(0, 0);
         setIntent(intent);
+        updateMetadataFromIntent(intent);
         applyWindowSettings(intent);
-
-        String title = intent.getStringExtra("title");
-        // Title update handled via webview overlay or custom UI
-
 
         String url = intent.getStringExtra("url");
         if (url != null && !url.isEmpty()) {
             runOnUiThread(() -> {
                 if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
-                setupHybridEngine(url); // Load with full headers/settings
+                setupHybridEngine(url);
             });
         }
     }
@@ -204,17 +198,39 @@ public class NativePlayerActivity extends AppCompatActivity {
         return Math.min(dm.widthPixels, dm.heightPixels);
     }
 
+    private void updateMetadataFromIntent(Intent intent) {
+        if (intent == null) return;
+        String animeTitle = intent.getStringExtra("animeTitle");
+        if (animeTitle == null || animeTitle.isEmpty()) {
+            animeTitle = intent.getStringExtra("title");
+        }
+        if (animeTitle == null || animeTitle.isEmpty()) {
+            animeTitle = "Now Playing";
+        }
+        int epNum = intent.getIntExtra("episodeNumber", 1);
+        String audio = intent.getStringExtra("audio");
+        if (audio == null || audio.isEmpty()) audio = "DUB";
+
+        TextView videoTitleView = findViewById(R.id.video_title);
+        TextView portraitAnimeTitle = findViewById(R.id.portrait_anime_title);
+        TextView portraitEpSubtitle = findViewById(R.id.portrait_episode_subtitle);
+        TextView portraitBadgeAudio = findViewById(R.id.portrait_badge_audio);
+
+        if (videoTitleView != null) videoTitleView.setText(animeTitle + " - EP " + epNum);
+        if (portraitAnimeTitle != null) portraitAnimeTitle.setText(animeTitle);
+        if (portraitEpSubtitle != null) portraitEpSubtitle.setText("Episode " + epNum);
+        if (portraitBadgeAudio != null) portraitBadgeAudio.setText(audio.toUpperCase());
+    }
+
     private void applyWindowSettings(Intent intent) {
         isFullscreenMode = intent.getBooleanExtra("startFullscreen", false);
-        Log.e("AniLove", ">>> applyWindowSettings CALLED | isFullscreen: " + isFullscreenMode);
+        Log.i("AniLove", "applyWindowSettings | isFullscreen: " + isFullscreenMode);
         
         final Window window = getWindow();
         final View decorView = window.getDecorView();
         
-        // Ensure we aren't inheriting global fullscreen from theme
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         
-        // SHOW NOTIFICATION BAR ON PLAYER PAGE ON BLACK BACKGROUND
         decorView.post(() -> {
             WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, decorView);
             if (controller != null) {
@@ -223,11 +239,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     controller.hide(WindowInsetsCompat.Type.navigationBars());
                     window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
                 } else {
-                    // Show status bar in portrait
                     controller.show(WindowInsetsCompat.Type.statusBars());
-                    // White icons for status bar
                     controller.setAppearanceLightStatusBars(false);
-                    // Force black background for status bar
                     window.setStatusBarColor(Color.BLACK);
                     controller.show(WindowInsetsCompat.Type.navigationBars());
                     window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -237,56 +250,44 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         WindowManager.LayoutParams params = window.getAttributes();
-        
-        // Force drawing in the notch area
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
 
+        params.width = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.MATCH_PARENT;
+        params.gravity = Gravity.FILL;
+        params.x = 0;
+        params.y = 0;
+        
+        // Solid black background for entire Activity window
+        window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
+
         if (isFullscreenMode) {
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-            
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
-            params.gravity = Gravity.FILL;
-            params.y = 0;
-            params.x = 0;
-            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-            params.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
-            params.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-            
-            // Solid black background for fullscreen
-            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
 
             decorView.post(() -> {
-                View webViewView = findViewById(R.id.player_webview);
-                View exoPlayerLayout = findViewById(R.id.player_exoplayer);
+                View videoRoot = findViewById(R.id.video_root_container);
+                View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
-                View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
                 View topBar = findViewById(R.id.top_bar);
                 
-                if (webViewView != null) {
-                    ViewGroup.LayoutParams lp = webViewView.getLayoutParams();
+                if (videoRoot != null) {
+                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
                     lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                    webViewView.setLayoutParams(lp);
+                    videoRoot.setLayoutParams(lp);
                 }
-                if (exoPlayerLayout != null) {
-                    ViewGroup.LayoutParams lp = exoPlayerLayout.getLayoutParams();
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                    exoPlayerLayout.setLayoutParams(lp);
-                }
+                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
-                if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
                 if (topBar != null) {
-                    topBar.setVisibility(View.VISIBLE);
                     topBar.setPadding(topBar.getPaddingLeft(), 0, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
         } else {
-            // PORTRAIT: Full phone width, height = 16:9 of physical phone width + status bar + gap
+            // PORTRAIT: Top 16:9 player + status bar gap, and bottom half black page
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             
@@ -297,71 +298,28 @@ public class NativePlayerActivity extends AppCompatActivity {
             int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
             if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
             
-            final int gap = (int) (20 * getResources().getDisplayMetrics().density); 
-            
-            params.width = WindowManager.LayoutParams.MATCH_PARENT; 
-            // Total height = status bar + video + gap
-            params.height = videoHeight + statusBarHeight + gap; 
-            params.gravity = Gravity.TOP;
-            params.x = 0;
-            params.y = 0; 
-
-            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-            params.flags |= WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
-            params.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
-            params.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
-
-            // In portrait, keep content background transparent so underlying web app shows through
-            findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
-            
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
-                View webViewView = findViewById(R.id.player_webview);
-                View exoPlayerLayout = findViewById(R.id.player_exoplayer);
+                View videoRoot = findViewById(R.id.video_root_container);
+                View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
-                View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
                 View topBar = findViewById(R.id.top_bar);
                 
-                if (webViewView != null) {
-                    ViewGroup.LayoutParams lp = webViewView.getLayoutParams();
+                if (videoRoot != null) {
+                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = videoHeight;
-                    webViewView.setLayoutParams(lp);
+                    lp.height = videoHeight + finalStatusBarHeight;
+                    videoRoot.setLayoutParams(lp);
                 }
-                if (exoPlayerLayout != null) {
-                    ViewGroup.LayoutParams lp = exoPlayerLayout.getLayoutParams();
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = videoHeight;
-                    exoPlayerLayout.setLayoutParams(lp);
-                }
+                if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
                     lp.height = finalStatusBarHeight;
                     statusBarFiller.setLayoutParams(lp);
                 }
-                if (bottomGapFiller != null) {
-                    bottomGapFiller.setVisibility(View.VISIBLE);
-                    ViewGroup.LayoutParams lp = bottomGapFiller.getLayoutParams();
-                    lp.height = gap;
-                    bottomGapFiller.setLayoutParams(lp);
-                }
-                // SHIFT TOP BAR DOWN so toggles don't mix with status bar
                 if (topBar != null) {
                     topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
-                }
-
-                // --- VISIBILITY FIX: HIDE BOX ONLY ---
-                if (MainActivity.instance != null && MainActivity.instance.getBridge() != null) {
-                    WebView mainWebView = MainActivity.instance.getBridge().getWebView();
-                    if (mainWebView != null) {
-                        String js = "(function() { " +
-                                   "  var css = '.native-player-placeholder, #native-player-active, [class*=\"PlayerPlaceholder\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; height: 0 !important; pointer-events: none !important; }'; " +
-                                   "  var style = document.getElementById('anilove-web-fix-style') || document.createElement('style'); " +
-                                   "  style.id = 'anilove-web-fix-style'; style.innerHTML = css; document.head.appendChild(style); " +
-                                   "})();";
-                        mainWebView.evaluateJavascript(js, null);
-                    }
                 }
             });
         }
@@ -372,7 +330,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void toggleFullscreenInPlace() {
         new Handler(Looper.getMainLooper()).post(() -> {
             isFullscreenMode = !isFullscreenMode;
-            Log.e("AniLove", ">>> toggleFullscreenInPlace CALLED | now: " + isFullscreenMode);
+            Log.i("AniLove", "toggleFullscreenInPlace | now: " + isFullscreenMode);
             
             Intent intent = getIntent();
             intent.putExtra("startFullscreen", isFullscreenMode);
@@ -386,22 +344,18 @@ public class NativePlayerActivity extends AppCompatActivity {
         currentInstance = this;
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         
-        // Let the layout flow into the status bar area
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
         
-        // Ensure activity background doesn't black out the screen
-        getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        getWindow().setFormat(PixelFormat.TRANSLUCENT);
-        
-        applyWindowSettings(getIntent());
         setContentView(R.layout.activity_native_player);
+        updateMetadataFromIntent(getIntent());
+        applyWindowSettings(getIntent());
         
-        // INSTANT APPEARANCE: Disable the slide-up animation
         overridePendingTransition(0, 0);
 
         // UI Initialization
         playerWebView = findViewById(R.id.player_webview);
-        playerWebView.setBackgroundColor(Color.BLACK); // Solid background for video rendering
+        playerWebView.setBackgroundColor(Color.BLACK);
 
         exoPlayerView = findViewById(R.id.player_exoplayer);
         
@@ -425,11 +379,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         indicatorForward = findViewById(R.id.indicator_forward);
         
         findViewById(R.id.close_button).setOnClickListener(v -> {
-            // INSTANT SIGNAL: Tell web app to navigate right now
             if (navigationListener != null) {
                 navigationListener.onBack();
             }
-            // INSTANT KILL: Close the player immediately with no animations
             finish();
             overridePendingTransition(0, 0);
         });
@@ -443,12 +395,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             btnPip.setOnClickListener(v -> enterPipMode());
         }
         
-        // Fullscreen Toggle logic
         View btnFullscreenToggle = findViewById(R.id.btn_fullscreen_toggle);
         if (btnFullscreenToggle != null) {
-            btnFullscreenToggle.setOnClickListener(v -> {
-                toggleFullscreenInPlace();
-            });
+            btnFullscreenToggle.setOnClickListener(v -> toggleFullscreenInPlace());
         }
         
         findViewById(R.id.btn_rewind).setOnClickListener(v -> seekVideo(-10));
@@ -456,16 +405,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         btnNextEpisode.setOnClickListener(v -> navigateEpisode(true));
         btnPrevEpisode.setOnClickListener(v -> navigateEpisode(false));
 
-        // Visibility based on intent (Default to VISIBLE so they are always functional and available)
-        boolean hasNext = getIntent().getBooleanExtra("hasNext", true);
-        boolean hasPrev = getIntent().getBooleanExtra("hasPrev", true);
         btnNextEpisode.setVisibility(View.VISIBLE);
         btnPrevEpisode.setVisibility(View.VISIBLE);
 
         View btnSkipIntro = findViewById(R.id.btn_skip_intro);
         btnSkipIntro.setOnClickListener(v -> seekVideo(85));
         
-        // Restore original look
         GradientDrawable border = new GradientDrawable();
         border.setColor(Color.TRANSPARENT);
         border.setStroke(2, Color.parseColor("#666666")); 
@@ -503,27 +448,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                 isDragging = true; 
                 stopHideTimer(); 
                 scrubberContainer.setVisibility(View.VISIBLE);
-                // Force Mirror Creation with high-priority listeners
-                playerWebView.evaluateJavascript("(function() { " +
-                        "  var v = document.querySelector('video'); " +
-                        "  if(!v){for(var i=0;i<window.frames.length;i++){try{var fv=window.frames[i].document.querySelector('video');if(fv)v=fv;}catch(e){}}} " +
-                        "  if(v && !window.aniloveMirror) { " +
-                        "    var m = document.createElement('video'); " +
-                        "    m.src = v.src; window.aniloveMirror = m; m.muted = true; m.style.display = 'none'; " +
-                        "    m.crossOrigin = 'anonymous'; m.preload = 'auto'; " +
-                        "    m.onseeked = function() { " +
-                        "      var canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90; " +
-                        "      var ctx = canvas.getContext('2d'); try { ctx.drawImage(m, 0, 0, 160, 90); " +
-                        "      var data = canvas.toDataURL('image/jpeg', 0.5); if(data.length > 500) AndroidScrubber.processFrame(data); } catch(e) {} " +
-                        "    }; " +
-                        "    document.body.appendChild(m); m.load(); " +
-                        "  } " +
-                        "})();", null);
             }
             @Override public void onStopTrackingTouch(SeekBar s) { 
                 isDragging = false; 
                 if (isOfflineMode && exoPlayer != null) {
-                    exoPlayer.seekTo(s.getProgress() * 1000L);
+                    long duration = exoPlayer.getDuration();
+                    if (duration > 0 && duration != androidx.media3.common.C.TIME_UNSET) {
+                        long targetMs = s.getProgress() * 1000L;
+                        exoPlayer.seekTo(Math.min(targetMs, duration));
+                    }
                 } else {
                     sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
                 }
@@ -550,6 +483,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void setupExoPlayer(String videoPath, String subPath) {
         if (videoPath == null || videoPath.isEmpty()) return;
         try {
+            if (exoPlayer != null) {
+                exoPlayer.stop();
+                exoPlayer.release();
+                exoPlayer = null;
+            }
             exoPlayer = new ExoPlayer.Builder(this).build();
             exoPlayerView.setPlayer(exoPlayer);
 
@@ -597,6 +535,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                         btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
                     }
                 }
+
+                @Override
+                public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    Log.e("AniLove", "ExoPlayer error: " + error.getMessage());
+                    loadingProgress.setVisibility(View.GONE);
+                }
             });
         } catch (Exception e) {
             Log.e("AniLove", "Error setting up ExoPlayer", e);
@@ -604,7 +548,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     public void updatePosition(int y) {
-        // Ignored to keep player fixed at the top (Sticky Header behavior)
+        // Ignored to keep player fixed in activity
     }
 
     private void updateScrubberPosition(SeekBar s, int progress) {
@@ -616,14 +560,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (finalX < 10) finalX = 10;
         if (finalX > screenWidth - scrubberContainer.getWidth() - 10) finalX = screenWidth - scrubberContainer.getWidth() - 10;
         scrubberContainer.setX(finalX);
-        
-        scrubberContainer.setTranslationY(40); // Move closer to seekbar
+        scrubberContainer.setTranslationY(40);
     }
 
     public class ScrubberInterface {
         @JavascriptInterface
         public void processFrame(String base64) {
-            // Thumbnails disabled, no-op
         }
     }
 
@@ -674,9 +616,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         unregisterReceiver(pipReceiver);
                     } catch (Exception e) {}
                     
-                    // Register with EXPORTED flag so system can send remote actions
                     ContextCompat.registerReceiver(this, pipReceiver, new IntentFilter("ACTION_PIP_CONTROL"), ContextCompat.RECEIVER_EXPORTED);
-                    
                     updatePipParams();
 
                     PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder()
@@ -706,9 +646,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         final View statusBarFiller = findViewById(R.id.status_bar_filler);
         final View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
-        final View webViewView = findViewById(R.id.player_webview);
+        final View portraitBottom = findViewById(R.id.portrait_bottom_container);
+        final View videoRoot = findViewById(R.id.video_root_container);
         final View topBar = findViewById(R.id.top_bar);
-        final View decorView = getWindow().getDecorView();
 
         if (isInPictureInPictureMode) {
             hideControlsQuietly();
@@ -716,64 +656,21 @@ public class NativePlayerActivity extends AppCompatActivity {
             
             if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
             if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
+            if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
             if (topBar != null) topBar.setVisibility(View.GONE);
-            
-            // PiP MODE: Activity window must fill the PiP window bounds
-            Window window = getWindow();
-            WindowManager.LayoutParams params = window.getAttributes();
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
-            params.gravity = Gravity.FILL;
-            window.setAttributes(params);
-
-            if (webViewView instanceof WebView) {
-                final WebView webView = (WebView) webViewView;
-                ViewGroup.LayoutParams lp = webView.getLayoutParams();
+            if (videoRoot != null) {
+                ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
                 lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
                 lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                webView.setLayoutParams(lp);
-                webView.requestLayout();
-
-                // CSS to scale video and iframe to fit PiP window
-                webView.evaluateJavascript("(function() { " +
-                        "  function setupPip(win) { try { " +
-                        "    var st = win.document.getElementById('anilove-pip-style') || win.document.createElement('style'); " +
-                        "    st.id = 'anilove-pip-style'; " +
-                        "    st.innerHTML = 'html, body { width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: black !important; } ' + " +
-                        "      'video, .jw-video, .vjs-tech { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; z-index: 2147483647 !important; } ' + " +
-                        "      'iframe { width: 100% !important; height: 100% !important; border: 0 !important; margin: 0 !important; padding: 0 !important; }'; " +
-                        "    if(!st.parentNode) win.document.head.appendChild(st); " +
-                        "  } catch(e){} " +
-                        "  for(var i=0; i<win.frames.length; i++) { try { setupPip(win.frames[i]); } catch(e){} } } " +
-                        "  setupPip(window); " +
-                        "})();", null);
+                videoRoot.setLayoutParams(lp);
             }
         } else {
-            // BACK TO PORTRAIT/LANDSCAPE: Restore fillers and constraints
             findViewById(R.id.touch_wall).setVisibility(View.VISIBLE);
-            
             try {
                 unregisterReceiver(pipReceiver);
             } catch (Exception e) {}
 
-            // Remove PiP styles from all frames
-            playerWebView.evaluateJavascript("(function() { " +
-                    "  function cleanPip(win) { try { " +
-                    "    var st = win.document.getElementById('anilove-pip-style'); " +
-                    "    if(st && st.parentNode) st.parentNode.removeChild(st); " +
-                    "  } catch(e){} " +
-                    "  for(var i=0; i<win.frames.length; i++) { try { cleanPip(win.frames[i]); } catch(e){} } } " +
-                    "  cleanPip(window); " +
-                    "})();", null);
-
-            // Re-apply window settings immediately and after Android exit animation completes
             applyWindowSettings(getIntent());
-            decorView.postDelayed(() -> {
-                applyWindowSettings(getIntent());
-                applyCaptionStyle();
-                injectAdEraser();
-            }, 250);
-
             if (isControlsVisible) toggleControlsVisibility();
         }
     }
@@ -784,10 +681,21 @@ public class NativePlayerActivity extends AppCompatActivity {
         dialog.setContentView(view);
         BottomSheetBehavior behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); switchBoost.setChecked(isVolumeBoosted); switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
+        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
+        switchBoost.setChecked(isVolumeBoosted); 
+        switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
         TextView[] speedBtns = { view.findViewById(R.id.speed_btn_05), view.findViewById(R.id.speed_btn_1), view.findViewById(R.id.speed_btn_125), view.findViewById(R.id.speed_btn_15), view.findViewById(R.id.speed_btn_2) };
         float[] speeds = {0.5f, 1.0f, 1.25f, 1.5f, 2.0f};
-        for (int i = 0; i < speedBtns.length; i++) { final float speedVal = speeds[i]; final TextView btn = speedBtns[i]; highlightButton(btn, currentPermanentSpeed == speedVal); btn.setOnClickListener(v -> { currentPermanentSpeed = speedVal; setPlaybackSpeed(speedVal, true); for (TextView b : speedBtns) highlightButton(b, b == btn); }); }
+        for (int i = 0; i < speedBtns.length; i++) { 
+            final float speedVal = speeds[i]; 
+            final TextView btn = speedBtns[i]; 
+            highlightButton(btn, currentPermanentSpeed == speedVal); 
+            btn.setOnClickListener(v -> { 
+                currentPermanentSpeed = speedVal; 
+                setPlaybackSpeed(speedVal, true); 
+                for (TextView b : speedBtns) highlightButton(b, b == btn); 
+            }); 
+        }
         dialog.show();
     }
 
@@ -871,8 +779,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         int bgColorInt = bgColor.equalsIgnoreCase("Gray") ? Color.GRAY : (bgColor.equalsIgnoreCase("Navy") ? Color.BLUE : (bgColor.equalsIgnoreCase("White") ? Color.WHITE : Color.BLACK));
         preview.setBackgroundColor(Color.argb((int)(opacityVal * 255), Color.red(bgColorInt), Color.green(bgColorInt), Color.blue(bgColorInt)));
 
-        // --- THE ABSOLUTE FINAL RESET FIX ---
-        // We force standard system fonts and disable all extra paint flags
         if (captionWeight.equalsIgnoreCase("Bold")) {
             preview.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
             preview.getPaint().setFakeBoldText(true);
@@ -882,7 +788,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             preview.getPaint().setStrokeWidth(0);
         }
 
-        // --- Edge Style ---
         if (edgeStyle.equalsIgnoreCase("Outline")) {
             preview.setShadowLayer(2f, 0, 0, Color.BLACK); 
         } else if (edgeStyle.equalsIgnoreCase("Shadow")) {
@@ -904,7 +809,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         preview.setLayoutParams(lp);
         
-        // Force a total View reset
         preview.setEnabled(false);
         preview.setEnabled(true);
         preview.requestLayout();
@@ -914,10 +818,22 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void setupCaptionGroup(LinearLayout container, String[] options, String currentVal, OnOptionSelected listener) {
         container.removeAllViews();
         for (String opt : options) {
-            TextView btn = new TextView(this); btn.setText(opt); btn.setPadding(32, 16, 32, 16); btn.setTextSize(13); btn.setGravity(Gravity.CENTER); btn.setMinWidth(130);
+            TextView btn = new TextView(this); 
+            btn.setText(opt); 
+            btn.setPadding(32, 16, 32, 16); 
+            btn.setTextSize(13); 
+            btn.setGravity(Gravity.CENTER); 
+            btn.setMinWidth(130);
             highlightButton(btn, opt.equalsIgnoreCase(currentVal));
-            btn.setOnClickListener(v -> { listener.onSelected(opt); for (int i = 0; i < container.getChildCount(); i++) { highlightButton((TextView) container.getChildAt(i), ((TextView) container.getChildAt(i)).getText().toString().equalsIgnoreCase(opt)); } });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.setMargins(0, 0, 16, 0); container.addView(btn, lp);
+            btn.setOnClickListener(v -> { 
+                listener.onSelected(opt); 
+                for (int i = 0; i < container.getChildCount(); i++) { 
+                    highlightButton((TextView) container.getChildAt(i), ((TextView) container.getChildAt(i)).getText().toString().equalsIgnoreCase(opt)); 
+                } 
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); 
+            lp.setMargins(0, 0, 16, 0); 
+            container.addView(btn, lp);
         }
     }
 
@@ -925,6 +841,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String getHexForColorName(String name) { if (name.equalsIgnoreCase("Yellow")) return "#FFFF00"; if (name.equalsIgnoreCase("Cyan")) return "#00FFFF"; if (name.equalsIgnoreCase("Green")) return "#00FF00"; if (name.equalsIgnoreCase("Magenta")) return "#FF00FF"; return "#FFFFFF"; }
     private void highlightButton(TextView btn, boolean selected) { GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(18f); if (selected) { shape.setColor(Color.WHITE); btn.setTextColor(Color.BLACK); } else { shape.setColor(Color.parseColor("#222222")); btn.setTextColor(Color.WHITE); } btn.setBackground(shape); }
     private void applyVolumeBoost(boolean boosted) { playerWebView.evaluateJavascript("(function() { if (!window.audioCtx) { try { window.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); var v = document.querySelector('video'); if (v) { window.source = window.audioCtx.createMediaElementSource(v); window.gainNode = window.audioCtx.createGain(); window.source.connect(window.gainNode); window.gainNode.connect(window.audioCtx.destination); } } catch(e) {} } if (window.gainNode) window.gainNode.gain.value = " + (boosted ? "2.5" : "1.0") + "; })();", null); }
+    
     private void toggleWebSubtitles(boolean enabled) { 
         isSubtitlesEnabled = enabled;
         String display = enabled ? "block" : "none";
@@ -950,7 +867,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        if (!" + enabled + ") { " +
                 "          v.textTracks[i].mode = 'disabled'; " +
                 "        } else { " +
-                // If custom DOM captions exist, set to 'hidden' so browser doesn't draw DUPLICATE native cues!
                 "          v.textTracks[i].mode = hasCustom ? 'hidden' : 'showing'; " +
                 "        } " +
                 "      } " +
@@ -986,12 +902,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "top: " + bottomMargin + "% !important; bottom: auto !important;" :
                 "bottom: " + bottomMargin + "% !important; top: auto !important;";
 
-        // Containers: Positioned at Top or Bottom with bottomMargin%, centered, full width, transparent container background
         String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
                 ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
                 ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions";
 
-        // Text elements: Color, font size, font weight, text-shadow, and background color pill
         String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
                 ".artplayer-subtitles p, .artplayer-subtitles span, " +
                 ".art-subtitles p, .art-subtitles span, " +
@@ -1023,7 +937,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  background-color: transparent !important; " +
                 "  " + posCss + " " +
                 "} " +
-                // General text styling for all containers and children
                 containerSelectors + ", " + containerSelectors + " * { " +
                 "  color: " + captionColorHex + " !important; " +
                 "  -webkit-text-fill-color: " + captionColorHex + " !important; " +
@@ -1031,7 +944,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
                 "  text-shadow: " + shadowCss + " !important; " +
                 "} " +
-                // Background color & opacity on actual text elements
                 textSelectors + " { " +
                 "  background: " + bgRgba + " !important; " +
                 "  background-color: " + bgRgba + " !important; " +
@@ -1046,7 +958,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    style.id = 'anilove-caption-style'; " +
                 "    style.innerHTML = '" + css + "'; " +
                 "    if(!style.parentNode) win.document.head.appendChild(style); " +
-                // Handle cases where .art-subtitle has direct text without child tags
                 "    var artSubs = win.document.querySelectorAll('.art-subtitle'); " +
                 "    artSubs.forEach(function(sub) { " +
                 "      sub.style.setProperty('position', 'absolute', 'important'); " +
@@ -1059,7 +970,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        sub.style.setProperty('border-radius', '" + (opacityVal > 0 ? "4px" : "0") + "', 'important'); " +
                 "      } " +
                 "    }); " +
-                // Check video textTracks - if custom captions exist, ensure native tracks remain hidden
                 "    var v = win.document.querySelector('video'); " +
                 "    if (v && v.textTracks) { " +
                 "      var hasCustom = win.document.querySelector('.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .vjs-text-track-display'); " +
@@ -1076,6 +986,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerWebView.evaluateJavascript(js, null);
     }
+
     private void setPlaybackSpeed(float speed, boolean permanent) { 
         if (!permanent) { 
             is2xSpeed = true; 
@@ -1138,19 +1049,35 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void seekVideo(int delta) {
         if (isOfflineMode && exoPlayer != null) {
-            long newPos = Math.max(0, Math.min(exoPlayer.getDuration(), exoPlayer.getCurrentPosition() + (delta * 1000L)));
+            long duration = exoPlayer.getDuration();
+            if (duration <= 0 || duration == androidx.media3.common.C.TIME_UNSET) {
+                duration = Long.MAX_VALUE;
+            }
+            long current = exoPlayer.getCurrentPosition();
+            if (current == androidx.media3.common.C.TIME_UNSET) {
+                current = 0;
+            }
+            long newPos = Math.max(0, Math.min(duration, current + (delta * 1000L)));
             exoPlayer.seekTo(newPos);
             return;
         }
         sendVideoCommand("v.currentTime += " + delta + ";");
     }
 
-    private void startUpdateLoop() { updateHandler.postDelayed(new Runnable() { @Override public void run() { syncPlayerState(); updateHandler.postDelayed(this, 1000); } }, 1000); }
+    private void startUpdateLoop() { 
+        updateHandler.postDelayed(new Runnable() { 
+            @Override public void run() { 
+                syncPlayerState(); 
+                updateHandler.postDelayed(this, 1000); 
+            } 
+        }, 1000); 
+    }
+
     private void syncPlayerState() {
         if (isOfflineMode && exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
-            if (durationMs > 0) {
+            if (durationMs > 0 && durationMs != androidx.media3.common.C.TIME_UNSET) {
                 int current = (int) (currentMs / 1000);
                 int duration = (int) (durationMs / 1000);
                 textCurrentTime.setText(formatTime(current));
@@ -1176,34 +1103,47 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "var v = null; " +
                 "penetrate(window, function(w) { try { if(!v) v = w.document.querySelector('video'); }catch(e){} }); " +
                 "return v ? [v.currentTime, v.duration, v.paused] : null; " +
-                "})();", value -> { if (value != null && !value.equals("null") && !value.isEmpty()) { try { String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); if (parts.length >= 3) { 
-                    double current = Double.parseDouble(parts[0]); 
-                    double duration = Double.parseDouble(parts[1]); 
-                    boolean pausedInWeb = Boolean.parseBoolean(parts[2]); 
-                    
-                    // Always update the left/right time tellers (keep playback sync)
-                    textCurrentTime.setText(formatTime((int) current)); 
-                    textTotalTime.setText(formatTime((int) duration)); 
-                    
-                    int timeLeft = (int) (duration - current);
-                    textTimeLeft.setText("-" + formatTime(timeLeft));
+                "})();", value -> { 
+            if (value != null && !value.equals("null") && !value.isEmpty()) { 
+                try { 
+                    String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); 
+                    if (parts.length >= 3) { 
+                        double current = Double.parseDouble(parts[0]); 
+                        double duration = Double.parseDouble(parts[1]); 
+                        boolean pausedInWeb = Boolean.parseBoolean(parts[2]); 
+                        
+                        textCurrentTime.setText(formatTime((int) current)); 
+                        textTotalTime.setText(formatTime((int) duration)); 
+                        
+                        int timeLeft = (int) (duration - current);
+                        textTimeLeft.setText("-" + formatTime(timeLeft));
 
-                    if (!isDragging) { 
-                        seekBar.setMax((int) duration); 
-                        seekBar.setProgress((int) current); 
+                        if (!isDragging && duration > 0) { 
+                            seekBar.setMax((int) duration); 
+                            seekBar.setProgress((int) current); 
+                        } 
+                        if (pausedInWeb == isPlaying) { 
+                            isPlaying = !pausedInWeb; 
+                            btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play); 
+                            if (isPlaying) resetHideTimer(); else stopHideTimer(); 
+                        } 
                     } 
-                    if (pausedInWeb == isPlaying) { 
-                        isPlaying = !pausedInWeb; 
-                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play); 
-                        if (isPlaying) resetHideTimer(); else stopHideTimer(); 
-                    } 
-                } } catch (Exception e) {} } }); }
-    private void sendVideoCommand(String jsAction) { playerWebView.evaluateJavascript("(function() { function findVideo(win) { try { var v = win.document.querySelector('video'); if (v) return v; } catch(e) {} for (var i = 0; i < win.frames.length; i++) { try { var fv = findVideo(win.frames[i]); if (fv) return fv; } catch(e) {} } return null; } var v = findVideo(window); if (v) { " + jsAction + " } })();", null); }
+                } catch (Exception e) {} 
+            } 
+        }); 
+    }
+
+    private void sendVideoCommand(String jsAction) { 
+        if (playerWebView != null) {
+            playerWebView.evaluateJavascript("(function() { function findVideo(win) { try { var v = win.document.querySelector('video'); if (v) return v; } catch(e) {} for (var i = 0; i < win.frames.length; i++) { try { var fv = findVideo(win.frames[i]); if (fv) return fv; } catch(e) {} } return null; } var v = findVideo(window); if (v) { " + jsAction + " } })();", null); 
+        }
+    }
+
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
     private boolean isDirectHls = false;
 
     private void setupHybridEngine(String url) {
-        if (url == null || url.isEmpty()) return;
+        if (url == null || url.isEmpty() || playerWebView == null) return;
         
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -1272,7 +1212,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 applyCaptionStyle(); 
                 toggleWebSubtitles(true); 
 
-                // Automatic Multi-Audio Track Selector (English, Japanese, Hindi, Tamil, Telugu, etc.)
                 String audio = getIntent().getStringExtra("audio");
                 final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
                 String audioScript = "(function() {" +
@@ -1332,7 +1271,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             } 
         }); 
 
-        // If URL is a direct .m3u8 master playlist or video stream
         if (url.contains(".m3u8") || url.contains(".mp4") || url.contains("/cdn/hls/") || url.contains("/hls/")) {
             isDirectHls = true;
             String audio = getIntent().getStringExtra("audio");
@@ -1424,7 +1362,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
     
     private void injectAdEraser() { 
-        if (isDirectHls) return;
+        if (isDirectHls || playerWebView == null) return;
         playerWebView.evaluateJavascript("(function() { " +
                 "  function absoluteCleanse(win) { " +
                 "    try { " +
@@ -1448,7 +1386,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "            el.style.setProperty('visibility', 'visible', 'important'); " +
                 "            el.style.setProperty('opacity', '1', 'important'); " +
                 "            el.style.setProperty('z-index', '2147483647', 'important'); " +
-                "            /* DO NOT TOUCH BACKGROUND OR POSITION HERE - handled by applyCaptionStyle */ " +
                 "          } else { " +
                 "            el.style.setProperty('visibility', 'hidden', 'important'); " +
                 "            el.style.setProperty('pointer-events', 'none', 'important'); " +
@@ -1470,20 +1407,20 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  setInterval(function() { penetrate(window); }, 1000); " +
                 "})();", null); 
     }
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
             if (controller != null) {
-                // Keep notification bar visible on Player page (per request)
-                controller.show(WindowInsetsCompat.Type.statusBars());
-                controller.setAppearanceLightStatusBars(false); // White icons
-                getWindow().setStatusBarColor(Color.BLACK);
-                
                 if (isFullscreenMode) {
+                    controller.hide(WindowInsetsCompat.Type.statusBars());
                     controller.hide(WindowInsetsCompat.Type.navigationBars());
                 } else {
+                    controller.show(WindowInsetsCompat.Type.statusBars());
+                    controller.setAppearanceLightStatusBars(false);
+                    getWindow().setStatusBarColor(Color.BLACK);
                     controller.show(WindowInsetsCompat.Type.navigationBars());
                 }
                 controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -1506,28 +1443,42 @@ public class NativePlayerActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
     }
 
-    @Override protected void onDestroy() { 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (exoPlayer != null && !isInPictureInPictureMode()) {
+            exoPlayer.pause();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (exoPlayer != null && !isInPictureInPictureMode()) {
+            exoPlayer.stop();
+        }
+    }
+
+    @Override 
+    protected void onDestroy() { 
         if (currentInstance == this) currentInstance = null;
         
-        // --- CLEANUP: REMOVE WEB MARGIN ---
-        if (MainActivity.instance != null && MainActivity.instance.getBridge() != null) {
-            WebView mainWebView = MainActivity.instance.getBridge().getWebView();
-            if (mainWebView != null) {
-                mainWebView.evaluateJavascript("document.body.style.marginTop = '0px';", null);
-            }
-        }
-
         NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         updateHandler.removeCallbacksAndMessages(null); 
         hideHandler.removeCallbacksAndMessages(null); 
+        
         if (exoPlayer != null) {
             exoPlayer.stop();
+            exoPlayer.clearMediaItems();
             exoPlayer.release();
             exoPlayer = null;
         }
-        if (playerWebView != null) { playerWebView.stopLoading(); playerWebView.destroy(); } 
+        if (playerWebView != null) { 
+            playerWebView.stopLoading(); 
+            playerWebView.destroy(); 
+            playerWebView = null;
+        } 
         super.onDestroy(); 
-        // INSTANT EXIT: Disable the slide-down animation
         overridePendingTransition(0, 0);
     }
 }

@@ -131,6 +131,7 @@ export async function queueBatchEpisodeDownloads(
         STREAM_PROVIDERS.find(p => p.serverMatch === serverName || p.label === serverName || p.id === serverName) ||
         STREAM_PROVIDERS[0];
 
+      let subtitleUrl = '';
       // 1. Quick probe to see if backend returns a direct URL
       try {
         const res = await resolveEpisodeSource({
@@ -143,6 +144,11 @@ export async function queueBatchEpisodeDownloads(
         if (res && res.status === 'available' && res.source?.url) {
           streamUrl = res.source.url;
           selectedServerName = res.source.selectedServerName || serverName;
+          if (res.source.subtitles && res.source.subtitles.length > 0) {
+            subtitleUrl = res.source.subtitles[0].url || '';
+          } else if ((res.source as any).subtitleUrl) {
+            subtitleUrl = (res.source as any).subtitleUrl;
+          }
         }
       } catch {
         // Fallback immediately
@@ -164,7 +170,7 @@ export async function queueBatchEpisodeDownloads(
         episodeNumber: ep.number,
         streamUrl,
         pageUrl: streamUrl,
-        subtitleUrl: '',
+        subtitleUrl: subtitleUrl || '',
         audio,
         serverName: selectedServerName,
         quality,
