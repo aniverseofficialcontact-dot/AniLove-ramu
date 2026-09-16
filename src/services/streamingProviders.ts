@@ -80,7 +80,19 @@ export interface ResolveEpisodeSourceResult {
   message?: string;
 }
 
-// 1. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
+
+// 1. Anikoto HD-1 (1080p Master - Default)
+const ANIKOTO_HD1: StreamProvider = {
+  id: 'anikoto-hd1',
+  label: 'Anikoto HD-1',
+  category: 'anikoto',
+  description: 'Primary 1080p high-bitrate master server from MegaCloud (Eng Dub & Jap Sub).',
+  supportedLanguages: ['SUB', 'DUB'],
+  tag: '1080p Master',
+  serverMatch: 'HD-1',
+};
+
+// 2. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
 const ANIMEWORLD_INDIA: StreamProvider = {
   id: 'animeworld-india',
   label: 'AnimeWorld India',
@@ -91,95 +103,33 @@ const ANIMEWORLD_INDIA: StreamProvider = {
   apiEndpoint: '/api/animeworld/resolve',
 };
 
-// 2. Anikoto HD Servers (1080p Master & Bufferless CDN)
-const ANIKOTO_HD1: StreamProvider = {
-  id: 'anikoto-hd1',
-  label: 'Anikoto HD-1',
-  category: 'anikoto',
-  description: 'Primary 1080p high bitrate server from Anikoto (Eng Dub & Jap Sub).',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: '1080p Master',
-  serverMatch: 'HD-1',
+// 3. Tatakai Ultra (TatakaiAPI Engine with Sub, Dub, Hindi & Regional)
+const TATAKAI_MULTI: StreamProvider = {
+  id: 'tatakai-multi',
+  label: 'Tatakai Ultra',
+  category: 'tatakai',
+  description: 'Real-time TatakaiAPI engine with 1080p Direct HLS, English Dub, Japanese Sub & Hindi.',
+  supportedLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL'],
+  tag: 'Tatakai HD',
+  apiEndpoint: '/api/tatakai/resolve',
 };
 
-const ANIKOTO_VIDSTREAM: StreamProvider = {
-  id: 'anikoto-vidstream',
-  label: 'Anikoto Vidstream',
-  category: 'anikoto',
-  description: 'Fast bufferless CDN stream with auto intro/outro skip.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Fast CDN',
-  serverMatch: 'Vidstream',
-};
-
-const ANIKOTO_VIDPLAY: StreamProvider = {
-  id: 'anikoto-vidplay',
-  label: 'Anikoto VidPlay',
-  category: 'anikoto',
-  description: 'High-speed video player with dual sub & dub tracks.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Dual Audio',
-  serverMatch: 'VidPlay',
-};
-
+// 4. Anikoto Backup (Secondary HD Mirror)
 const ANIKOTO_HD2: StreamProvider = {
   id: 'anikoto-hd2',
-  label: 'Anikoto HD-2',
+  label: 'Anikoto Backup',
   category: 'anikoto',
-  description: 'Secondary high-definition server mirror.',
+  description: 'Secondary high-definition server mirror for reliable failover.',
   supportedLanguages: ['SUB', 'DUB'],
   tag: 'Backup Mirror',
   serverMatch: 'HD-2',
 };
 
-const ANIKOTO_ULTRA: StreamProvider = {
-  id: 'anikoto',
-  label: 'Anikoto Ultra HD',
-  category: 'anikoto',
-  description: 'Smart load-balanced master stream node.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Ultra Master',
-};
-
-// 3. Renime Regional & Global (Hindi, Tamil, Telugu, English & Japanese)
-const RENIME_DUB: StreamProvider = {
-  id: 'renime-dub',
-  label: 'Renime Indian & Global',
-  category: 'renime',
-  description: 'Fast multi-audio stream node with Hindi, Tamil, Telugu, English & Japanese tracks.',
-  supportedLanguages: ['HIN', 'TAM', 'TEL', 'DUB', 'SUB'],
-  tag: 'Multi-Audio',
-  apiEndpoint: '/api/renime/resolve',
-};
-
-// 4. Tatakai Multi-Source Engine (English, Japanese, Hindi)
-const TATAKAI_MULTI: StreamProvider = {
-  id: 'tatakai-multi',
-  label: 'Tatakai Multi-Source',
-  category: 'tatakai',
-  description: 'Unified Tatakai engine with English Dub, Japanese Sub and Hindi tracks.',
-  supportedLanguages: ['SUB', 'DUB', 'HIN'],
-  tag: 'Tatakai HD',
-  apiEndpoint: '/api/tatakai/resolve',
-};
-
 export const STREAM_PROVIDERS: StreamProvider[] = [
-  // 1. Anikoto HD-1 (1080p Master - Default)
   ANIKOTO_HD1,
-  // 2. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
   ANIMEWORLD_INDIA,
-  // 3. Renime Indian & Global (Hindi, Tamil, Telugu, English, Japanese)
-  RENIME_DUB,
-  // 4. Tatakai Multi-Source (Sub, Dub, Hindi)
   TATAKAI_MULTI,
-  // 5. Anikoto Vidstream (Fast Bufferless CDN)
-  ANIKOTO_VIDSTREAM,
-  // 6. Anikoto VidPlay (Dual Sub/Dub)
-  ANIKOTO_VIDPLAY,
-  // 7. Anikoto HD-2 (Backup Mirror)
   ANIKOTO_HD2,
-  // 8. Anikoto Ultra HD
-  ANIKOTO_ULTRA,
 ];
 
 export const DEFAULT_STREAM_PROVIDER_ID: StreamServerId = 'anikoto-hd1';
