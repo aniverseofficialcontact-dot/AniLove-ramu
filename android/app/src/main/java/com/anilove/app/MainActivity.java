@@ -1,5 +1,9 @@
 package com.anilove.app;
 
+import android.Manifest;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,9 +32,9 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         // Request notification permission for background downloads on Android 13+ (API 33+)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
             }
         }
 
@@ -92,6 +96,12 @@ public class MainActivity extends BridgeActivity {
             pendingBackToDetails = false;
             dispatchBackToDetails();
         }
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
     }
 
     public void dispatchBackToDetails() {
