@@ -100,7 +100,7 @@ const ANIMEWORLD_INDIA: StreamProvider = {
   description: 'Premier Indian multi-audio anime network (Hindi, Tamil, Telugu, Malayalam, Bengali).',
   supportedLanguages: ['HIN', 'TAM', 'TEL', 'MAL', 'BEN', 'DUB', 'SUB'],
   tag: 'Hindi / Regional',
-  apiEndpoint: '/api/animeworld/resolve',
+  apiEndpoint: '/api/animeworld-india/resolve',
 };
 
 // 3. Tatakai Ultra (TatakaiAPI Engine with Sub, Dub, Hindi & Regional)
@@ -153,10 +153,11 @@ export function createDirectStreamSource(
 
   let availableServers: AvailableServerOption[] = [];
 
-  if (isIndian) {
+  if (isIndian || provider.id === 'animeworld-india') {
     availableServers = [
       { name: 'AnimeWorld Multi-Audio', type: language, linkId: `https://play.zephyrix.org/video/${cleanSlug}-episode-${episodeNumber}` },
       { name: 'AnimeWorld Edge Mirror', type: language, linkId: `https://watchanimeworld.top/episode/${cleanSlug}-episode-${episodeNumber}` },
+      { name: 'Anikoto Fast Edge', type: isDub ? 'DUB' : 'SUB', linkId: `https://megaplay.buzz/stream/s-2/${anilistId}/${isDub ? 'dub' : 'sub'}` },
     ];
   } else {
     availableServers = [

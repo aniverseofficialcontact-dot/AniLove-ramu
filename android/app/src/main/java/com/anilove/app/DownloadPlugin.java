@@ -119,6 +119,7 @@ public class DownloadPlugin extends Plugin {
     @PluginMethod
     public void getDownloads(PluginCall call) {
         try {
+            EpisodeDownloadService.ensureDownloadsLoaded(getContext());
             List<EpisodeDownloadService.DownloadItem> list = EpisodeDownloadService.getAllDownloads();
             JSArray arr = new JSArray();
 

@@ -1298,7 +1298,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String audioScript = "(function() {" +
                         "  var target = '" + targetAudio + "';" +
                         "  function matchTrack(t) {" +
-                        "    var all = ((t.language || '') + ' ' + (t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.id || '')).toLowerCase();" +
+                        "    if (!t) return false;" +
+                        "    var all = ((t.language || '') + ' ' + (t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.id || '') + ' ' + (t.title || '')).toLowerCase();" +
                         "    if (target === 'dub' || target === 'eng' || target === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
                         "    if (target === 'sub' || target === 'jpn' || target === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
                         "    if (target === 'hin' || target === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
@@ -1321,6 +1322,34 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "    }" +
                         "    return false;" +
                         "  }" +
+                        "  function applyHtml5Track(doc) {" +
+                        "    try {" +
+                        "      var videos = doc.querySelectorAll('video');" +
+                        "      for (var i = 0; i < videos.length; i++) {" +
+                        "        var v = videos[i];" +
+                        "        if (v.audioTracks && v.audioTracks.length > 0) {" +
+                        "          for (var j = 0; j < v.audioTracks.length; j++) {" +
+                        "            var tr = v.audioTracks[j];" +
+                        "            if (matchTrack(tr)) { tr.enabled = true; return true; }" +
+                        "          }" +
+                        "        }" +
+                        "      }" +
+                        "    } catch(e) {}" +
+                        "    return false;" +
+                        "  }" +
+                        "  function applyHlsTrack(win) {" +
+                        "    try {" +
+                        "      if (win.hls && win.hls.audioTracks && win.hls.audioTracks.length > 0) {" +
+                        "        for (var h = 0; h < win.hls.audioTracks.length; h++) {" +
+                        "          if (matchTrack(win.hls.audioTracks[h])) {" +
+                        "            if (win.hls.audioTrack !== h) win.hls.audioTrack = h;" +
+                        "            return true;" +
+                        "          }" +
+                        "        }" +
+                        "      }" +
+                        "    } catch(e) {}" +
+                        "    return false;" +
+                        "  }" +
                         "  function penetrateAudio(win) {" +
                         "    try {" +
                         "      if (typeof win.jwplayer === 'function') {" +
@@ -1335,6 +1364,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "          }" +
                         "        }" +
                         "      }" +
+                        "      if (applyHlsTrack(win)) return true;" +
+                        "      if (win.document && applyHtml5Track(win.document)) return true;" +
                         "    } catch(e) {}" +
                         "    for (var j = 0; j < win.frames.length; j++) {" +
                         "      try { if (penetrateAudio(win.frames[j])) return true; } catch(e) {}" +
@@ -1345,8 +1376,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "  var attempts = 0;" +
                         "  var interval = setInterval(function() {" +
                         "    attempts++;" +
-                        "    if (penetrateAudio(window) || attempts > 15) clearInterval(interval);" +
-                        "  }, 400);" +
+                        "    if (penetrateAudio(window) || attempts > 35) clearInterval(interval);" +
+                        "  }, 150);" +
                         "})();";
                 view.evaluateJavascript(audioScript, null);
             } 

@@ -165,7 +165,7 @@ public class EpisodeDownloadService extends Service {
         return START_STICKY;
     }
 
-    private DownloadItem parseDownloadItem(JSONObject obj) {
+    private static DownloadItem parseDownloadItem(JSONObject obj) {
         DownloadItem item = new DownloadItem();
         item.id = obj.optString("id", System.currentTimeMillis() + "");
         item.anilistId = obj.optInt("anilistId", 0);
@@ -456,25 +456,53 @@ public class EpisodeDownloadService extends Service {
                 br.close();
 
                 JSONObject resObj = new JSONObject(sb.toString());
-                if (!resObj.optBoolean("success", false)) {
-                    Log.w(TAG, "[ServerExtract] Render returned success:false");
-                    return null;
-                }
+                if (resObj.optBoolean("success", false)) {
+                    String directStreamUrl = resObj.optString("directStreamUrl", "");
+                    String streamUrl = resObj.optString("streamUrl", "");
+                    String subtitleUrl = resObj.optString("subtitleUrl", "");
 
-                String directStreamUrl = resObj.optString("directStreamUrl", "");
-                String streamUrl = resObj.optString("streamUrl", "");
-                String embedUrl = resObj.optString("embedUrl", "");
-                String subtitleUrl = resObj.optString("subtitleUrl", "");
-
-                // Check if directStreamUrl is usable directly
-                if (directStreamUrl != null && !directStreamUrl.isEmpty()) {
-                    return new String[]{ directStreamUrl, subtitleUrl };
+                    if (directStreamUrl != null && !directStreamUrl.isEmpty()) {
+                        return new String[]{directStreamUrl, subtitleUrl};
+                    }
+                    if (streamUrl != null && !streamUrl.isEmpty()) {
+                        return new String[]{streamUrl, subtitleUrl};
+                    }
                 }
+            }
 
-                String chosenUrl = (streamUrl != null && !streamUrl.isEmpty()) ? streamUrl : embedUrl;
-                if (chosenUrl != null && !chosenUrl.isEmpty()) {
-                    return new String[]{ chosenUrl, subtitleUrl };
-                }
+            // Fallback for English DUB: query Anikoto master directly if animeworld failed
+            if ("DUB".equals(lang) && !"anikoto-hd1".equals(safeProviderId)) {
+                try {
+                    jsonReq.put("providerId", "anikoto-hd1");
+                    HttpURLConnection connFb = (HttpURLConnection) new URL(apiUrl).openConnection();
+                    connFb.setRequestMethod("POST");
+                    connFb.setDoOutput(true);
+                    connFb.setConnectTimeout(15000);
+                    connFb.setReadTimeout(35000);
+                    connFb.setRequestProperty("Content-Type", "application/json");
+                    connFb.setRequestProperty("Accept", "application/json");
+                    connFb.setRequestProperty("User-Agent", "AniLove-Android/1.0");
+                    byte[] fbBytes = jsonReq.toString().getBytes("UTF-8");
+                    connFb.setRequestProperty("Content-Length", String.valueOf(fbBytes.length));
+                    java.io.OutputStream fbOs = connFb.getOutputStream();
+                    fbOs.write(fbBytes);
+                    fbOs.close();
+                    if (connFb.getResponseCode() == 200) {
+                        BufferedReader br = new BufferedReader(new InputStreamReader(connFb.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = br.readLine()) != null) sb.append(line);
+                        br.close();
+                        JSONObject resObj = new JSONObject(sb.toString());
+                        if (resObj.optBoolean("success", false)) {
+                            String streamUrl = resObj.optString("streamUrl", "");
+                            String subtitleUrl = resObj.optString("subtitleUrl", "");
+                            if (streamUrl != null && !streamUrl.isEmpty()) {
+                                return new String[]{streamUrl, subtitleUrl};
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
             }
         } catch (Exception e) {
             Log.w(TAG, "[ServerExtract] Exception: " + e.getMessage());
@@ -954,6 +982,19 @@ public class EpisodeDownloadService extends Service {
         }
     }
 
+    public static void ensureDownloadsLoaded(Context context) {
+        if (allDownloads.isEmpty() && context != null) {
+            try {
+                File baseDir = context.getExternalFilesDir("downloads");
+                if (baseDir != null && baseDir.exists()) {
+                    scanDirForMeta(baseDir);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error ensuring downloads loaded", e);
+            }
+        }
+    }
+
     private void loadSavedDownloadsFromDisk() {
         try {
             File baseDir = getExternalFilesDir("downloads");
@@ -965,7 +1006,7 @@ public class EpisodeDownloadService extends Service {
         }
     }
 
-    private void scanDirForMeta(File dir) {
+    private static void scanDirForMeta(File dir) {
         File[] files = dir.listFiles();
         if (files == null) return;
         for (File f : files) {

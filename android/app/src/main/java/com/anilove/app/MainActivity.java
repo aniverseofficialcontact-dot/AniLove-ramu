@@ -40,14 +40,18 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void hideSystemBars() {
-        // Force fullscreen flag
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        
-        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if (controller != null) {
-            controller.hide(WindowInsetsCompat.Type.statusBars());
-            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        }
+        try {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().getDecorView().post(() -> {
+                try {
+                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                    if (controller != null) {
+                        controller.hide(WindowInsetsCompat.Type.statusBars());
+                        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    }
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -63,13 +67,17 @@ public class MainActivity extends BridgeActivity {
         super.onStart();
         instance = this;
         
-        // Safer Ad-Shield: We only touch the settings, we DON'T overwrite the WebViewClient
-        // This prevents the "White Screen" issue on launch.
-        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-        if (webView != null) {
-            WebSettings settings = webView.getSettings();
-            settings.setSupportMultipleWindows(false);
-            settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+            if (webView != null) {
+                WebSettings settings = webView.getSettings();
+                settings.setSupportMultipleWindows(false);
+                settings.setJavaScriptCanOpenWindowsAutomatically(false);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+            }
+        } catch (Exception e) {
+            Log.w("MainActivity", "WebSettings adjustment error: " + e.getMessage());
         }
     }
 

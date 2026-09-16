@@ -295,8 +295,13 @@ public class VideoSniffer {
         timeoutHandler.removeCallbacks(timeoutRunnable);
         new Handler(Looper.getMainLooper()).post(() -> {
             if (webView != null) {
-                webView.stopLoading();
-                webView.loadUrl("about:blank");
+                try {
+                    webView.stopLoading();
+                    webView.loadUrl("about:blank");
+                    webView.onPause();
+                    webView.destroy();
+                } catch (Exception ignored) {}
+                webView = null;
             }
         });
     }

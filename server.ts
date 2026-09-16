@@ -1730,9 +1730,9 @@ async function startServer() {
   });
 
   // ====================================================
-  // 3. ANIMEWORLD API RESOLVER
+  // 3. ANIMEWORLD API RESOLVER (AnimeWorld India & Indic)
   // ====================================================
-  app.post('/api/animeworld-india/resolve', async (req, res) => {
+  app.post(['/api/animeworld-india/resolve', '/api/animeworld/resolve'], async (req, res) => {
     try {
       const {
         animeTitle,
