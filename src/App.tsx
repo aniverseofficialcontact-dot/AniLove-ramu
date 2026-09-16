@@ -343,6 +343,61 @@ export function App() {
     }
   }, [settings, showToast, triggerNotification]);
 
+  // 1.5. Check for AniList OAuth Implicit Token in Android Deep Link Redirect
+  useEffect(() => {
+    if (typeof window === 'undefined' || !(window as any).Capacitor) return;
+
+    try {
+      const { registerPlugin } = require('@capacitor/core');
+      const CapacitorApp = registerPlugin('App');
+
+      CapacitorApp.addListener('appUrlOpen', (data: any) => {
+        if (!data || !data.url) return;
+        if (data.url.includes('access_token=')) {
+          const token = data.url.split('access_token=')[1].split('&')[0];
+          if (token) {
+            fetchAuthenticatedViewer(token)
+              .then(async user => {
+                if (user) {
+                  const cardSyncResult = await syncUserDataWithAniList(token).catch(() => ({ cardsCount: 0, coins: 0 }));
+                  const userList = await fetchUserMediaList(user.name).catch(() => []);
+                  if (userList && userList.length > 0) {
+                    setLibrary(prev => {
+                      const map = new Map<number, UserMediaListItem>();
+                      prev.forEach(i => map.set(i.mediaId, i));
+                      userList.forEach(i => map.set(i.mediaId, i));
+                      const merged = Array.from(map.values());
+                      saveUserLibrary(merged);
+                      return merged;
+                    });
+                  }
+
+                  const updated: UserSettings = {
+                    ...settings,
+                    anilistToken: token,
+                    importUsername: user.name,
+                    anilistUser: user,
+                    customDisplayName: user.name,
+                    customAvatar: user.avatar?.large || settings.customAvatar,
+                    twoWaySyncEnabled: true,
+                    lastSyncTimestamp: Date.now(),
+                  };
+                  setSettings(updated);
+                  saveUserSettings(updated);
+                  showToast('sync', `Welcome ${user.name}! AniList 2-Way Sync active via App Link.`, 'AniList Connected');
+                }
+              })
+              .catch(err => {
+                console.error('Deep link OAuth token verification failed:', err);
+              });
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Capacitor App deep link listener registration failed:', e);
+    }
+  }, [settings, showToast]);
+
   // Initial URL tab and reel query parameter check & browser navigation listener
   useEffect(() => {
     // Proactively pre-buffer initial reels into client memory on site entry
