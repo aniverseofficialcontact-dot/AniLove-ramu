@@ -480,13 +480,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     });
   };
 
-  const lastLaunchedUrl = useRef<string | null>(null);
+  const lastLaunchedKey = useRef<string | null>(null);
 
   // Auto-launch Native Player for Inline Experience
   useEffect(() => {
     if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
-      if (lastLaunchedUrl.current === streamSource.url) return;
-      lastLaunchedUrl.current = streamSource.url;
+      const launchKey = `${streamSource.url}__${audioMode}__${episodeNumber}__${activeServer}__${selectedSubServerName || ''}`;
+      if (lastLaunchedKey.current === launchKey) return;
+      lastLaunchedKey.current = launchKey;
 
       const currentEpNum = Number(episodeNumber);
       const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';

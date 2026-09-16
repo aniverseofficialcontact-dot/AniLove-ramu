@@ -413,6 +413,14 @@ public class EpisodeDownloadService extends Service {
             String safeServer = item.serverName != null
                 ? item.serverName.replace("\\", "\\\\").replace("\"", "\\\"")
                 : "";
+
+            String safeProviderId = "anikoto-hd1";
+            if (safeServer.toLowerCase().contains("animeworld") || safeServer.toLowerCase().contains("indian") || safeServer.toLowerCase().contains("zephyrix")) {
+                safeProviderId = "animeworld-india";
+            } else if (safeServer.toLowerCase().contains("tatakai")) {
+                safeProviderId = "tatakai-multi";
+            }
+
             String jsonBody = "{"
                 + "\"anilistId\":" + item.anilistId + ","
                 + "\"animeTitle\":\"" + safeTitle + "\","
@@ -420,11 +428,12 @@ public class EpisodeDownloadService extends Service {
                 + "\"episodeNumber\":" + item.episodeNumber + ","
                 + "\"language\":\"" + lang + "\","
                 + "\"serverName\":\"" + safeServer + "\","
+                + "\"providerId\":\"" + safeProviderId + "\","
                 + "\"format\":\"TV\""
                 + "}";
 
             Log.i(TAG, "[ServerExtract] Calling Render /api/stream/resolve for: "
-                + item.animeTitle + " EP" + item.episodeNumber + " [" + lang + "] on " + item.serverName);
+                + item.animeTitle + " EP" + item.episodeNumber + " [" + lang + "] on " + item.serverName + " (" + safeProviderId + ")");
 
             URL url = new URL(apiUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -696,6 +705,7 @@ public class EpisodeDownloadService extends Service {
 
     private HttpURLConnection openConnectionWithHeaders(String urlStr, String referer) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setInstanceFollowRedirects(true);
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
         conn.setRequestProperty("Accept", "*/*");
         if (urlStr.contains("zephyrix") || urlStr.contains("zn-grid")) {

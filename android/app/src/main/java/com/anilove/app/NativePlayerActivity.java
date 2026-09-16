@@ -1219,40 +1219,43 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String audio = getIntent().getStringExtra("audio");
                 final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
                 String audioScript = "(function() {" +
-                        "  function switchAudio() {" +
+                        "  var target = '" + targetAudio + "';" +
+                        "  function matchTrack(t) {" +
+                        "    var all = ((t.language || '') + ' ' + (t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.id || '')).toLowerCase();" +
+                        "    if (target === 'dub' || target === 'eng' || target === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
+                        "    if (target === 'sub' || target === 'jpn' || target === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
+                        "    if (target === 'hin' || target === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
+                        "    if (target === 'tam' || target === 'tamil') return all.indexOf('tam') !== -1 || all.indexOf('ta') !== -1;" +
+                        "    if (target === 'tel' || target === 'telugu') return all.indexOf('tel') !== -1 || all.indexOf('te') !== -1;" +
+                        "    if (target === 'mal' || target === 'malayalam') return all.indexOf('mal') !== -1 || all.indexOf('ml') !== -1;" +
+                        "    if (target === 'ben' || target === 'bengali') return all.indexOf('ben') !== -1 || all.indexOf('bn') !== -1;" +
+                        "    return false;" +
+                        "  }" +
+                        "  function penetrateAudio(win) {" +
                         "    try {" +
-                        "      var target = '" + targetAudio + "';" +
-                        "      if (typeof jwplayer === 'function') {" +
-                        "        var p = jwplayer();" +
+                        "      if (typeof win.jwplayer === 'function') {" +
+                        "        var p = win.jwplayer();" +
                         "        if (p && typeof p.getAudioTracks === 'function') {" +
                         "          var tracks = p.getAudioTracks();" +
                         "          if (tracks && tracks.length > 0) {" +
                         "            for (var i = 0; i < tracks.length; i++) {" +
-                        "              var t = tracks[i];" +
-                        "              var lang = (t.language || t.name || '').toLowerCase();" +
-                        "              var name = (t.name || '').toLowerCase();" +
-                        "              var m = false;" +
-                        "              if (target === 'dub' || target === 'eng') m = lang.indexOf('en') !== -1 || name.indexOf('eng') !== -1 || name.indexOf('dub') !== -1;" +
-                        "              else if (target === 'sub' || target === 'jpn') m = lang.indexOf('jp') !== -1 || lang.indexOf('ja') !== -1 || name.indexOf('jap') !== -1 || name.indexOf('sub') !== -1;" +
-                        "              else if (target === 'hin') m = lang.indexOf('hi') !== -1 || name.indexOf('hin') !== -1;" +
-                        "              else if (target === 'tam') m = lang.indexOf('ta') !== -1 || name.indexOf('tam') !== -1;" +
-                        "              else if (target === 'tel') m = lang.indexOf('te') !== -1 || name.indexOf('tel') !== -1;" +
-                        "              else if (target === 'mal') m = lang.indexOf('ml') !== -1 || name.indexOf('mal') !== -1;" +
-                        "              else if (target === 'ben') m = lang.indexOf('bn') !== -1 || name.indexOf('ben') !== -1;" +
-                        "              if (m) {" +
+                        "              if (matchTrack(tracks[i])) {" +
                         "                if (p.getCurrentAudioTrack() !== i) p.setCurrentAudioTrack(i);" +
-                        "                break;" +
+                        "                return;" +
                         "              }" +
                         "            }" +
                         "          }" +
                         "        }" +
                         "      }" +
                         "    } catch(e) {}" +
+                        "    for (var j = 0; j < win.frames.length; j++) {" +
+                        "      try { penetrateAudio(win.frames[j]); } catch(e) {}" +
+                        "    }" +
                         "  }" +
-                        "  switchAudio();" +
-                        "  setTimeout(switchAudio, 600);" +
-                        "  setTimeout(switchAudio, 1500);" +
-                        "  setTimeout(switchAudio, 3000);" +
+                        "  penetrateAudio(window);" +
+                        "  setTimeout(function() { penetrateAudio(window); }, 600);" +
+                        "  setTimeout(function() { penetrateAudio(window); }, 1500);" +
+                        "  setTimeout(function() { penetrateAudio(window); }, 3000);" +
                         "})();";
                 view.evaluateJavascript(audioScript, null);
             } 
@@ -1279,6 +1282,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "  var v = document.getElementById('player');" +
                     "  var streamUrl = '" + url.replace("'", "\\'") + "';" +
                     "  var targetAudio = '" + targetAudio + "';" +
+                    "  function matchHlsTrack(t) {" +
+                    "    var all = ((t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.url || '')).toLowerCase();" +
+                    "    if (targetAudio === 'dub' || targetAudio === 'eng' || targetAudio === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
+                    "    if (targetAudio === 'sub' || targetAudio === 'jpn' || targetAudio === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
+                    "    if (targetAudio === 'hin' || targetAudio === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
+                    "    if (targetAudio === 'tam' || targetAudio === 'tamil') return all.indexOf('tam') !== -1 || all.indexOf('ta') !== -1;" +
+                    "    if (targetAudio === 'tel' || targetAudio === 'telugu') return all.indexOf('tel') !== -1 || all.indexOf('te') !== -1;" +
+                    "    if (targetAudio === 'mal' || targetAudio === 'malayalam') return all.indexOf('mal') !== -1 || all.indexOf('ml') !== -1;" +
+                    "    if (targetAudio === 'ben' || targetAudio === 'bengali') return all.indexOf('ben') !== -1 || all.indexOf('bn') !== -1;" +
+                    "    return false;" +
+                    "  }" +
                     "  if (Hls.isSupported()) {" +
                     "    var hls = new Hls({ enableWorker: true, lowLatencyMode: false });" +
                     "    hls.loadSource(streamUrl);" +
@@ -1287,18 +1301,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "      var tracks = hls.audioTracks;" +
                     "      if (tracks && tracks.length > 0) {" +
                     "        for (var i = 0; i < tracks.length; i++) {" +
-                    "          var t = tracks[i];" +
-                    "          var lang = (t.lang || t.name || '').toLowerCase();" +
-                    "          var name = (t.name || '').toLowerCase();" +
-                    "          var m = false;" +
-                    "          if (targetAudio === 'dub' || targetAudio === 'eng') m = lang.indexOf('en') !== -1 || name.indexOf('eng') !== -1 || name.indexOf('dub') !== -1;" +
-                    "          else if (targetAudio === 'sub' || targetAudio === 'jpn') m = lang.indexOf('jp') !== -1 || lang.indexOf('ja') !== -1 || name.indexOf('jap') !== -1 || name.indexOf('sub') !== -1;" +
-                    "          else if (targetAudio === 'hin') m = lang.indexOf('hi') !== -1 || name.indexOf('hin') !== -1;" +
-                    "          else if (targetAudio === 'tam') m = lang.indexOf('ta') !== -1 || name.indexOf('tam') !== -1;" +
-                    "          else if (targetAudio === 'tel') m = lang.indexOf('te') !== -1 || name.indexOf('tel') !== -1;" +
-                    "          else if (targetAudio === 'mal') m = lang.indexOf('ml') !== -1 || name.indexOf('mal') !== -1;" +
-                    "          else if (targetAudio === 'ben') m = lang.indexOf('bn') !== -1 || name.indexOf('ben') !== -1;" +
-                    "          if (m) {" +
+                    "          if (matchHlsTrack(tracks[i])) {" +
                     "            hls.audioTrack = i;" +
                     "            break;" +
                     "          }" +
