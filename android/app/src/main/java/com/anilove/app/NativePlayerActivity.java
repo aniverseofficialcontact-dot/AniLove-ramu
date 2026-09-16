@@ -69,7 +69,13 @@ import java.util.Map;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Player;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.extractor.DefaultExtractorsFactory;
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 import androidx.media3.ui.PlayerView;
 
 public class NativePlayerActivity extends AppCompatActivity {
@@ -255,6 +261,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             decorView.post(() -> {
                 View webViewView = findViewById(R.id.player_webview);
+                View exoPlayerLayout = findViewById(R.id.player_exoplayer);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
                 View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
                 View topBar = findViewById(R.id.top_bar);
@@ -264,6 +271,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
                     lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
                     webViewView.setLayoutParams(lp);
+                }
+                if (exoPlayerLayout != null) {
+                    ViewGroup.LayoutParams lp = exoPlayerLayout.getLayoutParams();
+                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    exoPlayerLayout.setLayoutParams(lp);
                 }
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
                 if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
@@ -304,6 +317,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
                 View webViewView = findViewById(R.id.player_webview);
+                View exoPlayerLayout = findViewById(R.id.player_exoplayer);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
                 View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
                 View topBar = findViewById(R.id.top_bar);
@@ -313,6 +327,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
                     lp.height = videoHeight;
                     webViewView.setLayoutParams(lp);
+                }
+                if (exoPlayerLayout != null) {
+                    ViewGroup.LayoutParams lp = exoPlayerLayout.getLayoutParams();
+                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                    lp.height = videoHeight;
+                    exoPlayerLayout.setLayoutParams(lp);
                 }
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
@@ -502,7 +522,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             @Override public void onStopTrackingTouch(SeekBar s) { 
                 isDragging = false; 
-                sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
+                if (isOfflineMode && exoPlayer != null) {
+                    exoPlayer.seekTo(s.getProgress() * 1000L);
+                } else {
+                    sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
+                }
                 resetHideTimer(); 
                 scrubberContainer.setVisibility(View.GONE);
             }
@@ -541,7 +565,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                 mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
             }
 
-            exoPlayer.setMediaItem(mediaBuilder.build());
+            DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
+                    .setConstantBitrateSeekingEnabled(true)
+                    .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
+
+            DataSource.Factory dataSourceFactory = new FileDataSource.Factory();
+            ProgressiveMediaSource mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
+                    .createMediaSource(mediaBuilder.build());
+
+            exoPlayer.setMediaSource(mediaSource);
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);
             loadingProgress.setVisibility(View.GONE);
@@ -552,6 +584,18 @@ public class NativePlayerActivity extends AppCompatActivity {
                     isPlaying = playing;
                     btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
                     if (isPlaying) resetHideTimer(); else stopHideTimer();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_BUFFERING) {
+                        loadingProgress.setVisibility(View.VISIBLE);
+                    } else if (playbackState == Player.STATE_READY) {
+                        loadingProgress.setVisibility(View.GONE);
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false;
+                        btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                    }
                 }
             });
         } catch (Exception e) {
@@ -1032,7 +1076,20 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerWebView.evaluateJavascript(js, null);
     }
-    private void setPlaybackSpeed(float speed, boolean permanent) { if (!permanent) { is2xSpeed = true; indicator2x.setVisibility(View.VISIBLE); } else { is2xSpeed = false; indicator2x.setVisibility(View.GONE); } sendVideoCommand("v.playbackRate = " + speed + ";"); }
+    private void setPlaybackSpeed(float speed, boolean permanent) { 
+        if (!permanent) { 
+            is2xSpeed = true; 
+            indicator2x.setVisibility(View.VISIBLE); 
+        } else { 
+            is2xSpeed = false; 
+            indicator2x.setVisibility(View.GONE); 
+        } 
+        if (isOfflineMode && exoPlayer != null) {
+            exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
+            return;
+        }
+        sendVideoCommand("v.playbackRate = " + speed + ";"); 
+    }
     
     private void navigateEpisode(boolean next) {
         if (navigationListener != null) {
@@ -1231,31 +1288,45 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "    if (target === 'ben' || target === 'bengali') return all.indexOf('ben') !== -1 || all.indexOf('bn') !== -1;" +
                         "    return false;" +
                         "  }" +
+                        "  function applyJwTrack(p) {" +
+                        "    if (!p || typeof p.getAudioTracks !== 'function') return false;" +
+                        "    var tracks = p.getAudioTracks();" +
+                        "    if (tracks && tracks.length > 0) {" +
+                        "      for (var i = 0; i < tracks.length; i++) {" +
+                        "        if (matchTrack(tracks[i])) {" +
+                        "          if (p.getCurrentAudioTrack() !== i) p.setCurrentAudioTrack(i);" +
+                        "          return true;" +
+                        "        }" +
+                        "      }" +
+                        "    }" +
+                        "    return false;" +
+                        "  }" +
                         "  function penetrateAudio(win) {" +
                         "    try {" +
                         "      if (typeof win.jwplayer === 'function') {" +
                         "        var p = win.jwplayer();" +
-                        "        if (p && typeof p.getAudioTracks === 'function') {" +
-                        "          var tracks = p.getAudioTracks();" +
-                        "          if (tracks && tracks.length > 0) {" +
-                        "            for (var i = 0; i < tracks.length; i++) {" +
-                        "              if (matchTrack(tracks[i])) {" +
-                        "                if (p.getCurrentAudioTrack() !== i) p.setCurrentAudioTrack(i);" +
-                        "                return;" +
-                        "              }" +
-                        "            }" +
+                        "        if (p) {" +
+                        "          if (applyJwTrack(p)) return true;" +
+                        "          if (!win._jwAudioHooked) {" +
+                        "            win._jwAudioHooked = true;" +
+                        "            p.on('ready', function() { applyJwTrack(p); });" +
+                        "            p.on('audioTracks', function() { applyJwTrack(p); });" +
+                        "            p.on('play', function() { applyJwTrack(p); });" +
                         "          }" +
                         "        }" +
                         "      }" +
                         "    } catch(e) {}" +
                         "    for (var j = 0; j < win.frames.length; j++) {" +
-                        "      try { penetrateAudio(win.frames[j]); } catch(e) {}" +
+                        "      try { if (penetrateAudio(win.frames[j])) return true; } catch(e) {}" +
                         "    }" +
+                        "    return false;" +
                         "  }" +
                         "  penetrateAudio(window);" +
-                        "  setTimeout(function() { penetrateAudio(window); }, 600);" +
-                        "  setTimeout(function() { penetrateAudio(window); }, 1500);" +
-                        "  setTimeout(function() { penetrateAudio(window); }, 3000);" +
+                        "  var attempts = 0;" +
+                        "  var interval = setInterval(function() {" +
+                        "    attempts++;" +
+                        "    if (penetrateAudio(window) || attempts > 15) clearInterval(interval);" +
+                        "  }, 400);" +
                         "})();";
                 view.evaluateJavascript(audioScript, null);
             } 
@@ -1320,9 +1391,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "</script></body></html>";
 
             String baseUrl = "https://play.zephyrix.org/";
-            try {
-                baseUrl = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";
-            } catch (Exception ignored) {}
+            if (url.contains("nexabloom.top") || url.contains("justanime.to")) {
+                baseUrl = "https://justanime.to/";
+            } else if (url.contains("megaplay.buzz")) {
+                baseUrl = "https://megaplay.buzz/";
+            } else {
+                try {
+                    baseUrl = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";
+                } catch (Exception ignored) {}
+            }
 
             playerWebView.loadDataWithBaseURL(baseUrl, hlsHtml, "text/html", "UTF-8", null);
             return;
@@ -1332,6 +1409,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         String referer = "https://anikototv.to/";
         if (url.contains("zephyrix") || url.contains("watchanimeworld") || url.contains("short.icu") || url.contains("animesalt")) {
             referer = "https://watchanimeworld.one/";
+        } else if (url.contains("nexabloom.top") || url.contains("justanime.to")) {
+            referer = "https://justanime.to/";
+        } else if (url.contains("megaplay.buzz")) {
+            referer = "https://megaplay.buzz/";
         } else {
             try {
                 referer = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";

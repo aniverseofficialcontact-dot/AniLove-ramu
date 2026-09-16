@@ -271,10 +271,17 @@ public class EpisodeDownloadService extends Service {
                 item.subtitleUrl = cachedSub;
             }
         } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")) {
-            // Step 1: Try server-side extraction via Render backend (same as player — if player works, this works)
-            Log.i(TAG, "URL is embed page. Trying Render backend extraction for: "
-                + item.animeTitle + " EP" + item.episodeNumber);
-            String[] serverResult = tryServerSideExtractFull(item);
+            boolean isIpLockedSource = (item.serverName != null && (item.serverName.toLowerCase().contains("animeworld") || item.serverName.toLowerCase().contains("zephyrix")))
+                    || item.streamUrl.contains("zephyrix") || item.streamUrl.contains("watchanimeworld");
+
+            String[] serverResult = null;
+            if (!isIpLockedSource) {
+                // Step 1: Try server-side extraction via Render backend (same as player)
+                Log.i(TAG, "URL is embed page. Trying Render backend extraction for: "
+                    + item.animeTitle + " EP" + item.episodeNumber);
+                serverResult = tryServerSideExtractFull(item);
+            }
+
             if (serverResult != null && serverResult[0] != null && !serverResult[0].isEmpty()) {
                 String resolvedUrl = serverResult[0];
                 Log.i(TAG, "Render returned URL: " + resolvedUrl.substring(0, Math.min(80, resolvedUrl.length())));
@@ -288,17 +295,17 @@ public class EpisodeDownloadService extends Service {
                 // If Render returned a direct .m3u8/.mp4 — we're done, skip VideoSniffer
                 boolean isDirect = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".mp4")
                         || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u");
-                if (isDirect) {
+                if (isDirect && !resolvedUrl.contains("zephyrix")) {
                     item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u");
                     Log.i(TAG, "Direct stream from Render — skipping VideoSniffer");
                 } else {
-                    // Render returned an embed URL — still need VideoSniffer, but now we have the RIGHT embed URL
-                    Log.i(TAG, "Render returned embed URL, running VideoSniffer on it with correct referer");
+                    // Render returned an embed URL or IP-locked stream — run VideoSniffer on device
+                    Log.i(TAG, "Render returned embed URL, running VideoSniffer on device with correct referer");
                     sniffVideoStream(item);
                 }
             } else {
-                // Step 2: Fall back to VideoSniffer on the original embed URL
-                Log.i(TAG, "Render backend failed, falling back to VideoSniffer for: " + item.streamUrl);
+                // Step 2: Fall back to VideoSniffer on the original embed URL on client device
+                Log.i(TAG, "Running on-device VideoSniffer for: " + item.streamUrl);
                 sniffVideoStream(item);
             }
         }
@@ -691,8 +698,16 @@ public class EpisodeDownloadService extends Service {
     }
 
     private String getRefererForUrl(String streamUrl, String pageUrl) {
-        if (streamUrl != null && (streamUrl.contains("zephyrix") || streamUrl.contains("zn-grid"))) {
-            return "https://play.zephyrix.org/";
+        if (streamUrl != null) {
+            if (streamUrl.contains("zephyrix") || streamUrl.contains("zn-grid")) {
+                return "https://play.zephyrix.org/";
+            }
+            if (streamUrl.contains("nexabloom.top") || streamUrl.contains("justanime.to")) {
+                return "https://justanime.to/";
+            }
+            if (streamUrl.contains("megaplay.buzz")) {
+                return "https://megaplay.buzz/";
+            }
         }
         String ref = (pageUrl != null && !pageUrl.isEmpty()) ? pageUrl : streamUrl;
         try {
@@ -711,6 +726,12 @@ public class EpisodeDownloadService extends Service {
         if (urlStr.contains("zephyrix") || urlStr.contains("zn-grid")) {
             conn.setRequestProperty("Referer", "https://play.zephyrix.org/");
             conn.setRequestProperty("Origin", "https://play.zephyrix.org");
+        } else if (urlStr.contains("nexabloom.top") || urlStr.contains("justanime.to")) {
+            conn.setRequestProperty("Referer", "https://justanime.to/");
+            conn.setRequestProperty("Origin", "https://justanime.to");
+        } else if (urlStr.contains("megaplay.buzz")) {
+            conn.setRequestProperty("Referer", "https://megaplay.buzz/");
+            conn.setRequestProperty("Origin", "https://megaplay.buzz");
         } else if (referer != null && !referer.isEmpty()) {
             conn.setRequestProperty("Referer", referer);
             conn.setRequestProperty("Origin", referer);

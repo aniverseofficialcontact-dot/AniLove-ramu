@@ -103,4 +103,17 @@ public class NativePlayerPlugin extends Plugin {
             call.resolve(); // Silent fail if not active
         }
     }
+
+    @PluginMethod
+    public void close(PluginCall call) {
+        if (NativePlayerActivity.currentInstance != null) {
+            NativePlayerActivity.currentInstance.runOnUiThread(() -> {
+                try {
+                    NativePlayerActivity.currentInstance.finish();
+                    NativePlayerActivity.currentInstance.overridePendingTransition(0, 0);
+                } catch (Exception ignored) {}
+            });
+        }
+        call.resolve();
+    }
 }

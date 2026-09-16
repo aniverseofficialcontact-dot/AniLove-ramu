@@ -234,9 +234,16 @@ public class VideoSniffer {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
                 Map<String, String> headers = new HashMap<>();
-                // Use Anikoto as referer — embed CDNs (MegaCloud, RapidCloud) check this
-                headers.put("Referer", "https://anikototv.to/");
-                headers.put("Origin", "https://anikototv.to");
+                String referer = "https://anikototv.to/";
+                if (pageUrl.contains("zephyrix") || pageUrl.contains("watchanimeworld") || pageUrl.contains("short.icu") || pageUrl.contains("animesalt")) {
+                    referer = "https://watchanimeworld.one/";
+                } else if (pageUrl.contains("nexabloom.top") || pageUrl.contains("justanime.to")) {
+                    referer = "https://justanime.to/";
+                } else if (pageUrl.contains("megaplay.buzz")) {
+                    referer = "https://megaplay.buzz/";
+                }
+                headers.put("Referer", referer);
+                headers.put("Origin", referer.substring(0, referer.length() - 1));
                 headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
                 webView.loadUrl(pageUrl, headers);
             } catch (Exception e) {

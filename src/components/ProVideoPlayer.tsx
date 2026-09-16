@@ -18,8 +18,9 @@ import {
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
 interface NativePlayerPlugin {
-  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number }): Promise<void>;
+  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number; anilistId?: number; episodeNumber?: number; audio?: string }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
+  close(): Promise<void>;
   addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
   addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;
 }
@@ -519,7 +520,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   useEffect(() => {
     return () => {
-      lastLaunchedUrl.current = null;
+      lastLaunchedKey.current = null;
+      // Close native player activity when ProVideoPlayer unmounts (e.g. navigating to Downloads)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          NativePlayer.close().catch(() => {});
+        } catch {}
+      }
     };
   }, []);
 
