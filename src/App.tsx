@@ -372,23 +372,32 @@ export function App() {
                     });
                   }
 
-                  const updated: UserSettings = {
-                    ...settings,
-                    anilistToken: token,
-                    importUsername: user.name,
-                    anilistUser: user,
-                    customDisplayName: user.name,
-                    customAvatar: user.avatar?.large || settings.customAvatar,
-                    twoWaySyncEnabled: true,
-                    lastSyncTimestamp: Date.now(),
-                  };
-                  setSettings(updated);
-                  saveUserSettings(updated);
+                  setSettings(prevSettings => {
+                    const updated = {
+                      ...prevSettings,
+                      anilistToken: token,
+                      importUsername: user.name,
+                      anilistUser: user,
+                      customDisplayName: user.name,
+                      customAvatar: user.avatar?.large || prevSettings.customAvatar,
+                      twoWaySyncEnabled: true,
+                      lastSyncTimestamp: Date.now(),
+                    };
+                    saveUserSettings(updated);
+                    return updated;
+                  });
+
                   showToast('sync', `Welcome ${user.name}! AniList 2-Way Sync active via App Link.`, 'AniList Connected');
+                  triggerNotification(
+                    'sync',
+                    'AniList Account Linked',
+                    `Logged in as ${user.name} via App Link. Two-way cloud synchronization is now active.`,
+                  );
                 }
               })
               .catch(err => {
                 console.error('Deep link OAuth token verification failed:', err);
+                showToast('error', 'Failed to authenticate AniList token from App Link.', 'Auth Error');
               });
           }
         }
@@ -396,7 +405,7 @@ export function App() {
     } catch (e) {
       console.warn('Capacitor App deep link listener registration failed:', e);
     }
-  }, [settings, showToast]);
+  }, [showToast, triggerNotification]);
 
   // Initial URL tab and reel query parameter check & browser navigation listener
   useEffect(() => {
