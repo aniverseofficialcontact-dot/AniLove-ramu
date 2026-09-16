@@ -16,6 +16,7 @@ export interface DownloadItemInfo {
   totalBytes: number;
   localFilePath?: string;
   localSubPath?: string;
+  localAudioPath?: string;
   thumbnail?: string;
   speed?: string;
   error?: string;
@@ -30,6 +31,7 @@ export interface DownloadPluginInterface {
   playOffline(options: {
     localFilePath: string;
     localSubPath?: string;
+    localAudioPath?: string;
     title: string;
     episodeNumber: number;
   }): Promise<void>;
@@ -238,6 +240,7 @@ export async function playOfflineEpisode(download: DownloadItemInfo): Promise<vo
     await DownloadPlugin.playOffline({
       localFilePath: download.localFilePath,
       localSubPath: download.localSubPath,
+      localAudioPath: download.localAudioPath,
       title: `${download.animeTitle} - EP ${download.episodeNumber}`,
       episodeNumber: download.episodeNumber,
     });

@@ -135,6 +135,7 @@ public class DownloadPlugin extends Plugin {
                 obj.put("totalBytes", item.totalBytes);
                 obj.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
                 obj.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
+                obj.put("localAudioPath", item.localAudioPath != null ? item.localAudioPath : "");
                 obj.put("thumbnail", item.thumbnail);
                 arr.put(obj);
             }
@@ -152,6 +153,7 @@ public class DownloadPlugin extends Plugin {
         try {
             String localFilePath = call.getString("localFilePath");
             String localSubPath = call.getString("localSubPath", "");
+            String localAudioPath = call.getString("localAudioPath", "");
             String title = call.getString("title", "Offline Episode");
             int episodeNumber = call.getInt("episodeNumber", 1);
 
@@ -170,6 +172,7 @@ public class DownloadPlugin extends Plugin {
             intent.putExtra("offlineMode", true);
             intent.putExtra("localFilePath", localFilePath);
             intent.putExtra("localSubPath", localSubPath);
+            intent.putExtra("localAudioPath", localAudioPath);
             intent.putExtra("animeTitle", title);
             intent.putExtra("episodeNumber", episodeNumber);
             intent.putExtra("startFullscreen", false);

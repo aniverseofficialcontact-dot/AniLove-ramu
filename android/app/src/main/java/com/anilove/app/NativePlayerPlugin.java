@@ -84,6 +84,8 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("anilistId", call.getInt("anilistId", 0));
             intent.putExtra("episodeNumber", call.getInt("episodeNumber", 0));
             intent.putExtra("audio", call.getString("audio", "DUB"));
+            intent.putExtra("subtitleUrl", call.getString("subtitleUrl", ""));
+            intent.putExtra("pageUrl", call.getString("pageUrl", url));
             intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
             getActivity().startActivity(intent);
             call.resolve();

@@ -59,6 +59,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -70,9 +71,14 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MergingMediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
@@ -522,7 +528,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             @Override public void onStopTrackingTouch(SeekBar s) { 
                 isDragging = false; 
-                if (isOfflineMode && exoPlayer != null) {
+                if (exoPlayer != null) {
                     exoPlayer.seekTo(s.getProgress() * 1000L);
                 } else {
                     sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
@@ -533,21 +539,71 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
+        String url = getIntent().getStringExtra("url");
+        if (url == null) url = "";
+        String localFilePath = getIntent().getStringExtra("localFilePath");
+        String localSubPath = getIntent().getStringExtra("localSubPath");
+        String localAudioPath = getIntent().getStringExtra("localAudioPath");
+
+        boolean isDirectStream = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".txt") 
+                || url.contains("nexabloom.top") || url.contains("zephyrix.org/cdn/hls") 
+                || url.contains("justanime.to") || url.contains("/cdn/hls/") || url.contains("/hls/");
+
         if (isOfflineMode) {
             playerWebView.setVisibility(View.GONE);
             exoPlayerView.setVisibility(View.VISIBLE);
-            setupExoPlayer(getIntent().getStringExtra("localFilePath"), getIntent().getStringExtra("localSubPath"));
+            setupExoPlayerOffline(localFilePath, localSubPath, localAudioPath);
+        } else if (isDirectStream) {
+            playerWebView.setVisibility(View.GONE);
+            exoPlayerView.setVisibility(View.VISIBLE);
+            String subUrl = getIntent().getStringExtra("subtitleUrl");
+            String audio = getIntent().getStringExtra("audio");
+            setupExoPlayerStreaming(url, subUrl, audio);
         } else {
             exoPlayerView.setVisibility(View.GONE);
             playerWebView.setVisibility(View.VISIBLE);
-            setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
+            setupHybridEngine(url);
             playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidScrubber");
         }
         startUpdateLoop();
         resetHideTimer();
     }
 
-    private void setupExoPlayer(String videoPath, String subPath) {
+    private String getRefererForUrl(String streamUrl, String pageUrl) {
+        if (streamUrl != null) {
+            String lower = streamUrl.toLowerCase();
+            if (lower.contains("zephyrix") || lower.contains("zn-grid")) {
+                return "https://play.zephyrix.org/";
+            }
+            if (lower.contains("watchanimeworld") || lower.contains("animesalt") || lower.contains("short.icu")) {
+                return "https://watchanimeworld.one/";
+            }
+            if (lower.contains("nexabloom.top") || lower.contains("megaplay.buzz")) {
+                return "https://megaplay.buzz/";
+            }
+            if (lower.contains("justanime.to")) {
+                return "https://justanime.to/";
+            }
+            if (lower.contains("vidlink.pro")) {
+                return "https://vidlink.pro/";
+            }
+            if (lower.contains("autoembed.co")) {
+                return "https://autoembed.co/";
+            }
+            if (lower.contains("smashystream.com")) {
+                return "https://player.smashystream.com/";
+            }
+        }
+        String ref = (pageUrl != null && !pageUrl.isEmpty()) ? pageUrl : streamUrl;
+        try {
+            java.net.URL u = new java.net.URL(ref);
+            return u.getProtocol() + "://" + u.getHost() + "/";
+        } catch (Exception e) {
+            return "https://anikototv.to/";
+        }
+    }
+
+    private void setupExoPlayerOffline(String videoPath, String subPath, String audioPath) {
         if (videoPath == null || videoPath.isEmpty()) return;
         try {
             exoPlayer = new ExoPlayer.Builder(this).build();
@@ -570,10 +626,27 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
 
             DataSource.Factory dataSourceFactory = new FileDataSource.Factory();
-            ProgressiveMediaSource mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
+            MediaSource videoSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                     .createMediaSource(mediaBuilder.build());
 
-            exoPlayer.setMediaSource(mediaSource);
+            File videoFile = new java.io.File(videoPath);
+            File audioFile = (audioPath != null && !audioPath.isEmpty())
+                    ? new java.io.File(audioPath)
+                    : new java.io.File(videoFile.getParentFile(), videoFile.getName().replace(".mp4", "_audio.ts"));
+
+            if (audioFile.exists() && audioFile.length() > 0) {
+                MediaItem audioItem = new MediaItem.Builder()
+                        .setUri(android.net.Uri.fromFile(audioFile))
+                        .build();
+                MediaSource audioSource = new ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
+                        .createMediaSource(audioItem);
+
+                MergingMediaSource mergingSource = new MergingMediaSource(videoSource, audioSource);
+                exoPlayer.setMediaSource(mergingSource);
+            } else {
+                exoPlayer.setMediaSource(videoSource);
+            }
+
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);
             loadingProgress.setVisibility(View.GONE);
@@ -599,7 +672,105 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             });
         } catch (Exception e) {
-            Log.e("AniLove", "Error setting up ExoPlayer", e);
+            Log.e("AniLove", "Error setting up ExoPlayer offline", e);
+        }
+    }
+
+    private void setupExoPlayerStreaming(String streamUrl, String subUrl, String audio) {
+        if (streamUrl == null || streamUrl.isEmpty()) return;
+        try {
+            exoPlayer = new ExoPlayer.Builder(this).build();
+            exoPlayerView.setPlayer(exoPlayer);
+
+            MediaItem.Builder mediaBuilder = new MediaItem.Builder()
+                    .setUri(android.net.Uri.parse(streamUrl));
+
+            if (subUrl != null && !subUrl.isEmpty()) {
+                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subUrl))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage("en")
+                        .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+                        .build();
+                mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
+            }
+
+            String referer = getRefererForUrl(streamUrl, getIntent().getStringExtra("pageUrl"));
+            DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(25000);
+
+            Map<String, String> defaultRequestProperties = new HashMap<>();
+            defaultRequestProperties.put("Referer", referer);
+            try {
+                java.net.URL u = new java.net.URL(referer);
+                defaultRequestProperties.put("Origin", u.getProtocol() + "://" + u.getHost());
+            } catch (Exception ignored) {}
+            httpDataSourceFactory.setDefaultRequestProperties(defaultRequestProperties);
+
+            MediaSource mediaSource;
+            if (streamUrl.contains(".m3u8") || streamUrl.contains(".txt") || streamUrl.contains("hls") || streamUrl.contains("nexabloom") || streamUrl.contains("zephyrix") || streamUrl.contains("justanime")) {
+                mediaSource = new HlsMediaSource.Factory(httpDataSourceFactory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(mediaBuilder.build());
+            } else {
+                mediaSource = new ProgressiveMediaSource.Factory(httpDataSourceFactory)
+                        .createMediaSource(mediaBuilder.build());
+            }
+
+            // Set Preferred Audio Language
+            String langCode = "en";
+            if (audio != null) {
+                String lower = audio.toLowerCase();
+                if (lower.contains("hin") || lower.contains("hindi")) langCode = "hi";
+                else if (lower.contains("tam") || lower.contains("tamil")) langCode = "ta";
+                else if (lower.contains("tel") || lower.contains("telugu")) langCode = "te";
+                else if (lower.contains("mal") || lower.contains("malayalam")) langCode = "ml";
+                else if (lower.contains("ben") || lower.contains("bengali")) langCode = "bn";
+                else if (lower.contains("jpn") || lower.contains("sub") || lower.contains("jap") || lower.contains("ja")) langCode = "ja";
+                else langCode = "en";
+            }
+            exoPlayer.setTrackSelectionParameters(
+                    exoPlayer.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setPreferredAudioLanguage(langCode)
+                            .build()
+            );
+
+            exoPlayer.setMediaSource(mediaSource);
+            exoPlayer.prepare();
+            exoPlayer.setPlayWhenReady(true);
+            loadingProgress.setVisibility(View.GONE);
+
+            exoPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onIsPlayingChanged(boolean playing) {
+                    isPlaying = playing;
+                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                    if (isPlaying) resetHideTimer(); else stopHideTimer();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_BUFFERING) {
+                        loadingProgress.setVisibility(View.VISIBLE);
+                    } else if (playbackState == Player.STATE_READY) {
+                        loadingProgress.setVisibility(View.GONE);
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false;
+                        btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                    }
+                }
+
+                @Override
+                public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                    Log.e("AniLove", "ExoPlayer streaming error: " + error.getMessage(), error);
+                    loadingProgress.setVisibility(View.GONE);
+                }
+            });
+        } catch (Exception e) {
+            Log.e("AniLove", "Error setting up ExoPlayer streaming", e);
         }
     }
 
@@ -634,7 +805,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void togglePlayPause() {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             if (exoPlayer.isPlaying()) {
                 exoPlayer.pause();
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
@@ -1084,7 +1255,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             is2xSpeed = false; 
             indicator2x.setVisibility(View.GONE); 
         } 
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
             return;
         }
@@ -1137,7 +1308,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void seekVideo(int delta) {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             long newPos = Math.max(0, Math.min(exoPlayer.getDuration(), exoPlayer.getCurrentPosition() + (delta * 1000L)));
             exoPlayer.seekTo(newPos);
             return;
@@ -1147,7 +1318,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void startUpdateLoop() { updateHandler.postDelayed(new Runnable() { @Override public void run() { syncPlayerState(); updateHandler.postDelayed(this, 1000); } }, 1000); }
     private void syncPlayerState() {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
             if (durationMs > 0) {

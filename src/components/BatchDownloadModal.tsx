@@ -25,6 +25,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
 }) => {
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
   const [selectedServer, setSelectedServer] = useState<string>(initialServer);
+  const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
     return new Set([currentEpisodeNumber]);
   });
@@ -74,7 +75,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
       targetEpisodes,
       selectedAudio,
       selectedServer,
-      '1080p'
+      selectedQuality
     );
 
     setIsSubmitting(false);
@@ -92,8 +93,9 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     }
   };
 
-  // Estimated storage (approx 220MB per 1080p episode)
-  const estimatedMB = selectedEpNumbers.size * 220;
+  // Estimated storage based on chosen quality
+  const mbPerEp = selectedQuality === '1080p' ? 240 : selectedQuality === '720p' ? 140 : selectedQuality === '480p' ? 85 : 55;
+  const estimatedMB = selectedEpNumbers.size * mbPerEp;
   const estimatedStr =
     estimatedMB >= 1024 ? `${(estimatedMB / 1024).toFixed(1)} GB` : `${estimatedMB} MB`;
 
@@ -121,7 +123,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
           </button>
         </div>
 
-        {/* Audio & Server Selectors */}
+        {/* Audio, Server & Quality Selectors */}
         <div className="p-4 bg-[#121622] border-b border-neutral-800/60 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-xs font-semibold text-neutral-300">Audio Language</span>
@@ -144,19 +146,35 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-300">Server Source</span>
-            <select
-              value={selectedServer}
-              onChange={e => setSelectedServer(e.target.value)}
-              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
-            >
-              {STREAM_PROVIDERS.map(p => (
-                <option key={p.id} value={p.serverMatch || p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="flex items-center justify-between bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1.5">
+              <span className="text-xs font-semibold text-neutral-300">Server</span>
+              <select
+                value={selectedServer}
+                onChange={e => setSelectedServer(e.target.value)}
+                className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+              >
+                {STREAM_PROVIDERS.map(p => (
+                  <option key={p.id} value={p.serverMatch || p.label} className="bg-neutral-900 text-white">
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1.5">
+              <span className="text-xs font-semibold text-neutral-300">Quality</span>
+              <select
+                value={selectedQuality}
+                onChange={e => setSelectedQuality(e.target.value)}
+                className="bg-transparent text-xs text-indigo-400 font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="1080p" className="bg-neutral-900 text-white">1080p (Full HD)</option>
+                <option value="720p" className="bg-neutral-900 text-white">720p (HD)</option>
+                <option value="480p" className="bg-neutral-900 text-white">480p (SD)</option>
+                <option value="360p" className="bg-neutral-900 text-white">360p (Saver)</option>
+              </select>
+            </div>
           </div>
         </div>
 

@@ -18,7 +18,7 @@ import {
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
 interface NativePlayerPlugin {
-  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number; anilistId?: number; episodeNumber?: number; audio?: string }): Promise<void>;
+  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number; anilistId?: number; episodeNumber?: number; audio?: string; subtitleUrl?: string; pageUrl?: string }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
   close(): Promise<void>;
   addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
@@ -47,6 +47,8 @@ interface ProVideoPlayerProps {
   onServerChange?: (server: StreamServerId) => void;
   currentAudioLanguage?: StreamLanguage;
   onAudioLanguageChange?: (lang: StreamLanguage) => void;
+  currentQuality?: StreamResolution;
+  onQualityChange?: (quality: StreamResolution) => void;
   onEpisodeChange?: (episodeNumber: number) => void;
   onClosePlayer?: () => void;
   onThumbnailStyleChange?: (style: ThumbnailAppearance) => void;
@@ -65,6 +67,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   onServerChange,
   currentAudioLanguage,
   onAudioLanguageChange,
+  currentQuality = '1080p',
+  onQualityChange,
   onEpisodeChange,
   onThumbnailStyleChange,
   initialThumbnailStyle = 'snapshot',
@@ -76,7 +80,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [activeServer, setActiveServer] = useState<StreamServerId>(currentServer || DEFAULT_STREAM_PROVIDER_ID);
   const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(undefined);
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
-  const [quality] = useState<StreamResolution>('1080p');
+  const [quality, setQuality] = useState<StreamResolution>(currentQuality);
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
   // Stream connection state
@@ -102,6 +106,12 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       setAudioMode(currentAudioLanguage);
     }
   }, [currentAudioLanguage]);
+
+  useEffect(() => {
+    if (currentQuality && currentQuality !== quality) {
+      setQuality(currentQuality);
+    }
+  }, [currentQuality]);
 
   // Synchronize preferences on mount
   useEffect(() => {
@@ -514,6 +524,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         anilistId: anime.id,
         episodeNumber: Number(episodeNumber),
         audio: audioMode,
+        subtitleUrl: streamSource.subtitles?.[0]?.url || '',
+        pageUrl: streamSource.url,
       }).catch(() => {});
     }
   }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id]);

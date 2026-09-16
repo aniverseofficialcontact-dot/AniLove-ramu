@@ -85,6 +85,7 @@ public class EpisodeDownloadService extends Service {
         public long totalBytes;
         public String localFilePath;
         public String localSubPath;
+        public String localAudioPath;
         public String speed;
         public String error;
         public boolean isHls;
@@ -631,6 +632,52 @@ public class EpisodeDownloadService extends Service {
         return conn;
     }
 
+    private static class HlsVariant {
+        String url;
+        int bandwidth;
+        int width;
+        int height;
+    }
+
+    private static class HlsAudioTrack {
+        String name;
+        String language;
+        String uri;
+        boolean isDefault;
+    }
+
+    private static String extractHlsAttribute(String line, String key) {
+        int idx = line.indexOf(key + "=\"");
+        if (idx != -1) {
+            int end = line.indexOf("\"", idx + key.length() + 2);
+            if (end != -1) {
+                return line.substring(idx + key.length() + 2, end);
+            }
+        }
+        idx = line.indexOf(key + "=");
+        if (idx != -1) {
+            int start = idx + key.length() + 1;
+            int end = line.indexOf(",", start);
+            if (end == -1) end = line.length();
+            return line.substring(start, end).trim();
+        }
+        return null;
+    }
+
+    private boolean matchAudioTrack(HlsAudioTrack track, String targetAudio) {
+        if (track == null || targetAudio == null) return false;
+        String all = ((track.language != null ? track.language : "") + " " + (track.name != null ? track.name : "")).toLowerCase();
+        String target = targetAudio.toLowerCase();
+        if (target.contains("hin")) return all.contains("hin") || all.contains("hi");
+        if (target.contains("tam")) return all.contains("tam") || all.contains("ta");
+        if (target.contains("tel")) return all.contains("tel") || all.contains("te");
+        if (target.contains("mal")) return all.contains("mal") || all.contains("ml");
+        if (target.contains("ben")) return all.contains("ben") || all.contains("bn");
+        if (target.contains("dub") || target.contains("eng")) return all.contains("eng") || all.contains("en") || all.contains("dub");
+        if (target.contains("sub") || target.contains("jpn") || target.contains("jap")) return all.contains("jpn") || all.contains("ja") || all.contains("sub") || all.contains("orig");
+        return false;
+    }
+
     private void downloadHlsStream(DownloadItem item, File downloadDir, File targetFile) throws Exception {
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
         String currentPlaylistUrl = item.streamUrl;
@@ -645,17 +692,51 @@ public class EpisodeDownloadService extends Service {
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         List<String> segmentUrls = new ArrayList<>();
-        List<String> variantStreams = new ArrayList<>();
+        List<HlsVariant> variants = new ArrayList<>();
+        List<HlsAudioTrack> audioTracks = new ArrayList<>();
         String initMapUrl = null;
         String line;
         boolean isMasterPlaylist = false;
+        HlsVariant pendingVariant = null;
 
         while ((line = reader.readLine()) != null) {
             line = line.trim();
-            if (line.contains("#EXT-X-STREAM-INF")) {
+            if (line.contains("#EXT-X-MEDIA:TYPE=AUDIO")) {
                 isMasterPlaylist = true;
+                HlsAudioTrack track = new HlsAudioTrack();
+                track.name = extractHlsAttribute(line, "NAME");
+                track.language = extractHlsAttribute(line, "LANGUAGE");
+                String uri = extractHlsAttribute(line, "URI");
+                if (uri != null && !uri.isEmpty()) {
+                    track.uri = resolveHlsUrl(currentPlaylistUrl, uri);
+                }
+                track.isDefault = "YES".equalsIgnoreCase(extractHlsAttribute(line, "DEFAULT"));
+                audioTracks.add(track);
+            } else if (line.contains("#EXT-X-STREAM-INF")) {
+                isMasterPlaylist = true;
+                pendingVariant = new HlsVariant();
+                String bw = extractHlsAttribute(line, "BANDWIDTH");
+                if (bw != null) {
+                    try { pendingVariant.bandwidth = Integer.parseInt(bw); } catch (Exception ignored) {}
+                }
+                String res = extractHlsAttribute(line, "RESOLUTION");
+                if (res != null && res.contains("x")) {
+                    String[] dims = res.split("x");
+                    try {
+                        pendingVariant.width = Integer.parseInt(dims[0]);
+                        pendingVariant.height = Integer.parseInt(dims[1]);
+                    } catch (Exception ignored) {}
+                }
             } else if (isMasterPlaylist && !line.startsWith("#") && !line.isEmpty()) {
-                variantStreams.add(resolveHlsUrl(currentPlaylistUrl, line));
+                if (pendingVariant != null) {
+                    pendingVariant.url = resolveHlsUrl(currentPlaylistUrl, line);
+                    variants.add(pendingVariant);
+                    pendingVariant = null;
+                } else {
+                    HlsVariant v = new HlsVariant();
+                    v.url = resolveHlsUrl(currentPlaylistUrl, line);
+                    variants.add(v);
+                }
             } else if (!isMasterPlaylist) {
                 if (line.contains("#EXT-X-MAP:")) {
                     int uriIdx = line.indexOf("URI=\"");
@@ -673,11 +754,31 @@ public class EpisodeDownloadService extends Service {
         reader.close();
         conn.disconnect();
 
-        // If it was a master playlist, try variant streams in descending order until segments are found
-        if (isMasterPlaylist && !variantStreams.isEmpty()) {
-            for (int v = variantStreams.size() - 1; v >= 0; v--) {
-                String subPlaylistUrl = variantStreams.get(v);
-                Log.i(TAG, "Resolving master playlist to variant: " + subPlaylistUrl);
+        // If it was a master playlist, select the best matching variant based on item.quality
+        if (isMasterPlaylist && !variants.isEmpty()) {
+            int targetHeight = 1080;
+            if (item.quality != null) {
+                String qLower = item.quality.toLowerCase();
+                if (qLower.contains("720")) targetHeight = 720;
+                else if (qLower.contains("480")) targetHeight = 480;
+                else if (qLower.contains("360")) targetHeight = 360;
+                else if (qLower.contains("1080")) targetHeight = 1080;
+            }
+
+            final int finalTargetHeight = targetHeight;
+            Collections.sort(variants, (a, b) -> {
+                int aH = a.height > 0 ? a.height : 1080;
+                int bH = b.height > 0 ? b.height : 1080;
+                int diffA = Math.abs(aH - finalTargetHeight);
+                int diffB = Math.abs(bH - finalTargetHeight);
+                if (diffA != diffB) return Integer.compare(diffA, diffB);
+                if (bH != aH) return Integer.compare(bH, aH);
+                return Integer.compare(b.bandwidth, a.bandwidth);
+            });
+
+            for (HlsVariant v : variants) {
+                String subPlaylistUrl = v.url;
+                Log.i(TAG, "Resolving master playlist to variant (" + v.height + "p): " + subPlaylistUrl);
                 try {
                     conn = openHlsConnectionWithRedirects(subPlaylistUrl, referer);
                     if (conn.getResponseCode() == 200) {
@@ -713,15 +814,73 @@ public class EpisodeDownloadService extends Service {
             }
         }
 
+        // Check if separate audio playlist exists (e.g. multi-audio Zephyrix)
+        List<String> audioSegmentUrls = new ArrayList<>();
+        String audioInitMapUrl = null;
+        HlsAudioTrack chosenAudioTrack = null;
+
+        if (!audioTracks.isEmpty()) {
+            for (HlsAudioTrack track : audioTracks) {
+                if (matchAudioTrack(track, item.audio)) {
+                    chosenAudioTrack = track;
+                    break;
+                }
+            }
+            if (chosenAudioTrack == null) {
+                for (HlsAudioTrack track : audioTracks) {
+                    if (track.isDefault) {
+                        chosenAudioTrack = track;
+                        break;
+                    }
+                }
+            }
+            if (chosenAudioTrack == null) {
+                chosenAudioTrack = audioTracks.get(0);
+            }
+
+            if (chosenAudioTrack != null && chosenAudioTrack.uri != null && !chosenAudioTrack.uri.isEmpty()) {
+                Log.i(TAG, "Fetching audio sub-playlist for " + chosenAudioTrack.name + " (" + chosenAudioTrack.language + "): " + chosenAudioTrack.uri);
+                try {
+                    HttpURLConnection audioConn = openHlsConnectionWithRedirects(chosenAudioTrack.uri, referer);
+                    if (audioConn.getResponseCode() == 200) {
+                        String audioPlaylistUrl = chosenAudioTrack.uri;
+                        BufferedReader audioReader = new BufferedReader(new InputStreamReader(audioConn.getInputStream()));
+                        while ((line = audioReader.readLine()) != null) {
+                            line = line.trim();
+                            if (line.contains("#EXT-X-MAP:")) {
+                                int uriIdx = line.indexOf("URI=\"");
+                                if (uriIdx != -1) {
+                                    int endIdx = line.indexOf("\"", uriIdx + 5);
+                                    if (endIdx != -1) {
+                                        audioInitMapUrl = resolveHlsUrl(audioPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                                    }
+                                }
+                            } else if (!line.startsWith("#") && !line.isEmpty()) {
+                                audioSegmentUrls.add(resolveHlsUrl(audioPlaylistUrl, line));
+                            }
+                        }
+                        audioReader.close();
+                        audioConn.disconnect();
+                        Log.i(TAG, "Found " + audioSegmentUrls.size() + " audio segments for " + chosenAudioTrack.name);
+                    }
+                } catch (Exception aEx) {
+                    Log.w(TAG, "Failed resolving audio playlist: " + aEx.getMessage());
+                }
+            }
+        }
+
         if (segmentUrls.isEmpty()) {
             throw new Exception("No downloadable video segments found in playlist");
         }
 
-        int totalSegments = segmentUrls.size();
+        int totalVideoSegments = segmentUrls.size();
+        int totalAudioSegments = audioSegmentUrls.size();
+        int grandTotalSegments = totalVideoSegments + totalAudioSegments;
+
         File partsDir = new File(downloadDir, "segments_ep_" + item.episodeNumber);
         if (!partsDir.exists()) partsDir.mkdirs();
 
-        // If starting fresh (progress == 0), clear any previous broken partial file
+        // 1. Download Video Stream
         if (targetFile.exists() && item.progress == 0) {
             targetFile.delete();
         }
@@ -748,13 +907,14 @@ public class EpisodeDownloadService extends Service {
 
         long lastSpeedTime = System.currentTimeMillis();
         long chunkBytesDownloaded = 0;
+        int completedSegments = 0;
 
-        for (int i = 0; i < totalSegments; i++) {
+        for (int i = 0; i < totalVideoSegments; i++) {
             if (item.isPaused || item.isCancelled) {
                 break;
             }
 
-            File segFile = new File(partsDir, "seg_" + i + ".ts");
+            File segFile = new File(partsDir, "v_seg_" + i + ".ts");
             if (!segFile.exists() || segFile.length() == 0) {
                 downloadFileDirect(segmentUrls.get(i), segFile, referer);
             }
@@ -769,6 +929,7 @@ public class EpisodeDownloadService extends Service {
                 chunkBytesDownloaded += r;
             }
             segIn.close();
+            completedSegments++;
 
             long now = System.currentTimeMillis();
             if (now - lastSpeedTime > 800) {
@@ -777,16 +938,81 @@ public class EpisodeDownloadService extends Service {
                 String speedStr = speedKBps > 1024 ? String.format("%.1f MB/s", speedKBps / 1024.0) : String.format("%.0f KB/s", speedKBps);
                 item.speed = speedStr;
 
-                item.progress = (int) (((i + 1) * 100.0) / totalSegments);
+                item.progress = (int) ((completedSegments * 100.0) / grandTotalSegments);
                 notifyProgress(item, speedStr);
                 lastSpeedTime = now;
                 chunkBytesDownloaded = 0;
             } else {
-                item.progress = (int) (((i + 1) * 100.0) / totalSegments);
+                item.progress = (int) ((completedSegments * 100.0) / grandTotalSegments);
             }
         }
-
         mergedOut.close();
+
+        // 2. Download Audio Stream if separate audio tracks were present
+        if (!audioSegmentUrls.isEmpty() && !item.isPaused && !item.isCancelled) {
+            File audioFile = new File(downloadDir, "ep_" + item.episodeNumber + "_audio.ts");
+            if (audioFile.exists() && item.progress == 0) {
+                audioFile.delete();
+            }
+
+            FileOutputStream audioOut = new FileOutputStream(audioFile, item.progress > 0);
+
+            if (audioInitMapUrl != null && !audioInitMapUrl.isEmpty()) {
+                File audioInitFile = new File(partsDir, "audio_init.mp4");
+                if (!audioInitFile.exists() || audioInitFile.length() == 0) {
+                    downloadFileDirect(audioInitMapUrl, audioInitFile, referer);
+                }
+                if (audioInitFile.exists() && audioInitFile.length() > 0 && audioFile.length() == 0) {
+                    FileInputStream initIn = new FileInputStream(audioInitFile);
+                    byte[] buf = new byte[32 * 1024];
+                    int r;
+                    while ((r = initIn.read(buf)) != -1) {
+                        audioOut.write(buf, 0, r);
+                        item.bytesDownloaded += r;
+                    }
+                    initIn.close();
+                }
+            }
+
+            for (int j = 0; j < totalAudioSegments; j++) {
+                if (item.isPaused || item.isCancelled) {
+                    break;
+                }
+
+                File audioSegFile = new File(partsDir, "a_seg_" + j + ".ts");
+                if (!audioSegFile.exists() || audioSegFile.length() == 0) {
+                    downloadFileDirect(audioSegmentUrls.get(j), audioSegFile, referer);
+                }
+
+                FileInputStream segIn = new FileInputStream(audioSegFile);
+                byte[] buf = new byte[32 * 1024];
+                int r;
+                while ((r = segIn.read(buf)) != -1) {
+                    audioOut.write(buf, 0, r);
+                    item.bytesDownloaded += r;
+                    chunkBytesDownloaded += r;
+                }
+                segIn.close();
+                completedSegments++;
+
+                long now = System.currentTimeMillis();
+                if (now - lastSpeedTime > 800) {
+                    double seconds = (now - lastSpeedTime) / 1000.0;
+                    double speedKBps = (chunkBytesDownloaded / 1024.0) / Math.max(0.1, seconds);
+                    String speedStr = speedKBps > 1024 ? String.format("%.1f MB/s", speedKBps / 1024.0) : String.format("%.0f KB/s", speedKBps);
+                    item.speed = speedStr;
+
+                    item.progress = (int) ((completedSegments * 100.0) / grandTotalSegments);
+                    notifyProgress(item, speedStr);
+                    lastSpeedTime = now;
+                    chunkBytesDownloaded = 0;
+                } else {
+                    item.progress = (int) ((completedSegments * 100.0) / grandTotalSegments);
+                }
+            }
+            audioOut.close();
+            item.localAudioPath = audioFile.getAbsolutePath();
+        }
 
         // Clean up temporary ts parts once merged
         if (!item.isPaused && !item.isCancelled) {
@@ -930,6 +1156,7 @@ public class EpisodeDownloadService extends Service {
             obj.put("totalBytes", item.totalBytes);
             obj.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
             obj.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
+            obj.put("localAudioPath", item.localAudioPath != null ? item.localAudioPath : "");
             obj.put("thumbnail", item.thumbnail);
             obj.put("completedAt", System.currentTimeMillis());
 
@@ -972,6 +1199,7 @@ public class EpisodeDownloadService extends Service {
                     item.totalBytes = obj.optLong("totalBytes", 0);
                     item.localFilePath = obj.optString("localFilePath", "");
                     item.localSubPath = obj.optString("localSubPath", "");
+                    item.localAudioPath = obj.optString("localAudioPath", "");
                     if (item.localFilePath != null && new File(item.localFilePath).exists()) {
                         allDownloads.put(item.id, item);
                     }
@@ -997,6 +1225,14 @@ public class EpisodeDownloadService extends Service {
                 File s = new File(item.localSubPath);
                 if (s.exists()) s.delete();
             }
+
+            if (item.localAudioPath != null && !item.localAudioPath.isEmpty()) {
+                File a = new File(item.localAudioPath);
+                if (a.exists()) a.delete();
+            }
+
+            File audioTs = new File(dir, "ep_" + item.episodeNumber + "_audio.ts");
+            if (audioTs.exists()) audioTs.delete();
 
             File parts = new File(dir, "segments_ep_" + item.episodeNumber);
             if (parts.exists()) deleteRecursive(parts);

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
-import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, StreamLanguage } from '../services/streamingProviders';
+import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, StreamLanguage, StreamResolution } from '../services/streamingProviders';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
 import { fetchFranchiseWatchOrder } from '../services/watchOrderService';
@@ -128,6 +128,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   }, [settings?.preferredAudio, settings?.preferredLanguages]);
 
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
+  const [selectedQuality, setSelectedQuality] = useState<StreamResolution>('1080p');
 
   // Sync if settings update
   useEffect(() => {
@@ -390,6 +391,8 @@ export const WatchView: React.FC<WatchViewProps> = ({
             onServerChange={setSelectedServer}
             currentAudioLanguage={selectedAudio}
             onAudioLanguageChange={setSelectedAudio}
+            currentQuality={selectedQuality}
+            onQualityChange={setSelectedQuality}
             onEpisodeChange={ep => {
               onEpisodeChange(ep);
               onUpdateProgress(anime, Math.max(currentProgress, ep - 1));
@@ -406,7 +409,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold px-1">
             <span className="flex items-center gap-1.5 text-neutral-200 font-bold">
               <Radio className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-              <span>Streaming Server & Language</span>
+              <span>Streaming Server, Language & Quality</span>
             </span>
             <span className="text-[11px] text-neutral-500">{STREAM_PROVIDERS.length} Working Servers</span>
           </div>
@@ -450,6 +453,26 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 );
               });
             })()}
+
+            <div className="h-5 w-px bg-neutral-800 shrink-0 mx-1" />
+
+            {/* Quality Selector Pills */}
+            {(['1080p', '720p', '480p', '360p'] as StreamResolution[]).map(q => {
+              const isSelected = selectedQuality === q;
+              return (
+                <button
+                  key={q}
+                  onClick={() => setSelectedQuality(q)}
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20 ring-1 ring-indigo-300'
+                      : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {q}
+                </button>
+              );
+            })}
 
             <div className="h-5 w-px bg-neutral-800 shrink-0 mx-1" />
 
