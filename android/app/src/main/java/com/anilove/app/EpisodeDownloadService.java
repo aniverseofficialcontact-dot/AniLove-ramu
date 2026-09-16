@@ -552,16 +552,93 @@ public class EpisodeDownloadService extends Service {
         }
     }
 
+    private String getRefererForUrl(String streamUrl, String pageUrl) {
+        if (streamUrl != null) {
+            String lower = streamUrl.toLowerCase();
+            if (lower.contains("zephyrix") || lower.contains("zn-grid")) {
+                return "https://play.zephyrix.org/";
+            }
+            if (lower.contains("watchanimeworld") || lower.contains("animesalt") || lower.contains("short.icu")) {
+                return "https://watchanimeworld.one/";
+            }
+            if (lower.contains("nexabloom.top") || lower.contains("justanime.to")) {
+                return "https://justanime.to/";
+            }
+            if (lower.contains("megaplay.buzz")) {
+                return "https://megaplay.buzz/";
+            }
+            if (lower.contains("vidlink.pro")) {
+                return "https://vidlink.pro/";
+            }
+            if (lower.contains("autoembed.co")) {
+                return "https://autoembed.co/";
+            }
+            if (lower.contains("smashystream.com")) {
+                return "https://player.smashystream.com/";
+            }
+        }
+        String ref = (pageUrl != null && !pageUrl.isEmpty()) ? pageUrl : streamUrl;
+        try {
+            URL u = new URL(ref);
+            return u.getProtocol() + "://" + u.getHost() + "/";
+        } catch (Exception e) {
+            return "https://anikototv.to/";
+        }
+    }
+
+    private HttpURLConnection openConnectionWithHeaders(String urlStr, String referer) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setInstanceFollowRedirects(true);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+
+        String effectiveReferer = referer;
+        if (effectiveReferer == null || effectiveReferer.isEmpty() || "https://google.com/".equals(effectiveReferer)) {
+            effectiveReferer = getRefererForUrl(urlStr, null);
+        }
+
+        conn.setRequestProperty("Referer", effectiveReferer);
+        try {
+            URL u = new URL(effectiveReferer);
+            conn.setRequestProperty("Origin", u.getProtocol() + "://" + u.getHost());
+        } catch (Exception ignored) {}
+
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(25000);
+        return conn;
+    }
+
+    private HttpURLConnection openHlsConnectionWithRedirects(String urlStr, String referer) throws Exception {
+        String currentUrl = urlStr;
+        HttpURLConnection conn = null;
+        for (int hop = 0; hop < 5; hop++) {
+            conn = openConnectionWithHeaders(currentUrl, referer);
+            conn.connect();
+            int code = conn.getResponseCode();
+            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP || code == 307 || code == 308) {
+                String loc = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (loc != null && !loc.isEmpty()) {
+                    currentUrl = resolveHlsUrl(currentUrl, loc);
+                    continue;
+                }
+            }
+            break;
+        }
+        return conn;
+    }
+
     private void downloadHlsStream(DownloadItem item, File downloadDir, File targetFile) throws Exception {
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
         String currentPlaylistUrl = item.streamUrl;
 
-        // Fetch Master / Media playlist
-        HttpURLConnection conn = openConnectionWithHeaders(currentPlaylistUrl, referer);
-        conn.connect();
+        // Fetch Master / Media playlist with redirect resolution
+        HttpURLConnection conn = openHlsConnectionWithRedirects(currentPlaylistUrl, referer);
 
-        if (conn.getResponseCode() != 200) {
-            throw new Exception("HTTP " + conn.getResponseCode() + " when connecting to stream playlist");
+        int resCode = conn.getResponseCode();
+        if (resCode != 200) {
+            throw new Exception("HTTP " + resCode + " when connecting to stream playlist: " + currentPlaylistUrl);
         }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -600,8 +677,7 @@ public class EpisodeDownloadService extends Service {
                 String subPlaylistUrl = variantStreams.get(v);
                 Log.i(TAG, "Resolving master playlist to variant: " + subPlaylistUrl);
                 try {
-                    conn = openConnectionWithHeaders(subPlaylistUrl, referer);
-                    conn.connect();
+                    conn = openHlsConnectionWithRedirects(subPlaylistUrl, referer);
                     if (conn.getResponseCode() == 200) {
                         currentPlaylistUrl = subPlaylistUrl;
                         reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -714,50 +790,6 @@ public class EpisodeDownloadService extends Service {
         if (!item.isPaused && !item.isCancelled) {
             deleteRecursive(partsDir);
         }
-    }
-
-    private String getRefererForUrl(String streamUrl, String pageUrl) {
-        if (streamUrl != null) {
-            if (streamUrl.contains("zephyrix") || streamUrl.contains("zn-grid")) {
-                return "https://play.zephyrix.org/";
-            }
-            if (streamUrl.contains("nexabloom.top") || streamUrl.contains("justanime.to")) {
-                return "https://justanime.to/";
-            }
-            if (streamUrl.contains("megaplay.buzz")) {
-                return "https://megaplay.buzz/";
-            }
-        }
-        String ref = (pageUrl != null && !pageUrl.isEmpty()) ? pageUrl : streamUrl;
-        try {
-            URL u = new URL(ref);
-            return u.getProtocol() + "://" + u.getHost() + "/";
-        } catch (Exception e) {
-            return "https://google.com/";
-        }
-    }
-
-    private HttpURLConnection openConnectionWithHeaders(String urlStr, String referer) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-        conn.setRequestProperty("Accept", "*/*");
-        if (urlStr.contains("zephyrix") || urlStr.contains("zn-grid")) {
-            conn.setRequestProperty("Referer", "https://play.zephyrix.org/");
-            conn.setRequestProperty("Origin", "https://play.zephyrix.org");
-        } else if (urlStr.contains("nexabloom.top") || urlStr.contains("justanime.to")) {
-            conn.setRequestProperty("Referer", "https://justanime.to/");
-            conn.setRequestProperty("Origin", "https://justanime.to");
-        } else if (urlStr.contains("megaplay.buzz")) {
-            conn.setRequestProperty("Referer", "https://megaplay.buzz/");
-            conn.setRequestProperty("Origin", "https://megaplay.buzz");
-        } else if (referer != null && !referer.isEmpty()) {
-            conn.setRequestProperty("Referer", referer);
-            conn.setRequestProperty("Origin", referer);
-        }
-        conn.setConnectTimeout(15000);
-        conn.setReadTimeout(20000);
-        return conn;
     }
 
     private void downloadFileDirect(String urlStr, File destFile, String referer) throws Exception {

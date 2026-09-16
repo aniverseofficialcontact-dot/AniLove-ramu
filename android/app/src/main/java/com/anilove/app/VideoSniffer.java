@@ -30,7 +30,7 @@ public class VideoSniffer {
     // Notice: .ts is purposely excluded so we capture .m3u8 playlists or .mp4 files, not individual 2-second transport chunks
     private static final List<String> VIDEO_EXTENSIONS = Arrays.asList(
             ".m3u8", ".mp4", ".m4s", ".mpd", ".m4v", "googlevideo.com",
-            "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u", "/hls/"
+            "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u"
     );
 
     public interface OnVideoFoundListener {
@@ -79,12 +79,6 @@ public class VideoSniffer {
                 }
 
                 if (isVideoUrl(url)) {
-                    // Ignore common tracking/ad domains
-                    if (lower.contains("google-analytics") || lower.contains("doubleclick") ||
-                        lower.contains("pixel") || lower.contains("/ads/") || lower.contains("googletagmanager")) {
-                        return super.shouldInterceptRequest(view, request);
-                    }
-
                     if (!found) {
                         found = true;
                         Log.i(TAG, "SUCCESS! Caught Video URL: " + url);
@@ -192,21 +186,27 @@ public class VideoSniffer {
     }
 
     private boolean isVideoUrl(String url) {
-        if (url == null) return false;
+        if (url == null || url.isEmpty()) return false;
         String lowerUrl = url.toLowerCase();
 
-        // Must not be a script, style, image, or tracking pixel
+        // Must not be a script, style, image, document, or tracking/beacon/analytics request
         if (lowerUrl.endsWith(".js") || lowerUrl.endsWith(".css") ||
             lowerUrl.endsWith(".png") || lowerUrl.endsWith(".jpg") ||
             lowerUrl.endsWith(".jpeg") || lowerUrl.endsWith(".webp") ||
             lowerUrl.endsWith(".svg") || lowerUrl.endsWith(".gif") ||
+            lowerUrl.endsWith(".ico") || lowerUrl.endsWith(".html") || lowerUrl.endsWith(".htm") ||
             lowerUrl.contains("google-analytics") || lowerUrl.contains("doubleclick") ||
-            lowerUrl.contains("analytics") || lowerUrl.contains("/ads/")) {
+            lowerUrl.contains("analytics") || lowerUrl.contains("/ads/") ||
+            lowerUrl.contains("/beacon") || lowerUrl.contains("/events") ||
+            lowerUrl.contains("/ping") || lowerUrl.contains("/track") ||
+            lowerUrl.contains("/telemetry") || lowerUrl.contains("/log") ||
+            lowerUrl.contains("/stats") || lowerUrl.contains("socket.io") ||
+            lowerUrl.contains("googletagmanager")) {
             return false;
         }
 
-        // Must not be a single individual .ts chunk (which would download only 2 seconds)
-        if (lowerUrl.endsWith(".ts") && !lowerUrl.contains(".m3u8")) {
+        // Must not be a single individual .ts chunk
+        if (lowerUrl.contains(".ts") && !lowerUrl.contains(".m3u8")) {
             return false;
         }
 
@@ -241,6 +241,12 @@ public class VideoSniffer {
                     referer = "https://justanime.to/";
                 } else if (pageUrl.contains("megaplay.buzz")) {
                     referer = "https://megaplay.buzz/";
+                } else if (pageUrl.contains("vidlink.pro")) {
+                    referer = "https://vidlink.pro/";
+                } else if (pageUrl.contains("autoembed.co")) {
+                    referer = "https://autoembed.co/";
+                } else if (pageUrl.contains("smashystream.com")) {
+                    referer = "https://player.smashystream.com/";
                 }
                 headers.put("Referer", referer);
                 headers.put("Origin", referer.substring(0, referer.length() - 1));
