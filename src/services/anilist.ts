@@ -5,11 +5,7 @@ export const ANILIST_CLIENT_ID = '49024';
 
 export function getAniListAuthUrl(): string {
   // Implicit grant flow using configured AniList Client ID
-  const isNative = typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.isNativePlatform();
-  const redirectUri = isNative
-    ? 'anilove://anilist-auth'
-    : window.location.origin + window.location.pathname;
-  return `https://anilist.co/api/v2/oauth/authorize?client_id=${ANILIST_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  return `https://anilist.co/api/v2/oauth/authorize?client_id=${ANILIST_CLIENT_ID}&response_type=token`;
 }
 
 export const getOAuthLoginUrl = getAniListAuthUrl;
