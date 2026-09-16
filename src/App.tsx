@@ -351,57 +351,73 @@ export function App() {
       const { registerPlugin } = require('@capacitor/core');
       const CapacitorApp = registerPlugin('App');
 
-      CapacitorApp.addListener('appUrlOpen', (data: any) => {
-        if (!data || !data.url) return;
-        if (data.url.includes('access_token=')) {
-          const token = data.url.split('access_token=')[1].split('&')[0];
-          if (token) {
-            fetchAuthenticatedViewer(token)
-              .then(async user => {
-                if (user) {
-                  const cardSyncResult = await syncUserDataWithAniList(token).catch(() => ({ cardsCount: 0, coins: 0 }));
-                  const userList = await fetchUserMediaList(user.name).catch(() => []);
-                  if (userList && userList.length > 0) {
-                    setLibrary(prev => {
-                      const map = new Map<number, UserMediaListItem>();
-                      prev.forEach(i => map.set(i.mediaId, i));
-                      userList.forEach(i => map.set(i.mediaId, i));
-                      const merged = Array.from(map.values());
-                      saveUserLibrary(merged);
-                      return merged;
-                    });
-                  }
+      const handleUrl = (urlStr: string) => {
+        if (!urlStr || !urlStr.includes('access_token=')) return;
+        const token = urlStr.split('access_token=')[1].split('&')[0];
+        if (!token) return;
 
-                  setSettings(prevSettings => {
-                    const updated = {
-                      ...prevSettings,
-                      anilistToken: token,
-                      importUsername: user.name,
-                      anilistUser: user,
-                      customDisplayName: user.name,
-                      customAvatar: user.avatar?.large || prevSettings.customAvatar,
-                      twoWaySyncEnabled: true,
-                      lastSyncTimestamp: Date.now(),
-                    };
-                    saveUserSettings(updated);
-                    return updated;
-                  });
+        fetchAuthenticatedViewer(token)
+          .then(async user => {
+            if (user) {
+              const cardSyncResult = await syncUserDataWithAniList(token).catch(() => ({ cardsCount: 0, coins: 0 }));
+              const userList = await fetchUserMediaList(user.name).catch(() => []);
+              if (userList && userList.length > 0) {
+                setLibrary(prev => {
+                  const map = new Map<number, UserMediaListItem>();
+                  prev.forEach(i => map.set(i.mediaId, i));
+                  userList.forEach(i => map.set(i.mediaId, i));
+                  const merged = Array.from(map.values());
+                  saveUserLibrary(merged);
+                  return merged;
+                });
+              }
 
-                  showToast('sync', `Welcome ${user.name}! AniList 2-Way Sync active via App Link.`, 'AniList Connected');
-                  triggerNotification(
-                    'sync',
-                    'AniList Account Linked',
-                    `Logged in as ${user.name} via App Link. Two-way cloud synchronization is now active.`,
-                  );
-                }
-              })
-              .catch(err => {
-                console.error('Deep link OAuth token verification failed:', err);
-                showToast('error', 'Failed to authenticate AniList token from App Link.', 'Auth Error');
+              setSettings(prevSettings => {
+                const updated = {
+                  ...prevSettings,
+                  anilistToken: token,
+                  importUsername: user.name,
+                  anilistUser: user,
+                  customDisplayName: user.name,
+                  customAvatar: user.avatar?.large || prevSettings.customAvatar,
+                  twoWaySyncEnabled: true,
+                  lastSyncTimestamp: Date.now(),
+                };
+                saveUserSettings(updated);
+                return updated;
               });
-          }
+
+              showToast('sync', `Welcome ${user.name}! AniList 2-Way Sync active via App Link.`, 'AniList Connected');
+              triggerNotification(
+                'sync',
+                'AniList Account Linked',
+                `Logged in as ${user.name} via App Link. Two-way cloud synchronization is now active.`,
+              );
+            }
+          })
+          .catch(err => {
+            console.error('Deep link OAuth token verification failed:', err);
+            showToast('error', 'Failed to authenticate AniList token from App Link.', 'Auth Error');
+          });
+      };
+
+      // 1. Check if the app was launched fresh from a deep link URL
+      CapacitorApp.getLaunchUrl().then((launchData: any) => {
+        if (launchData && launchData.url) {
+          handleUrl(launchData.url);
+        }
+      }).catch((err: any) => console.warn('Failed to get launch URL:', err));
+
+      // 2. Listen for incoming deep link URL events while app is running/warm
+      const listener = CapacitorApp.addListener('appUrlOpen', (data: any) => {
+        if (data && data.url) {
+          handleUrl(data.url);
         }
       });
+
+      return () => {
+        listener.then((l: any) => l.remove()).catch(() => {});
+      };
     } catch (e) {
       console.warn('Capacitor App deep link listener registration failed:', e);
     }
