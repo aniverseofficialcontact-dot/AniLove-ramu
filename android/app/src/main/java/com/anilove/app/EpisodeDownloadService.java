@@ -271,40 +271,31 @@ public class EpisodeDownloadService extends Service {
                 item.subtitleUrl = cachedSub;
             }
         } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")) {
-            boolean isIpLockedSource = (item.serverName != null && (item.serverName.toLowerCase().contains("animeworld") || item.serverName.toLowerCase().contains("zephyrix")))
-                    || item.streamUrl.contains("zephyrix") || item.streamUrl.contains("watchanimeworld");
-
-            String[] serverResult = null;
-            if (!isIpLockedSource) {
-                // Step 1: Try server-side extraction via Render backend (same as player)
-                Log.i(TAG, "URL is embed page. Trying Render backend extraction for: "
-                    + item.animeTitle + " EP" + item.episodeNumber);
-                serverResult = tryServerSideExtractFull(item);
-            }
+            // ALWAYS extract true stream from backend first
+            Log.i(TAG, "Resolving stream via backend for: " + item.animeTitle + " EP" + item.episodeNumber + " [" + item.audio + "]");
+            String[] serverResult = tryServerSideExtractFull(item);
 
             if (serverResult != null && serverResult[0] != null && !serverResult[0].isEmpty()) {
                 String resolvedUrl = serverResult[0];
-                Log.i(TAG, "Render returned URL: " + resolvedUrl.substring(0, Math.min(80, resolvedUrl.length())));
+                Log.i(TAG, "Backend returned URL: " + resolvedUrl);
                 item.pageUrl = item.streamUrl;
                 item.streamUrl = resolvedUrl;
-                // Update subtitle if provided
                 if (serverResult[1] != null && !serverResult[1].isEmpty()
                         && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
                     item.subtitleUrl = serverResult[1];
                 }
-                // If Render returned a direct .m3u8/.mp4 — we're done, skip VideoSniffer
                 boolean isDirect = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".mp4")
                         || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u");
                 if (isDirect && !resolvedUrl.contains("zephyrix")) {
                     item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u");
-                    Log.i(TAG, "Direct stream from Render — skipping VideoSniffer");
+                    Log.i(TAG, "Direct stream from backend — skipping VideoSniffer");
                 } else {
-                    // Render returned an embed URL or IP-locked stream — run VideoSniffer on device
-                    Log.i(TAG, "Render returned embed URL, running VideoSniffer on device with correct referer");
+                    // Embed URL or IP-locked stream — run VideoSniffer on device
+                    Log.i(TAG, "Running on-device VideoSniffer for resolved embed: " + item.streamUrl);
                     sniffVideoStream(item);
                 }
             } else {
-                // Step 2: Fall back to VideoSniffer on the original embed URL on client device
+                // Fall back to VideoSniffer on original URL
                 Log.i(TAG, "Running on-device VideoSniffer for: " + item.streamUrl);
                 sniffVideoStream(item);
             }
@@ -400,19 +391,13 @@ public class EpisodeDownloadService extends Service {
     }
 
     /**
-     * Calls the Render-hosted backend's /api/anikoto/resolve endpoint to get
-     * a direct stream URL for downloading, without needing VideoSniffer at all.
-     * This is the same endpoint the player uses — if the player works, this will too.
-     *
-     * @param item The DownloadItem containing anilistId, animeTitle, episodeNumber, audio
-     * @return String[2] = { streamUrl, subtitleUrl }, or null if resolution failed
+     * Calls the Render-hosted backend's /api/stream/resolve endpoint to get
+     * a direct stream URL or embed page for downloading.
      */
     private String[] tryServerSideExtractFull(DownloadItem item) {
         try {
-            // Render.com cloud backend master multi-language endpoint
             String apiUrl = "https://anilove-backend.onrender.com/api/stream/resolve";
 
-            // Preserve full audio language code (HIN, TAM, TEL, MAL, BEN, DUB, SUB)
             String lang = item.audio != null && !item.audio.isEmpty() ? item.audio.toUpperCase() : "DUB";
             String safeTitle = item.animeTitle != null
                 ? item.animeTitle.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -422,22 +407,22 @@ public class EpisodeDownloadService extends Service {
                 : "";
 
             String safeProviderId = "anikoto-hd1";
-            if (safeServer.toLowerCase().contains("animeworld") || safeServer.toLowerCase().contains("indian") || safeServer.toLowerCase().contains("zephyrix")) {
+            if (safeServer.toLowerCase().contains("animeworld") || safeServer.toLowerCase().contains("indian") || safeServer.toLowerCase().contains("zephyrix")
+                    || "HIN".equals(lang) || "TAM".equals(lang) || "TEL".equals(lang) || "MAL".equals(lang) || "BEN".equals(lang)) {
                 safeProviderId = "animeworld-india";
             } else if (safeServer.toLowerCase().contains("tatakai")) {
                 safeProviderId = "tatakai-multi";
             }
 
-            String jsonBody = "{"
-                + "\"anilistId\":" + item.anilistId + ","
-                + "\"animeTitle\":\"" + safeTitle + "\","
-                + "\"englishTitle\":\"" + safeTitle + "\","
-                + "\"episodeNumber\":" + item.episodeNumber + ","
-                + "\"language\":\"" + lang + "\","
-                + "\"serverName\":\"" + safeServer + "\","
-                + "\"providerId\":\"" + safeProviderId + "\","
-                + "\"format\":\"TV\""
-                + "}";
+            JSONObject jsonReq = new JSONObject();
+            jsonReq.put("anilistId", item.anilistId);
+            jsonReq.put("animeTitle", safeTitle);
+            jsonReq.put("englishTitle", safeTitle);
+            jsonReq.put("episodeNumber", item.episodeNumber);
+            jsonReq.put("language", lang);
+            jsonReq.put("serverName", safeServer);
+            jsonReq.put("providerId", safeProviderId);
+            jsonReq.put("format", "TV");
 
             Log.i(TAG, "[ServerExtract] Calling Render /api/stream/resolve for: "
                 + item.animeTitle + " EP" + item.episodeNumber + " [" + lang + "] on " + item.serverName + " (" + safeProviderId + ")");
@@ -446,13 +431,13 @@ public class EpisodeDownloadService extends Service {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(25000); // Render cold-start can take up to 30s
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(35000);
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept", "application/json");
             conn.setRequestProperty("User-Agent", "AniLove-Android/1.0");
 
-            byte[] bodyBytes = jsonBody.getBytes("UTF-8");
+            byte[] bodyBytes = jsonReq.toString().getBytes("UTF-8");
             conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
             java.io.OutputStream os = conn.getOutputStream();
             os.write(bodyBytes);
@@ -468,56 +453,31 @@ public class EpisodeDownloadService extends Service {
                 while ((line = br.readLine()) != null) sb.append(line);
                 br.close();
 
-                String json = sb.toString();
-                // Check success field
-                if (!json.contains("\"success\":true")) {
+                JSONObject resObj = new JSONObject(sb.toString());
+                if (!resObj.optBoolean("success", false)) {
                     Log.w(TAG, "[ServerExtract] Render returned success:false");
                     return null;
                 }
 
-                // Try directStreamUrl first (actual .m3u8), then streamUrl (may be embed or m3u8)
-                String streamUrl = extractJsonString(json, "directStreamUrl");
-                if (streamUrl == null || streamUrl.isEmpty()) {
-                    streamUrl = extractJsonString(json, "streamUrl");
-                }
-                String subtitleUrl = extractJsonString(json, "subtitleUrl");
+                String directStreamUrl = resObj.optString("directStreamUrl", "");
+                String streamUrl = resObj.optString("streamUrl", "");
+                String embedUrl = resObj.optString("embedUrl", "");
+                String subtitleUrl = resObj.optString("subtitleUrl", "");
 
-                if (streamUrl != null && !streamUrl.isEmpty()) {
-                    Log.i(TAG, "[ServerExtract] Got stream URL: "
-                        + streamUrl.substring(0, Math.min(80, streamUrl.length())));
-                    return new String[]{ streamUrl, subtitleUrl != null ? subtitleUrl : "" };
+                // Check if directStreamUrl is usable directly (skip Zephyrix because of IP locks)
+                if (directStreamUrl != null && !directStreamUrl.isEmpty() && !directStreamUrl.contains("zephyrix")) {
+                    return new String[]{ directStreamUrl, subtitleUrl };
                 }
-                Log.w(TAG, "[ServerExtract] No streamUrl in response JSON");
-            } else {
-                // Read error body
-                try {
-                    BufferedReader errBr = new BufferedReader(new InputStreamReader(conn.getErrorStream(), "UTF-8"));
-                    StringBuilder errSb = new StringBuilder();
-                    String errLine;
-                    while ((errLine = errBr.readLine()) != null) errSb.append(errLine);
-                    errBr.close();
-                    Log.w(TAG, "[ServerExtract] Error body: " + errSb.toString().substring(0, Math.min(200, errSb.length())));
-                } catch (Exception ignored) {}
+
+                String chosenUrl = (streamUrl != null && !streamUrl.isEmpty()) ? streamUrl : embedUrl;
+                if (chosenUrl != null && !chosenUrl.isEmpty()) {
+                    return new String[]{ chosenUrl, subtitleUrl };
+                }
             }
         } catch (Exception e) {
             Log.w(TAG, "[ServerExtract] Exception: " + e.getMessage());
         }
         return null;
-    }
-
-    /** Minimal JSON string field extractor (avoids needing org.json in this method) */
-    private String extractJsonString(String json, String key) {
-        try {
-            String search = "\"" + key + "\":\"";
-            int start = json.indexOf(search);
-            if (start == -1) return null;
-            start += search.length();
-            int end = json.indexOf("\"", start);
-            if (end == -1) return null;
-            return json.substring(start, end).replace("\\/", "/");
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private void downloadDirectVideo(DownloadItem item, File targetFile) throws Exception {
@@ -600,9 +560,14 @@ public class EpisodeDownloadService extends Service {
         HttpURLConnection conn = openConnectionWithHeaders(currentPlaylistUrl, referer);
         conn.connect();
 
+        if (conn.getResponseCode() != 200) {
+            throw new Exception("HTTP " + conn.getResponseCode() + " when connecting to stream playlist");
+        }
+
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         List<String> segmentUrls = new ArrayList<>();
         List<String> variantStreams = new ArrayList<>();
+        String initMapUrl = null;
         String line;
         boolean isMasterPlaylist = false;
 
@@ -612,32 +577,62 @@ public class EpisodeDownloadService extends Service {
                 isMasterPlaylist = true;
             } else if (isMasterPlaylist && !line.startsWith("#") && !line.isEmpty()) {
                 variantStreams.add(resolveHlsUrl(currentPlaylistUrl, line));
-            } else if (!isMasterPlaylist && !line.startsWith("#") && !line.isEmpty()) {
-                segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+            } else if (!isMasterPlaylist) {
+                if (line.contains("#EXT-X-MAP:")) {
+                    int uriIdx = line.indexOf("URI=\"");
+                    if (uriIdx != -1) {
+                        int endIdx = line.indexOf("\"", uriIdx + 5);
+                        if (endIdx != -1) {
+                            initMapUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                        }
+                    }
+                } else if (!line.startsWith("#") && !line.isEmpty()) {
+                    segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+                }
             }
         }
         reader.close();
         conn.disconnect();
 
-        // If it was a master playlist, follow the highest quality sub-playlist (last entry or 1080p)
+        // If it was a master playlist, try variant streams in descending order until segments are found
         if (isMasterPlaylist && !variantStreams.isEmpty()) {
-            String highestQualitySubPlaylist = variantStreams.get(variantStreams.size() - 1);
-            Log.i(TAG, "Resolving master playlist to highest quality stream: " + highestQualitySubPlaylist);
-            currentPlaylistUrl = highestQualitySubPlaylist;
+            for (int v = variantStreams.size() - 1; v >= 0; v--) {
+                String subPlaylistUrl = variantStreams.get(v);
+                Log.i(TAG, "Resolving master playlist to variant: " + subPlaylistUrl);
+                try {
+                    conn = openConnectionWithHeaders(subPlaylistUrl, referer);
+                    conn.connect();
+                    if (conn.getResponseCode() == 200) {
+                        currentPlaylistUrl = subPlaylistUrl;
+                        reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        segmentUrls.clear();
+                        initMapUrl = null;
 
-            conn = openConnectionWithHeaders(currentPlaylistUrl, referer);
-            conn.connect();
-            reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            segmentUrls.clear();
+                        while ((line = reader.readLine()) != null) {
+                            line = line.trim();
+                            if (line.contains("#EXT-X-MAP:")) {
+                                int uriIdx = line.indexOf("URI=\"");
+                                if (uriIdx != -1) {
+                                    int endIdx = line.indexOf("\"", uriIdx + 5);
+                                    if (endIdx != -1) {
+                                        initMapUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                                    }
+                                }
+                            } else if (!line.startsWith("#") && !line.isEmpty()) {
+                                segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+                            }
+                        }
+                        reader.close();
+                        conn.disconnect();
 
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (!line.startsWith("#") && !line.isEmpty()) {
-                    segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+                        if (!segmentUrls.isEmpty()) {
+                            break;
+                        }
+                    }
+                } catch (Exception varEx) {
+                    Log.w(TAG, "Variant playlist failed: " + varEx.getMessage());
                 }
             }
-            reader.close();
-            conn.disconnect();
         }
 
         if (segmentUrls.isEmpty()) {
@@ -648,7 +643,31 @@ public class EpisodeDownloadService extends Service {
         File partsDir = new File(downloadDir, "segments_ep_" + item.episodeNumber);
         if (!partsDir.exists()) partsDir.mkdirs();
 
-        FileOutputStream mergedOut = new FileOutputStream(targetFile, targetFile.exists());
+        // If starting fresh (progress == 0), clear any previous broken partial file
+        if (targetFile.exists() && item.progress == 0) {
+            targetFile.delete();
+        }
+
+        FileOutputStream mergedOut = new FileOutputStream(targetFile, item.progress > 0);
+
+        // If initialization segment (fMP4 CMAF init.mp4) exists, write it first
+        if (initMapUrl != null && !initMapUrl.isEmpty()) {
+            File initFile = new File(partsDir, "init.mp4");
+            if (!initFile.exists() || initFile.length() == 0) {
+                downloadFileDirect(initMapUrl, initFile, referer);
+            }
+            if (initFile.exists() && initFile.length() > 0 && targetFile.length() == 0) {
+                FileInputStream initIn = new FileInputStream(initFile);
+                byte[] buf = new byte[32 * 1024];
+                int r;
+                while ((r = initIn.read(buf)) != -1) {
+                    mergedOut.write(buf, 0, r);
+                    item.bytesDownloaded += r;
+                }
+                initIn.close();
+            }
+        }
+
         long lastSpeedTime = System.currentTimeMillis();
         long chunkBytesDownloaded = 0;
 

@@ -127,16 +127,19 @@ export async function queueBatchEpisodeDownloads(
       let streamUrl = '';
       let selectedServerName = serverName;
 
-      // 1. Quick probe to see if backend returns a direct URL in under 1200ms
+      const matchedProvider =
+        STREAM_PROVIDERS.find(p => p.serverMatch === serverName || p.label === serverName || p.id === serverName) ||
+        STREAM_PROVIDERS[0];
+
+      // 1. Quick probe to see if backend returns a direct URL
       try {
-        const quickResolve = resolveEpisodeSource({
+        const res = await resolveEpisodeSource({
           anime,
           episodeNumber: ep.number,
+          providerId: matchedProvider.id,
           language: audio,
           serverName,
         });
-        const timeout = new Promise<null>(r => setTimeout(() => r(null), 3500));
-        const res: any = await Promise.race([quickResolve, timeout]);
         if (res && res.status === 'available' && res.source?.url) {
           streamUrl = res.source.url;
           selectedServerName = res.source.selectedServerName || serverName;
@@ -145,11 +148,8 @@ export async function queueBatchEpisodeDownloads(
         // Fallback immediately
       }
 
-      // 2. Direct embed stream source generator (instant 0ms resolution)
+      // 2. Direct embed stream source generator
       if (!streamUrl) {
-        const matchedProvider =
-          STREAM_PROVIDERS.find(p => p.serverMatch === serverName || p.label === serverName || p.id === serverName) ||
-          STREAM_PROVIDERS[0];
         const direct = createDirectStreamSource(anime, ep.number, matchedProvider, audio, '1080p', serverName);
         streamUrl = direct.url;
         selectedServerName = direct.selectedServerName || serverName;
