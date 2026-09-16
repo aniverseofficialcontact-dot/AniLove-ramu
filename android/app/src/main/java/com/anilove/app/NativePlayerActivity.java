@@ -222,9 +222,16 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (portraitBadgeAudio != null) portraitBadgeAudio.setText(audio.toUpperCase());
     }
 
+    private int currentY = 0;
+
     private void applyWindowSettings(Intent intent) {
+        if (intent == null) intent = getIntent();
         isFullscreenMode = intent.getBooleanExtra("startFullscreen", false);
-        Log.i("AniLove", "applyWindowSettings | isFullscreen: " + isFullscreenMode);
+        isOfflineMode = intent.getBooleanExtra("offlineMode", isOfflineMode);
+        if (intent.hasExtra("yOffset")) {
+            currentY = intent.getIntExtra("yOffset", 0);
+        }
+        Log.i("AniLove", "applyWindowSettings | isFullscreen: " + isFullscreenMode + " | isOffline: " + isOfflineMode);
         
         final Window window = getWindow();
         final View decorView = window.getDecorView();
@@ -254,19 +261,20 @@ public class NativePlayerActivity extends AppCompatActivity {
             params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
 
-        params.width = WindowManager.LayoutParams.MATCH_PARENT;
-        params.height = WindowManager.LayoutParams.MATCH_PARENT;
-        params.gravity = Gravity.FILL;
-        params.x = 0;
-        params.y = 0;
-        
-        // Solid black background for entire Activity window
-        window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-        findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
-
         if (isFullscreenMode) {
+            // FULLSCREEN LANDSCAPE (both streaming and offline playback)
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
+
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.gravity = Gravity.FILL;
+            params.x = 0;
+            params.y = 0;
 
             decorView.post(() -> {
                 View videoRoot = findViewById(R.id.video_root_container);
@@ -286,11 +294,21 @@ public class NativePlayerActivity extends AppCompatActivity {
                     topBar.setPadding(topBar.getPaddingLeft(), 0, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
-        } else {
-            // PORTRAIT: Top 16:9 player + status bar gap, and bottom half black page
+        } else if (isOfflineMode) {
+            // PORTRAIT OFFLINE DOWNLOAD PLAYBACK: Full Activity with top video + bottom episode details container
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-            
+
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
+
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.gravity = Gravity.FILL;
+            params.x = 0;
+            params.y = 0;
+
             int physicalWidth = getPhysicalScreenWidth();
             int videoHeight = (int) (physicalWidth * 0.5625);
             
@@ -312,6 +330,52 @@ public class NativePlayerActivity extends AppCompatActivity {
                     videoRoot.setLayoutParams(lp);
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
+                if (statusBarFiller != null) {
+                    statusBarFiller.setVisibility(View.VISIBLE);
+                    ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
+                    lp.height = finalStatusBarHeight;
+                    statusBarFiller.setLayoutParams(lp);
+                }
+                if (topBar != null) {
+                    topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
+                }
+            });
+        } else {
+            // PORTRAIT STREAMING: Floating Top Overlay over web view
+            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+
+            int physicalWidth = getPhysicalScreenWidth();
+            int videoHeight = (int) (physicalWidth * 0.5625);
+            
+            int statusBarHeight = 0;
+            int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
+            
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = videoHeight + statusBarHeight;
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = 0;
+            params.y = currentY;
+
+            final int finalStatusBarHeight = statusBarHeight;
+            decorView.post(() -> {
+                View videoRoot = findViewById(R.id.video_root_container);
+                View portraitBottom = findViewById(R.id.portrait_bottom_container);
+                View statusBarFiller = findViewById(R.id.status_bar_filler);
+                View topBar = findViewById(R.id.top_bar);
+                
+                if (videoRoot != null) {
+                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
+                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                    lp.height = videoHeight + finalStatusBarHeight;
+                    videoRoot.setLayoutParams(lp);
+                }
+                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -345,7 +409,13 @@ public class NativePlayerActivity extends AppCompatActivity {
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        
+        isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
+        if (isOfflineMode) {
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        } else {
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
         
         setContentView(R.layout.activity_native_player);
         updateMetadataFromIntent(getIntent());
@@ -548,7 +618,18 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     public void updatePosition(int y) {
-        // Ignored to keep player fixed in activity
+        if (isFullscreenMode || isOfflineMode) return;
+        currentY = y;
+        runOnUiThread(() -> {
+            try {
+                Window window = getWindow();
+                if (window != null) {
+                    WindowManager.LayoutParams params = window.getAttributes();
+                    params.y = y;
+                    window.setAttributes(params);
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private void updateScrubberPosition(SeekBar s, int progress) {
@@ -1467,15 +1548,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateHandler.removeCallbacksAndMessages(null); 
         hideHandler.removeCallbacksAndMessages(null); 
         
+        try {
+            unregisterReceiver(pipReceiver);
+        } catch (Exception ignored) {}
+
         if (exoPlayer != null) {
-            exoPlayer.stop();
-            exoPlayer.clearMediaItems();
-            exoPlayer.release();
+            try {
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
+                exoPlayer.release();
+            } catch (Exception ignored) {}
             exoPlayer = null;
         }
         if (playerWebView != null) { 
-            playerWebView.stopLoading(); 
-            playerWebView.destroy(); 
+            try {
+                playerWebView.stopLoading(); 
+                playerWebView.destroy(); 
+            } catch (Exception ignored) {}
             playerWebView = null;
         } 
         super.onDestroy(); 

@@ -42,7 +42,7 @@
             android:name=".NativePlayerActivity"
             android:exported="false"
             android:theme="@style/AppTheme.Translucent"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|uiMode" />
 

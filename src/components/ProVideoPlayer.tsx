@@ -15,7 +15,17 @@ import {
   StreamSource,
   SUPPORTED_LANGUAGES,
 } from '../services/streamingProviders';
-import { Capacitor } from '@capacitor/core';
+import { registerPlugin, Capacitor } from '@capacitor/core';
+
+interface NativePlayerPlugin {
+  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number; anilistId?: number; episodeNumber?: number; audio?: string }): Promise<void>;
+  updatePosition(options: { y: number }): Promise<void>;
+  close(): Promise<void>;
+  addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
+  addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;
+}
+
+const NativePlayer = registerPlugin<NativePlayerPlugin>('NativePlayer');
 
 interface EpisodeItem {
   number: number;
@@ -449,6 +459,74 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     });
   };
 
+  // Synchronize Native Player position with scrolling
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || streamStatus !== 'ready') return;
+
+    const syncPosition = () => {
+      if (playerContainerRef.current) {
+        const rect = playerContainerRef.current.getBoundingClientRect();
+        requestAnimationFrame(() => {
+          NativePlayer.updatePosition({ y: Math.round(rect.top) });
+        });
+      }
+    };
+
+    window.addEventListener('scroll', syncPosition, { passive: true });
+    const interval = setInterval(syncPosition, 32);
+    return () => {
+      window.removeEventListener('scroll', syncPosition);
+      clearInterval(interval);
+    };
+  }, [streamStatus]);
+
+  const lastLaunchedKey = useRef<string | null>(null);
+
+  // Auto-launch Native Player for Inline Experience
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
+      const launchKey = `${streamSource.url}__${audioMode}__${episodeNumber}__${activeServer}__${selectedSubServerName || ''}`;
+      if (lastLaunchedKey.current === launchKey) return;
+      lastLaunchedKey.current = launchKey;
+
+      const currentEpNum = Number(episodeNumber);
+      const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+
+      (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
+      (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
+      NativePlayer.addListener('onEpisodeNavigation', (data) => {
+        if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
+        else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
+      });
+      NativePlayer.addListener('onBackButtonPressed', () => {
+        if (onClosePlayer) onClosePlayer();
+      });
+
+      NativePlayer.play({
+        url: streamSource.url,
+        title: `${dTitle} - Ep ${episodeNumber}`,
+        hasNext: episodesList.length > episodeNumber,
+        hasPrev: episodeNumber > 1,
+        startFullscreen: false,
+        yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
+        anilistId: anime.id,
+        episodeNumber: Number(episodeNumber),
+        audio: audioMode,
+      }).catch(() => {});
+    }
+  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id]);
+
+  useEffect(() => {
+    return () => {
+      lastLaunchedKey.current = null;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          NativePlayer.close().catch(() => {});
+        } catch {}
+      }
+    };
+  }, []);
+
   const displayTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const coverUrl = anime.coverImage?.extraLarge || anime.coverImage?.large || anime.coverImage?.medium || undefined;
   const userCount = anime.popularity || (anime.favourites ? anime.favourites * 10 : 0) || 0;
@@ -475,7 +553,15 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {streamSource?.isEmbeddable && streamStatus !== 'error' ? (
+        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
+          <div className="w-full h-full relative group bg-black z-10">
+            <div className="absolute inset-0 bg-black z-0" />
+            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
+               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
+               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Player Active</div>
+            </div>
+          </div>
+        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
           <iframe
             key={`${streamSource.url}-${refreshKey}`}
             ref={iframeRef}
