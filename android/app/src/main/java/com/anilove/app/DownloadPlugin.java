@@ -36,11 +36,13 @@ public class DownloadPlugin extends Plugin {
             }
 
             @Override
-            public void onStatusChange(String downloadId, String status, String error) {
+            public void onStatusChange(EpisodeDownloadService.DownloadItem item, String status, String error) {
                 JSObject data = new JSObject();
-                data.put("downloadId", downloadId);
+                data.put("downloadId", item.id);
                 data.put("status", status);
                 data.put("error", error != null ? error : "");
+                data.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
+                data.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
                 notifyListeners("onDownloadStatusChange", data);
             }
         };
@@ -153,7 +155,10 @@ public class DownloadPlugin extends Plugin {
             String localFilePath = call.getString("localFilePath");
             String localSubPath = call.getString("localSubPath", "");
             String title = call.getString("title", "Offline Episode");
+            String animeTitle = call.getString("animeTitle", title);
             int episodeNumber = call.getInt("episodeNumber", 1);
+            String audio = call.getString("audio", "DUB");
+            String quality = call.getString("quality", "1080p");
 
             if (localFilePath == null || localFilePath.isEmpty()) {
                 call.reject("localFilePath is required");
@@ -170,8 +175,11 @@ public class DownloadPlugin extends Plugin {
             intent.putExtra("offlineMode", true);
             intent.putExtra("localFilePath", localFilePath);
             intent.putExtra("localSubPath", localSubPath);
-            intent.putExtra("animeTitle", title);
+            intent.putExtra("title", title);
+            intent.putExtra("animeTitle", animeTitle);
             intent.putExtra("episodeNumber", episodeNumber);
+            intent.putExtra("audio", audio);
+            intent.putExtra("quality", quality);
             intent.putExtra("startFullscreen", false);
             getContext().startActivity(intent);
 

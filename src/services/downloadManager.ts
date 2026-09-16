@@ -31,7 +31,10 @@ export interface DownloadPluginInterface {
     localFilePath: string;
     localSubPath?: string;
     title: string;
+    animeTitle?: string;
     episodeNumber: number;
+    audio?: string;
+    quality?: string;
   }): Promise<void>;
   addListener(
     eventName: 'onDownloadProgress',
@@ -45,7 +48,13 @@ export interface DownloadPluginInterface {
   ): Promise<any>;
   addListener(
     eventName: 'onDownloadStatusChange',
-    listenerFunc: (data: { downloadId: string; status: string; error?: string }) => void
+    listenerFunc: (data: {
+      downloadId: string;
+      status: string;
+      error?: string;
+      localFilePath?: string;
+      localSubPath?: string;
+    }) => void
   ): Promise<any>;
 }
 
@@ -69,12 +78,17 @@ if (Capacitor.isNativePlatform()) {
     }
   });
 
-  DownloadPlugin.addListener('onDownloadStatusChange', data => {
+  DownloadPlugin.addListener('onDownloadStatusChange', async data => {
     const item = downloadsCache.find(d => d.id === data.downloadId);
     if (item) {
       item.status = data.status as any;
       if (data.error) item.error = data.error;
+      if (data.localFilePath) item.localFilePath = data.localFilePath;
+      if (data.localSubPath) item.localSubPath = data.localSubPath;
       notifySubscribers();
+    }
+    if (data.status === 'COMPLETED') {
+      await refreshDownloadsList();
     }
   });
 
@@ -237,15 +251,34 @@ export async function cancelDownload(downloadId: string): Promise<void> {
 }
 
 export async function playOfflineEpisode(download: DownloadItemInfo): Promise<void> {
-  if (!download.localFilePath) {
+  let filePath = download.localFilePath;
+  let subPath = download.localSubPath;
+
+  // If localFilePath is missing in the passed object, attempt to refresh and find it
+  if (!filePath && Capacitor.isNativePlatform()) {
+    const latest = await refreshDownloadsList();
+    const matched = latest.find(
+      d => d.id === download.id || (d.anilistId === download.anilistId && d.episodeNumber === download.episodeNumber)
+    );
+    if (matched && matched.localFilePath) {
+      filePath = matched.localFilePath;
+      subPath = matched.localSubPath;
+    }
+  }
+
+  if (!filePath) {
     throw new Error('Local file path is missing');
   }
+
   if (Capacitor.isNativePlatform()) {
     await DownloadPlugin.playOffline({
-      localFilePath: download.localFilePath,
-      localSubPath: download.localSubPath,
+      localFilePath: filePath,
+      localSubPath: subPath,
       title: `${download.animeTitle} - EP ${download.episodeNumber}`,
+      animeTitle: download.animeTitle,
       episodeNumber: download.episodeNumber,
+      audio: download.audio,
+      quality: download.quality,
     });
   }
 }

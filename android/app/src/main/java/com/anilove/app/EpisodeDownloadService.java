@@ -63,7 +63,7 @@ public class EpisodeDownloadService extends Service {
 
     public interface DownloadProgressListener {
         void onProgress(String downloadId, int progressPercent, long bytesDownloaded, long totalBytes, String speed);
-        void onStatusChange(String downloadId, String status, String error);
+        void onStatusChange(DownloadItem item, String status, String error);
     }
     public static DownloadProgressListener progressListener;
 
@@ -818,7 +818,7 @@ public class EpisodeDownloadService extends Service {
 
     private void notifyStatus(DownloadItem item, String status, String error) {
         if (progressListener != null) {
-            progressListener.onStatusChange(item.id, status, error);
+            progressListener.onStatusChange(item, status, error);
         }
         saveDownloadMetadata(item);
     }
@@ -916,6 +916,19 @@ public class EpisodeDownloadService extends Service {
             if (!dir.exists()) dir.mkdirs();
             File metaFile = new File(dir, "meta_" + item.episodeNumber + ".json");
 
+            if (item.localFilePath == null || item.localFilePath.isEmpty()) {
+                File vFile = new File(dir, "ep_" + item.episodeNumber + ".mp4");
+                if (vFile.exists()) {
+                    item.localFilePath = vFile.getAbsolutePath();
+                }
+            }
+            if (item.localSubPath == null || item.localSubPath.isEmpty()) {
+                File sFile = new File(dir, "ep_" + item.episodeNumber + ".vtt");
+                if (sFile.exists()) {
+                    item.localSubPath = sFile.getAbsolutePath();
+                }
+            }
+
             JSONObject obj = new JSONObject();
             obj.put("id", item.id);
             obj.put("anilistId", item.anilistId);
@@ -972,6 +985,21 @@ public class EpisodeDownloadService extends Service {
                     item.totalBytes = obj.optLong("totalBytes", 0);
                     item.localFilePath = obj.optString("localFilePath", "");
                     item.localSubPath = obj.optString("localSubPath", "");
+
+                    // Auto-recovery if localFilePath is empty or file moved
+                    if (item.localFilePath == null || item.localFilePath.isEmpty() || !new File(item.localFilePath).exists()) {
+                        File fallbackVideo = new File(dir, "ep_" + item.episodeNumber + ".mp4");
+                        if (fallbackVideo.exists()) {
+                            item.localFilePath = fallbackVideo.getAbsolutePath();
+                        }
+                    }
+                    if (item.localSubPath == null || item.localSubPath.isEmpty() || !new File(item.localSubPath).exists()) {
+                        File fallbackSub = new File(dir, "ep_" + item.episodeNumber + ".vtt");
+                        if (fallbackSub.exists()) {
+                            item.localSubPath = fallbackSub.getAbsolutePath();
+                        }
+                    }
+
                     if (item.localFilePath != null && new File(item.localFilePath).exists()) {
                         allDownloads.put(item.id, item);
                     }
