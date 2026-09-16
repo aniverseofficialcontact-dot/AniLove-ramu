@@ -186,34 +186,55 @@ public class VideoSniffer {
     }
 
     private boolean isVideoUrl(String url) {
-        if (url == null || url.isEmpty()) return false;
-        String lowerUrl = url.toLowerCase();
+        if (url == null || url.trim().isEmpty()) return false;
+        String lowerUrl = url.toLowerCase().trim();
 
-        // Must not be a script, style, image, document, or tracking/beacon/analytics request
-        if (lowerUrl.endsWith(".js") || lowerUrl.endsWith(".css") ||
-            lowerUrl.endsWith(".png") || lowerUrl.endsWith(".jpg") ||
-            lowerUrl.endsWith(".jpeg") || lowerUrl.endsWith(".webp") ||
-            lowerUrl.endsWith(".svg") || lowerUrl.endsWith(".gif") ||
-            lowerUrl.endsWith(".ico") || lowerUrl.endsWith(".html") || lowerUrl.endsWith(".htm") ||
-            lowerUrl.contains("google-analytics") || lowerUrl.contains("doubleclick") ||
-            lowerUrl.contains("analytics") || lowerUrl.contains("/ads/") ||
+        // 1. Block analytics, telemetry, and tracking domains / paths
+        if (lowerUrl.contains("jwpltx.com") || lowerUrl.contains("ping.gif") ||
+            lowerUrl.contains("google-analytics") || lowerUrl.contains("googletagmanager") ||
+            lowerUrl.contains("doubleclick") || lowerUrl.contains("analytics") ||
+            lowerUrl.contains("/ads/") || lowerUrl.contains("adservice") ||
             lowerUrl.contains("/beacon") || lowerUrl.contains("/events") ||
             lowerUrl.contains("/ping") || lowerUrl.contains("/track") ||
             lowerUrl.contains("/telemetry") || lowerUrl.contains("/log") ||
             lowerUrl.contains("/stats") || lowerUrl.contains("socket.io") ||
-            lowerUrl.contains("googletagmanager")) {
+            lowerUrl.contains("clarity.ms") || lowerUrl.contains("hotjar") ||
+            lowerUrl.contains("mixpanel") || lowerUrl.contains("sentry")) {
             return false;
         }
 
-        // Must not be a single individual .ts chunk
-        if (lowerUrl.contains(".ts") && !lowerUrl.contains(".m3u8")) {
+        // 2. Strip query params and hash to check the clean URL path extension
+        String cleanPath = lowerUrl;
+        int qIdx = cleanPath.indexOf('?');
+        if (qIdx != -1) cleanPath = cleanPath.substring(0, qIdx);
+        int hIdx = cleanPath.indexOf('#');
+        if (hIdx != -1) cleanPath = cleanPath.substring(0, hIdx);
+
+        // Block static web resources based on clean file extension
+        if (cleanPath.endsWith(".js") || cleanPath.endsWith(".css") ||
+            cleanPath.endsWith(".png") || cleanPath.endsWith(".jpg") ||
+            cleanPath.endsWith(".jpeg") || cleanPath.endsWith(".webp") ||
+            cleanPath.endsWith(".svg") || cleanPath.endsWith(".gif") ||
+            cleanPath.endsWith(".ico") || cleanPath.endsWith(".woff") ||
+            cleanPath.endsWith(".woff2") || cleanPath.endsWith(".ttf") ||
+            cleanPath.endsWith(".html") || cleanPath.endsWith(".htm") ||
+            cleanPath.endsWith(".php") || cleanPath.endsWith(".json")) {
             return false;
         }
 
+        // Must not be an individual 2-second .ts segment (we want playlist or full video)
+        if (cleanPath.endsWith(".ts") && !cleanPath.contains(".m3u8")) {
+            return false;
+        }
+
+        // 3. Must have valid video or playlist extension in the clean path or query
         for (String ext : VIDEO_EXTENSIONS) {
-            if (lowerUrl.contains(ext)) {
+            if (cleanPath.contains(ext)) {
                 return true;
             }
+        }
+        if (cleanPath.endsWith(".mp4") || cleanPath.endsWith(".m4s") || cleanPath.endsWith(".mpd") || cleanPath.endsWith(".m3u8")) {
+            return true;
         }
         return false;
     }
@@ -237,10 +258,10 @@ public class VideoSniffer {
                 String referer = "https://anikototv.to/";
                 if (pageUrl.contains("zephyrix") || pageUrl.contains("watchanimeworld") || pageUrl.contains("short.icu") || pageUrl.contains("animesalt")) {
                     referer = "https://watchanimeworld.one/";
-                } else if (pageUrl.contains("nexabloom.top") || pageUrl.contains("justanime.to")) {
-                    referer = "https://justanime.to/";
-                } else if (pageUrl.contains("megaplay.buzz")) {
+                } else if (pageUrl.contains("nexabloom.top") || pageUrl.contains("megaplay.buzz")) {
                     referer = "https://megaplay.buzz/";
+                } else if (pageUrl.contains("justanime.to")) {
+                    referer = "https://justanime.to/";
                 } else if (pageUrl.contains("vidlink.pro")) {
                     referer = "https://vidlink.pro/";
                 } else if (pageUrl.contains("autoembed.co")) {

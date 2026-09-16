@@ -1391,10 +1391,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "</script></body></html>";
 
             String baseUrl = "https://play.zephyrix.org/";
-            if (url.contains("nexabloom.top") || url.contains("justanime.to")) {
-                baseUrl = "https://justanime.to/";
-            } else if (url.contains("megaplay.buzz")) {
+            if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
                 baseUrl = "https://megaplay.buzz/";
+            } else if (url.contains("justanime.to")) {
+                baseUrl = "https://justanime.to/";
             } else {
                 try {
                     baseUrl = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";
@@ -1409,10 +1409,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         String referer = "https://anikototv.to/";
         if (url.contains("zephyrix") || url.contains("watchanimeworld") || url.contains("short.icu") || url.contains("animesalt")) {
             referer = "https://watchanimeworld.one/";
-        } else if (url.contains("nexabloom.top") || url.contains("justanime.to")) {
-            referer = "https://justanime.to/";
-        } else if (url.contains("megaplay.buzz")) {
+        } else if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
             referer = "https://megaplay.buzz/";
+        } else if (url.contains("justanime.to")) {
+            referer = "https://justanime.to/";
         } else {
             try {
                 referer = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";

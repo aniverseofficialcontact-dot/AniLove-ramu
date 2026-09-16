@@ -561,11 +561,11 @@ public class EpisodeDownloadService extends Service {
             if (lower.contains("watchanimeworld") || lower.contains("animesalt") || lower.contains("short.icu")) {
                 return "https://watchanimeworld.one/";
             }
-            if (lower.contains("nexabloom.top") || lower.contains("justanime.to")) {
-                return "https://justanime.to/";
-            }
-            if (lower.contains("megaplay.buzz")) {
+            if (lower.contains("nexabloom.top") || lower.contains("megaplay.buzz")) {
                 return "https://megaplay.buzz/";
+            }
+            if (lower.contains("justanime.to")) {
+                return "https://justanime.to/";
             }
             if (lower.contains("vidlink.pro")) {
                 return "https://vidlink.pro/";
