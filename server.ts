@@ -578,72 +578,24 @@ async function startServer() {
     // 2. Trigger asynchronous background caching into RAM for future requests
     fetchAndCacheReelVideo(fileId).catch(() => {});
 
-    // 3. Fallback: Direct Streaming Proxy from Google Drive with immediate chunk piping
-    const abortController = new AbortController();
-    req.on('close', () => {
-      abortController.abort();
-    });
+    // 3. Fallback: Redirect client to Google Drive direct download URL (reduces server bandwidth)
+    // Trigger background caching but serve a 302 redirect to let the client fetch directly from Google
+    fetchAndCacheReelVideo(fileId).catch(() => {});
 
     try {
       const targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
-      const forwardHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Referer': 'https://drive.google.com/',
-      };
-
-      if (req.headers.range) {
-        forwardHeaders['Range'] = req.headers.range as string;
-      }
-
-      let remoteRes = await fetch(targetUrl, {
-        headers: forwardHeaders,
-        redirect: 'follow',
-        signal: abortController.signal,
-      });
-
-      if (!remoteRes.ok && remoteRes.status !== 206) {
-        remoteRes = await fetch(`https://drive.google.com/uc?export=download&id=${fileId}`, {
-          headers: forwardHeaders,
-          redirect: 'follow',
-          signal: abortController.signal,
-        });
-      }
-
-      if (!remoteRes.ok && remoteRes.status !== 206) {
-        res.status(remoteRes.status || 404).send('Failed to stream video');
-        return;
-      }
-
-      res.status(remoteRes.status);
-      res.setHeader('Content-Type', remoteRes.headers.get('content-type') || 'video/mp4');
-      res.setHeader('Accept-Ranges', 'bytes');
+      // Expose minimal CORS headers for the redirect response; the final resource determines CORS for the actual media
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Expose-Headers', 'Content-Range,Content-Length,Accept-Ranges,Content-Disposition');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
 
-      const contentRange = remoteRes.headers.get('content-range');
-      if (contentRange) res.setHeader('Content-Range', contentRange);
-
-      const contentLength = remoteRes.headers.get('content-length');
-      if (contentLength) res.setHeader('Content-Length', contentLength);
-
-      if (isHeadOnly) {
-        res.end();
-        return;
-      }
-
-      if (remoteRes.body) {
-        const stream = await import('stream');
-        const nodeStream = stream.Readable.fromWeb(remoteRes.body as any);
-        nodeStream.pipe(res);
-      } else {
-        res.end();
-      }
+      // For HEAD or GET, issue a 302 redirect to the direct download endpoint
+      res.redirect(302, targetUrl);
+      return;
     } catch (err: any) {
-      if (err.name === 'AbortError' || err.code === 'ECONNRESET' || err.code === 'EPIPE') return;
+      console.error('[Reels Redirect] Failed to redirect to external stream:', err);
       if (!res.headersSent) {
-        res.status(500).send('Stream proxy failure');
+        res.status(500).send('Stream redirect failure');
       }
     }
   };
@@ -659,60 +611,14 @@ async function startServer() {
       return;
     }
 
+    // Redirect to Google Drive direct download URL to avoid proxying large files
     try {
-      const reel = inMemoryReels.find(r => r.id === fileId);
-      let filename = reel?.cleanTitle || `AnimeReel-${fileId.slice(0, 8)}`;
-      filename = filename.replace(/[^a-zA-Z0-9._ -]/g, '_').trim();
-      if (!filename.toLowerCase().endsWith('.mp4')) {
-        filename += '.mp4';
-      }
-
       const targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
-      const forwardHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Referer': 'https://drive.google.com/',
-      };
-
-      const remoteRes = await fetch(targetUrl, {
-        headers: forwardHeaders,
-        redirect: 'follow',
-      });
-
-      if (!remoteRes.ok) {
-        const fbRes = await fetch(`https://drive.google.com/uc?export=download&id=${fileId}`, {
-          headers: forwardHeaders,
-          redirect: 'follow',
-        });
-        if (fbRes.ok && fbRes.body) {
-          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-          res.setHeader('Content-Type', 'video/mp4');
-          const stream = await import('stream');
-          const nodeStream = stream.Readable.fromWeb(fbRes.body as any);
-          nodeStream.pipe(res);
-          return;
-        }
-        res.status(404).send('Video not found or download unavailable');
-        return;
-      }
-
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Type', remoteRes.headers.get('content-type') || 'video/mp4');
-      const contentLength = remoteRes.headers.get('content-length');
-      if (contentLength) res.setHeader('Content-Length', contentLength);
-
-      if (remoteRes.body) {
-        const stream = await import('stream');
-        const nodeStream = stream.Readable.fromWeb(remoteRes.body as any);
-        nodeStream.pipe(res);
-      } else {
-        res.end();
-      }
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      return res.redirect(302, targetUrl);
     } catch (err: any) {
-      console.warn(`[Reels Download Proxy] Download error for ${fileId}:`, err.message);
-      if (!res.headersSent) {
-        res.status(500).send('Download proxy failure');
-      }
+      console.warn(`[Reels Download Redirect] Failed to redirect for ${fileId}:`, err.message);
+      if (!res.headersSent) res.status(500).send('Download redirect failure');
     }
   });
 
@@ -734,10 +640,18 @@ async function startServer() {
         return;
       }
     } catch {
-      // Fall through to 404
+      // continue to redirect fallback
     }
 
-    if (!res.headersSent) res.status(404).send('Thumbnail not found');
+    // Redirect to Google thumbnail endpoint to avoid proxying image bytes
+    try {
+      const targetUrl = `https://lh3.googleusercontent.com/d/${fileId}`;
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      return res.redirect(302, targetUrl);
+    } catch (err: any) {
+      console.warn(`[Thumbnail Redirect] Failed for ${fileId}:`, err.message);
+      if (!res.headersSent) res.status(404).send('Thumbnail not found');
+    }
   });
 
   // ==========================================
@@ -754,44 +668,13 @@ async function startServer() {
         return;
       }
 
-      const headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://animethemes.moe/',
-        'Accept': '*/*',
-      };
-
-      if (req.headers.range) {
-        headers['Range'] = req.headers.range as string;
-      }
-
-      const remoteRes = await fetch(rawUrl, { headers });
-
-      res.status(remoteRes.status);
-
-      const contentType = remoteRes.headers.get('content-type') || (rawUrl.endsWith('.ogg') ? 'audio/ogg' : 'video/webm');
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Simply redirect clients to the animethemes media URL so they fetch directly from animethemes CDN
       res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
-
-      const contentRange = remoteRes.headers.get('content-range');
-      if (contentRange) res.setHeader('Content-Range', contentRange);
-
-      const contentLength = remoteRes.headers.get('content-length');
-      if (contentLength) res.setHeader('Content-Length', contentLength);
-
-      if (remoteRes.body) {
-        const stream = await import('stream');
-        const nodeStream = stream.Readable.fromWeb(remoteRes.body as any);
-        nodeStream.pipe(res);
-      } else {
-        res.end();
-      }
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.redirect(302, rawUrl);
     } catch (err: any) {
-      console.error('AnimeThemes media proxy error:', err);
-      if (!res.headersSent) {
-        res.status(500).send('Media stream proxy error');
-      }
+      console.error('AnimeThemes redirect error:', err);
+      if (!res.headersSent) res.status(500).send('Media redirect failed');
     }
   });
 
@@ -2593,6 +2476,37 @@ async function startServer() {
     }
   });
 
+  // ====================================================
+  // ANDROID DOWNLOAD: Server-side embed stream extractor
+  // Android EpisodeDownloadService calls this BEFORE VideoSniffer
+  // to get a direct .m3u8/.mp4 URL without needing a WebView at all.
+  // ====================================================
+  app.post('/api/stream/extract-direct', async (req, res) => {
+    try {
+      const { embedUrl, referer = 'https://anikototv.to/' } = req.body;
+      if (!embedUrl) {
+        res.status(400).json({ success: false, error: 'embedUrl is required' });
+        return;
+      }
+      console.log('[extract-direct] Attempting extraction for:', embedUrl.substring(0, 100));
+      const result = await extractDirectStreamFromEmbed(embedUrl, referer);
+      if (result?.streamUrl) {
+        console.log('[extract-direct] SUCCESS:', result.streamUrl.substring(0, 80));
+        res.json({
+          success: true,
+          streamUrl: result.streamUrl,
+          subtitleUrl: result.subtitleUrl || '',
+        });
+      } else {
+        console.log('[extract-direct] Could not extract from:', embedUrl.substring(0, 80));
+        res.status(404).json({ success: false, error: 'Could not extract stream from embed URL' });
+      }
+    } catch (err: any) {
+      console.error('[extract-direct] Error:', err);
+      res.status(500).json({ success: false, error: err.message || 'Extraction failed' });
+    }
+  });
+
   // AI Anime Sensei chat proxy endpoint
   app.post('/api/ai/chat', async (req, res) => {
     try {
@@ -3305,6 +3219,235 @@ function generateUniversalFallbackStream(input: {
   };
 }
 
+// ==========================================
+// SERVER-SIDE EMBED STREAM EXTRACTOR
+// Extracts direct .m3u8/.mp4 from CDN embed pages without needing a WebView
+// Handles: MegaCloud, RapidCloud, StreamTape, FileMoon
+// ==========================================
+
+async function decryptMegaCloudSources(encrypted: string): Promise<any[] | null> {
+  try {
+    const crypto = await import('crypto');
+    // Fetch current AES key from publicly maintained enimax-anime key repo
+    let keyStr = '';
+    try {
+      const keyRes = await fetch('https://raw.githubusercontent.com/enimax-anime/key/e6/key.txt', {
+        signal: AbortSignal.timeout(3500),
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (keyRes.ok) keyStr = (await keyRes.text()).trim();
+    } catch {
+      keyStr = 'c!i&t9rEfHGj8^m6'; // last known fallback key
+    }
+    if (!keyStr) return null;
+
+    const encryptedBytes = Buffer.from(encrypted, 'base64');
+    let saltBuf: Buffer | null = null;
+    let cipherText: Buffer;
+
+    // OpenSSL salted format: "Salted__" (8 bytes) + salt (8 bytes) + ciphertext
+    if (encryptedBytes.slice(0, 8).toString('ascii') === 'Salted__') {
+      saltBuf = encryptedBytes.slice(8, 16);
+      cipherText = encryptedBytes.slice(16);
+    } else {
+      cipherText = encryptedBytes;
+    }
+
+    // Derive 32-byte key + 16-byte IV using CryptoJS MD5 EVP_BytesToKey
+    const keyBytes = Buffer.from(keyStr, 'utf8');
+    let derived = Buffer.alloc(0);
+    let prev = Buffer.alloc(0);
+    while (derived.length < 48) {
+      const input = saltBuf
+        ? Buffer.concat([prev, keyBytes, saltBuf])
+        : Buffer.concat([prev, keyBytes]);
+      const cryptoMod = (crypto as any).default || crypto;
+      prev = cryptoMod.createHash('md5').update(input).digest();
+      derived = Buffer.concat([derived, prev]);
+    }
+    const aesKey = derived.slice(0, 32);
+    const iv = derived.slice(32, 48);
+
+    const cryptoModule = (crypto as any).default || crypto;
+    const decipher = cryptoModule.createDecipheriv('aes-256-cbc', aesKey, iv);
+    decipher.setAutoPadding(true);
+    const decrypted = Buffer.concat([decipher.update(cipherText), decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (e) {
+    console.warn('[Decrypt] AES decryption failed:', String(e));
+    return null;
+  }
+}
+
+async function extractDirectStreamFromEmbed(
+  embedUrl: string,
+  anikotoReferer: string = 'https://anikototv.to/'
+): Promise<{ streamUrl: string; subtitleUrl?: string } | null> {
+  if (!embedUrl || !embedUrl.startsWith('http')) return null;
+  try {
+    const u = new URL(embedUrl);
+    const host = u.hostname;
+    const pathname = u.pathname;
+    const browserUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+    // ---- 1. MegaCloud (megacloud.tv, megacloud.club) ----
+    if (host.includes('megacloud')) {
+      const idMatch = pathname.match(/\/embed-2\/e-1\/([A-Za-z0-9]+)/);
+      if (idMatch) {
+        const contentId = idMatch[1];
+        const apiUrl = `https://megacloud.tv/embed-2/ajax/e-1/getSources?id=${contentId}`;
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: {
+              'User-Agent': browserUA,
+              'Accept': 'application/json, text/plain, */*',
+              'Referer': 'https://megacloud.tv/',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Origin': 'https://megacloud.tv',
+            },
+            signal: AbortSignal.timeout(7000),
+          });
+          if (apiRes.ok) {
+            const data = await apiRes.json();
+            if (Array.isArray(data.sources) && data.sources[0]?.file) {
+              const streamUrl = data.sources[0].file;
+              const subtitleUrl = (data.tracks || []).find((t: any) => t.kind === 'captions' || t.kind === 'subtitles')?.file || '';
+              console.log('[Extractor] MegaCloud unencrypted:', streamUrl.substring(0, 80));
+              return { streamUrl, subtitleUrl };
+            }
+            if (typeof data.sources === 'string' && data.sources.length > 10) {
+              const decrypted = await decryptMegaCloudSources(data.sources);
+              if (decrypted && Array.isArray(decrypted) && decrypted[0]?.file) {
+                const streamUrl = decrypted[0].file;
+                const subtitleUrl = (data.tracks || []).find((t: any) => t.kind === 'captions' || t.kind === 'subtitles')?.file || '';
+                console.log('[Extractor] MegaCloud decrypted:', streamUrl.substring(0, 80));
+                return { streamUrl, subtitleUrl };
+              }
+            }
+          }
+        } catch (e) { console.warn('[Extractor] MegaCloud failed:', String(e)); }
+      }
+    }
+
+    // ---- 2. RapidCloud (rapid-cloud.co) ----
+    if (host.includes('rapid-cloud')) {
+      const idMatch = pathname.match(/\/embed-6\/datael\/([A-Za-z0-9]+)/);
+      if (idMatch) {
+        const contentId = idMatch[1];
+        const apiUrl = `https://rapid-cloud.co/ajax/embed-6-v2/getSources?id=${contentId}`;
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: {
+              'User-Agent': browserUA,
+              'Accept': 'application/json, text/plain, */*',
+              'Referer': 'https://rapid-cloud.co/',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Origin': 'https://rapid-cloud.co',
+            },
+            signal: AbortSignal.timeout(7000),
+          });
+          if (apiRes.ok) {
+            const data = await apiRes.json();
+            if (Array.isArray(data.sources) && data.sources[0]?.file) {
+              const streamUrl = data.sources[0].file;
+              const subtitleUrl = (data.tracks || []).find((t: any) => t.kind === 'captions' || t.kind === 'subtitles')?.file || '';
+              console.log('[Extractor] RapidCloud unencrypted:', streamUrl.substring(0, 80));
+              return { streamUrl, subtitleUrl };
+            }
+            if (typeof data.sources === 'string' && data.sources.length > 10) {
+              const decrypted = await decryptMegaCloudSources(data.sources);
+              if (decrypted && Array.isArray(decrypted) && decrypted[0]?.file) {
+                const streamUrl = decrypted[0].file;
+                const subtitleUrl = (data.tracks || []).find((t: any) => t.kind === 'captions' || t.kind === 'subtitles')?.file || '';
+                console.log('[Extractor] RapidCloud decrypted:', streamUrl.substring(0, 80));
+                return { streamUrl, subtitleUrl };
+              }
+            }
+          }
+        } catch (e) { console.warn('[Extractor] RapidCloud failed:', String(e)); }
+      }
+    }
+
+    // ---- 3. StreamTape ----
+    if (host.includes('streamtape')) {
+      try {
+        const pageRes = await fetch(embedUrl, {
+          headers: { 'User-Agent': browserUA, 'Referer': anikotoReferer },
+          signal: AbortSignal.timeout(7000),
+        });
+        if (pageRes.ok) {
+          const html = await pageRes.text();
+          // StreamTape splits URL across two innerHTML values to prevent scraping
+          const part1Match = html.match(/document\.getElementById\('ideoooolink'\)\.innerHTML\s*=\s*"([^"]+)"/);
+          const part2Match = html.match(/\+\s*document\.getElementById\('ideoooolink'\)\.innerHTML\s*\+\s*"([^"]+)"/);
+          const robotMatch = html.match(/robotlink\)\.innerHTML\s*=\s*["']([^"']+)["']/);
+          const directMatch = html.match(/"(\/\/streamtape\.com\/get_video[^"&]+)/);
+          let videoUrl = '';
+          if (directMatch) {
+            videoUrl = 'https:' + directMatch[1];
+          } else if (part1Match && part2Match) {
+            videoUrl = 'https:' + part1Match[1] + part2Match[1];
+          } else if (robotMatch) {
+            videoUrl = robotMatch[1].startsWith('//') ? 'https:' + robotMatch[1] : robotMatch[1];
+          }
+          if (videoUrl && videoUrl.includes('streamtape')) {
+            console.log('[Extractor] StreamTape:', videoUrl.substring(0, 80));
+            return { streamUrl: videoUrl };
+          }
+        }
+      } catch (e) { console.warn('[Extractor] StreamTape failed:', String(e)); }
+    }
+
+    // ---- 4. FileMoon (filemoon.sx, filemoon.to, moon.to) ----
+    if (host.includes('filemoon') || host.includes('moon.to')) {
+      try {
+        const pageRes = await fetch(embedUrl, {
+          headers: { 'User-Agent': browserUA, 'Referer': anikotoReferer },
+          signal: AbortSignal.timeout(7000),
+        });
+        if (pageRes.ok) {
+          const html = await pageRes.text();
+          const m3u8Direct = html.match(/"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+          if (m3u8Direct) {
+            console.log('[Extractor] FileMoon direct m3u8:', m3u8Direct[1].substring(0, 80));
+            return { streamUrl: m3u8Direct[1] };
+          }
+          const evalMatch = html.match(/eval\(atob\("([^"]+)"\)\)/);
+          if (evalMatch) {
+            const decoded = Buffer.from(evalMatch[1], 'base64').toString('utf8');
+            const urlMatch = decoded.match(/"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+            if (urlMatch) {
+              console.log('[Extractor] FileMoon decoded m3u8:', urlMatch[1].substring(0, 80));
+              return { streamUrl: urlMatch[1] };
+            }
+          }
+        }
+      } catch (e) { console.warn('[Extractor] FileMoon failed:', String(e)); }
+    }
+
+    // ---- 5. Generic: look for m3u8 in embed page HTML ----
+    try {
+      const pageRes = await fetch(embedUrl, {
+        headers: { 'User-Agent': browserUA, 'Referer': anikotoReferer },
+        signal: AbortSignal.timeout(7000),
+      });
+      if (pageRes.ok) {
+        const html = await pageRes.text();
+        const m3u8Match = html.match(/"(https?:\/\/[^"]+\.m3u8[^"]*)"/);
+        if (m3u8Match) {
+          console.log('[Extractor] Generic m3u8 found:', m3u8Match[1].substring(0, 80));
+          return { streamUrl: m3u8Match[1] };
+        }
+      }
+    } catch (e) { /* ignore generic fallback failure */ }
+
+    return null;
+  } catch (e) {
+    console.warn('[Extractor] extractDirectStreamFromEmbed error:', String(e));
+    return null;
+  }
+}
+
 // Internal reusable streaming resolution pipeline
 async function resolveAnikotoInternal(input: {
   anilistId?: number | string;
@@ -3514,9 +3657,9 @@ async function resolveAnikotoInternal(input: {
       }
     }
 
-    // Fetch Direct Stream Embed URL
-    const streamUrl = `${ANIKOTO_BASE}/ajax/server?get=${encodeURIComponent(chosenServer.linkId)}`;
-    const streamRes = await fetch(streamUrl, {
+    // Fetch Direct Stream Embed URL from Anikoto CDN
+    const streamReqUrl = `${ANIKOTO_BASE}/ajax/server?get=${encodeURIComponent(chosenServer.linkId)}`;
+    const streamRes = await fetch(streamReqUrl, {
       headers: { ...ANIKOTO_HEADERS, Referer: bestItem.url || `${ANIKOTO_BASE}/` },
       signal: AbortSignal.timeout(2500),
     });
@@ -3534,6 +3677,25 @@ async function resolveAnikotoInternal(input: {
       });
     }
 
+    const embedUrl = streamJson.result.url as string;
+
+    // Attempt server-side extraction of actual .m3u8 from the embed URL.
+    // This avoids needing VideoSniffer on Android for downloads.
+    let directStreamUrl: string | undefined;
+    let directSubtitleUrl: string | undefined;
+    try {
+      const extracted = await extractDirectStreamFromEmbed(embedUrl, bestItem.url || `${ANIKOTO_BASE}/`);
+      if (extracted?.streamUrl) {
+        directStreamUrl = extracted.streamUrl;
+        directSubtitleUrl = extracted.subtitleUrl;
+        console.log(`[AnikotoResolver] Server-side extraction SUCCESS for ${chosenServer.name}: ${directStreamUrl.substring(0, 80)}`);
+      } else {
+        console.log(`[AnikotoResolver] Server-side extraction returned null for ${chosenServer.name}, returning embed URL`);
+      }
+    } catch (extractErr) {
+      console.warn('[AnikotoResolver] Server-side extraction error:', String(extractErr));
+    }
+
     // Flat list of all available server options for easy frontend UI switching
     const flatServersList: Array<{ name: string; type: string; linkId: string }> = [];
     Object.keys(serverGroups).forEach(groupLang => {
@@ -3548,7 +3710,12 @@ async function resolveAnikotoInternal(input: {
 
     return {
       success: true,
-      streamUrl: streamJson.result.url,
+      // If we extracted a direct .m3u8, return it as streamUrl for downloads.
+      // The embedUrl is also returned so the WebView player can use it.
+      streamUrl: directStreamUrl || embedUrl,
+      embedUrl,
+      directStreamUrl: directStreamUrl || null,
+      subtitleUrl: directSubtitleUrl || null,
       skipData: streamJson.result.skip_data || { intro: [0, 0], outro: [0, 0] },
       animeMatch: {
         id: bestItem.id,

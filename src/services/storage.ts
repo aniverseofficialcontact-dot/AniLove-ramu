@@ -1,5 +1,6 @@
 import { UserMediaListItem, UserSettings, Anime, EpisodeNote, AppTheme, WatchHistoryEntry, GachaCard, MediaListStatus } from '../types';
 import { auth, saveGameDataToCloudFirestore, fetchGameDataFromCloudFirestore } from '../lib/firebase';
+import { API_BASE, apiFetch, apiUrl } from './api';
 
 const SETTINGS_KEY = 'anilove_settings_v3';
 const SETTINGS_KEY_LEGACY = 'anilove_settings_legacy';
@@ -191,7 +192,7 @@ export async function pushUserDataToCloud(tokenOrSettings?: string | UserSetting
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
 
-    const response = await fetch('/api/user/sync', {
+        const response = await apiFetch('/api/user/sync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -294,7 +295,7 @@ export async function syncUserDataWithCloud(
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
 
-    const response = await fetch('/api/user/sync', {
+        const response = await apiFetch('/api/user/sync', {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

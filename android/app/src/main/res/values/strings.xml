@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AniLove</string>
+    <string name="title_activity_main">AniLove</string>
+    <string name="package_name">com.anilove.app</string>
+    <string name="custom_url_scheme">com.anilove.app</string>
+</resources>

@@ -18,6 +18,7 @@ import {
   ArrowUpDown,
   Compass,
   Layers,
+  Download,
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
@@ -32,6 +33,8 @@ import {
   checkIsFillerEpisode,
   ExtendedEpisodeInfo,
 } from '../services/episodeMetadataService';
+import { BatchDownloadModal } from './BatchDownloadModal';
+import { isEpisodeDownloaded } from '../services/downloadManager';
 
 interface EpisodeItem {
   number: number;
@@ -54,6 +57,7 @@ interface WatchViewProps {
   userItem?: UserMediaListItem;
   isTwoWaySyncActive?: boolean;
   settings?: UserSettings;
+  onOpenDownloadsView?: () => void;
 }
 
 export const WatchView: React.FC<WatchViewProps> = ({
@@ -68,6 +72,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   userItem,
   isTwoWaySyncActive = false,
   settings,
+  onOpenDownloadsView,
 }) => {
   const [details, setDetails] = useState<AnimeDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -79,6 +84,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const [showFullSynopsis, setShowFullSynopsis] = useState<boolean>(false);
   const [thumbnailStyle, setThumbnailStyle] = useState<ThumbnailAppearance>('snapshot');
   const [extraEpisodeData, setExtraEpisodeData] = useState<Record<number, ExtendedEpisodeInfo>>({});
+  const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
   // Background fetcher for extended metadata for long anime (syncing thumbnails & titles with details modal)
   useEffect(() => {
@@ -367,60 +373,13 @@ export const WatchView: React.FC<WatchViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-black text-white pb-20 selection:bg-indigo-500 selection:text-white">
-      {/* Top Navigation Sticky Header */}
-      <header className="sticky top-0 z-40 bg-black/70 backdrop-blur-md px-3 sm:px-6 py-2.5">
-        <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-3">
-          {/* Left: Back Button & Title */}
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-bold transition active:scale-95 shrink-0 cursor-pointer"
-              title="Return to previous screen"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back</span>
-            </button>
+    <div className="min-h-screen bg-black text-white selection:bg-indigo-500 selection:text-white">
+      {/* Target: Image 2 - Header removed for ultra-clean fixed player view */}
 
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-black text-white truncate max-w-xs sm:max-w-md md:max-w-lg">
-                {title}
-              </h1>
-              <div className="flex items-center gap-2 text-xs text-neutral-400 font-medium truncate">
-                <span className="text-blue-400 font-bold">Episode {episodeNumber}</span>
-                <span>•</span>
-                <span className="truncate">{currentEpisodeData.title}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Quick actions (View Anime Details, AniList Sync Badge) */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {isTwoWaySyncActive && (
-              <div
-                title="Auto-syncing episode progress with AniList"
-                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-[11px] font-semibold text-emerald-400"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>AniList Synced</span>
-              </div>
-            )}
-
-            <button
-              onClick={() => onOpenDetails(anime)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white text-xs font-bold transition cursor-pointer"
-            >
-              <Info className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Anime Info</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Watch Page Container - Maximized Canvas Size */}
-      <main className="w-full max-w-[1920px] mx-auto px-0 sm:px-4 lg:px-6 pt-0 sm:pt-4 space-y-5 sm:space-y-6">
-        {/* Theatrical Video Player Component */}
-        <div className="w-full rounded-none sm:rounded-3xl overflow-hidden shadow-2xl sm:border sm:border-neutral-800 bg-black">
+      {/* Main Watch Page Container - Positioned at very top */}
+      <main className="w-full max-w-[1920px] mx-auto px-0 pt-0 space-y-5 sm:space-y-6">
+        {/* Theatrical Video Player Component - Fixed at Top */}
+        <div className="w-full rounded-none overflow-hidden bg-black aspect-video">
           <ProVideoPlayer
             anime={anime}
             episodeNumber={episodeNumber}
@@ -453,28 +412,44 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server and language options">
-            {/* Multi-Language Dub & Sub Toggles (Filtered by active server support) */}
-            {SUPPORTED_LANGUAGES.filter(lang => {
-              const currentP = STREAM_PROVIDERS.find(p => p.id === selectedServer) || STREAM_PROVIDERS[0];
-              return currentP.supportedLanguages.includes(lang.code);
-            }).map(lang => (
-              <button
-                key={lang.code}
-                onClick={() => {
-                  setSelectedAudio(lang.code);
-                }}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  selectedAudio === lang.code
-                    ? lang.code === 'SUB'
-                      ? 'bg-indigo-600 text-white font-black shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400'
-                      : 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/20 ring-1 ring-amber-400'
-                    : 'bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-neutral-500'
-                }`}
-              >
-                <span>{lang.flag}</span>
-                <span>{lang.short}</span>
-              </button>
-            ))}
+            {/* Multi-Language Dub, Sub & Regional Toggles (Filtered to languages supported by selected server) */}
+            {(() => {
+              const currentProvider = STREAM_PROVIDERS.find(p => p.id === selectedServer) || STREAM_PROVIDERS[0];
+              const visibleLanguages = SUPPORTED_LANGUAGES.filter(lang => currentProvider.supportedLanguages.includes(lang.code));
+
+              return visibleLanguages.map(lang => {
+                const isSelected = selectedAudio === lang.code;
+                let selectedStyle = 'bg-indigo-600 text-white font-black shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400';
+                if (lang.code === 'DUB') {
+                  selectedStyle = 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/20 ring-1 ring-amber-400';
+                } else if (lang.code === 'HIN') {
+                  selectedStyle = 'bg-orange-600 text-white font-black shadow-lg shadow-orange-600/30 ring-1 ring-orange-400';
+                } else if (lang.code === 'TAM') {
+                  selectedStyle = 'bg-emerald-600 text-white font-black shadow-lg shadow-emerald-600/30 ring-1 ring-emerald-400';
+                } else if (lang.code === 'TEL') {
+                  selectedStyle = 'bg-cyan-600 text-white font-black shadow-lg shadow-cyan-600/30 ring-1 ring-cyan-400';
+                } else if (lang.code === 'MAL' || lang.code === 'BEN') {
+                  selectedStyle = 'bg-purple-600 text-white font-black shadow-lg shadow-purple-600/30 ring-1 ring-purple-400';
+                }
+
+                return (
+                  <button
+                    key={lang.code}
+                    onClick={() => {
+                      setSelectedAudio(lang.code);
+                    }}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? selectedStyle
+                        : 'bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-neutral-500'
+                    }`}
+                  >
+                    <span>{lang.flag}</span>
+                    <span>{lang.short}</span>
+                  </button>
+                );
+              });
+            })()}
 
             <div className="h-5 w-px bg-neutral-800 shrink-0 mx-1" />
 
@@ -665,6 +640,17 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Download Episodes Modal Trigger */}
+                <button
+                  type="button"
+                  onClick={() => setShowDownloadModal(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-pink-500/20 transition cursor-pointer shrink-0 active:scale-95"
+                  title="Download episodes for offline viewing"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">Download</span>
+                </button>
 
                 {/* Sort Asc/Desc Button */}
                 <button
@@ -881,6 +867,13 @@ export const WatchView: React.FC<WatchViewProps> = ({
                           ) : (
                             <span className="text-neutral-400">24m • HD</span>
                           )}
+
+                          {isEpisodeDownloaded(anime.id, ep.number) && (
+                            <span className="text-violet-400 font-semibold flex items-center gap-1">
+                              <Download className="w-3.5 h-3.5 text-violet-400" />
+                              <span>Downloaded</span>
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1048,6 +1041,25 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </section>
         )}
       </main>
+
+      {/* Batch Download Modal for Offline Viewing */}
+      {showDownloadModal && (
+        <BatchDownloadModal
+          anime={anime}
+          episodes={episodeList.map(ep => ({
+            number: ep.number,
+            title: ep.title,
+            thumbnail: ep.thumbnail,
+            synopsis: ep.synopsis,
+            filler: ep.filler,
+          }))}
+          currentEpisodeNumber={episodeNumber}
+          initialAudio={selectedAudio}
+          initialServer={STREAM_PROVIDERS.find(p => p.id === selectedServer)?.label || 'Anikoto HD-1'}
+          onClose={() => setShowDownloadModal(false)}
+          onOpenDownloadsView={onOpenDownloadsView}
+        />
+      )}
     </div>
   );
 };

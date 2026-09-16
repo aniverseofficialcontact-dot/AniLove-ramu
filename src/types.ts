@@ -334,6 +334,7 @@ export type StreamServerId =
   | 'anikoto-vidplay'
   | 'anikoto-hd2'
   | 'anikoto-ultra'
+  | 'animeworld-india'
   | 'anify-cloud'
   | 'anify-fast'
   | 'tatakai-multi'
@@ -343,7 +344,7 @@ export type StreamServerId =
   | 'miruro-pro'
   | 'miruro-pahe'
   | 'official-link';
-export type AudioLanguagePreference = 'SUB' | 'DUB';
+export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'BEN';
 
 export interface UserProfile {
   id: string;

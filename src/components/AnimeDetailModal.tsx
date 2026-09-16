@@ -11,6 +11,7 @@ import {
 import confetti from 'canvas-confetti';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, AnimeTrailer, ThumbnailAppearance } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
+import { API_BASE, apiFetch, apiUrl } from '../services/api';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { AnimeWatchOrderTab } from './AnimeWatchOrderTab';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
@@ -166,7 +167,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     const romTitle = anime.title?.romaji || '';
     const engTitle = anime.title?.english || '';
     if (displayTitle) {
-      fetch(`/api/anime-themes?title=${encodeURIComponent(displayTitle)}&romaji=${encodeURIComponent(romTitle)}&english=${encodeURIComponent(engTitle)}`)
+      apiFetch(`/api/anime-themes?title=${encodeURIComponent(displayTitle)}&romaji=${encodeURIComponent(romTitle)}&english=${encodeURIComponent(engTitle)}`)
         .then(res => res.json())
         .then(data => {
           if (isMounted && data) {
@@ -319,7 +320,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     const opSong = themesData.openings[0] || `${title} Opening Theme`;
     setThemeLoading('op_side_toggle');
     try {
-      const fullRes = await fetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + (themesData.openings[0] || 'opening theme'))}`);
+      const fullRes = await apiFetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + (themesData.openings[0] || 'opening theme'))}`);
       const fullData = await fullRes.json();
       if (fullData.audioUrl || fullData.rawAudioUrl || fullData.videoUrl) {
         onPlayThemeTrack(
@@ -333,7 +334,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         );
         return;
       }
-      const res = await fetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + (themesData.openings[0] || 'opening'))}`);
+      const res = await apiFetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + (themesData.openings[0] || 'opening'))}`);
       const data = await res.json();
       if (data.previewUrl || data.rawAudioUrl || data.videoUrl) {
         onPlayThemeTrack(
@@ -375,7 +376,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     const edSong = themesData.endings[0] || `${title} Ending Theme`;
     setThemeLoading('ed_side_toggle');
     try {
-      const fullRes = await fetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + (themesData.endings[0] || 'ending theme'))}`);
+      const fullRes = await apiFetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + (themesData.endings[0] || 'ending theme'))}`);
       const fullData = await fullRes.json();
       if (fullData.audioUrl || fullData.rawAudioUrl || fullData.videoUrl) {
         onPlayThemeTrack(
@@ -389,7 +390,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         );
         return;
       }
-      const res = await fetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + (themesData.endings[0] || 'ending'))}`);
+      const res = await apiFetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + (themesData.endings[0] || 'ending'))}`);
       const data = await res.json();
       if (data.previewUrl || data.rawAudioUrl || data.videoUrl) {
         onPlayThemeTrack(
@@ -1840,7 +1841,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   }
                                   setThemeLoading(op);
                                   try {
-                                    const fullRes = await fetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + op)}`);
+                                    const fullRes = await apiFetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + op)}`);
                                     const fullData = await fullRes.json();
                                     if (fullData.audioUrl || fullData.rawAudioUrl || fullData.videoUrl) {
                                       onPlayThemeTrack(
@@ -1854,7 +1855,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                       );
                                       return;
                                     }
-                                    const res = await fetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + op)}`);
+                                    const res = await apiFetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + op)}`);
                                     const data = await res.json();
                                     if (data.previewUrl || data.rawAudioUrl || data.videoUrl) {
                                       onPlayThemeTrack(
@@ -1946,7 +1947,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   }
                                   setThemeLoading(ed);
                                   try {
-                                    const fullRes = await fetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + ed)}`);
+                                    const fullRes = await apiFetch(`/api/theme-full-track?query=${encodeURIComponent(romajiTitle || title + ' ' + ed)}`);
                                     const fullData = await fullRes.json();
                                     if (fullData.audioUrl || fullData.rawAudioUrl || fullData.videoUrl) {
                                       onPlayThemeTrack(
@@ -1960,7 +1961,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                       );
                                       return;
                                     }
-                                    const res = await fetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + ed)}`);
+                                    const res = await apiFetch(`/api/theme-preview?query=${encodeURIComponent(title + ' ' + ed)}`);
                                     const data = await res.json();
                                     if (data.previewUrl || data.rawAudioUrl || data.videoUrl) {
                                       onPlayThemeTrack(

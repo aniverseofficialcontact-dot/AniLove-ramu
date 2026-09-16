@@ -1,6 +1,7 @@
 import { Anime, StreamServerId } from '../types';
+import { API_BASE, apiFetch, apiUrl } from './api';
 
-export type StreamLanguage = 'SUB' | 'DUB';
+export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'BEN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p';
 
 export interface LanguageOption {
@@ -14,6 +15,11 @@ export interface LanguageOption {
 export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'SUB', label: 'Japanese (Sub)', nativeLabel: '日本語', flag: '🇯🇵', short: 'JAP/SUB' },
   { code: 'DUB', label: 'English Dub', nativeLabel: 'English', flag: '🇺🇸', short: 'ENG/DUB' },
+  { code: 'HIN', label: 'Hindi Dub', nativeLabel: 'हिन्दी', flag: '🇮🇳', short: 'HINDI' },
+  { code: 'TAM', label: 'Tamil Dub', nativeLabel: 'தமிழ்', flag: '🇮🇳', short: 'TAMIL' },
+  { code: 'TEL', label: 'Telugu Dub', nativeLabel: 'తెలుగు', flag: '🇮🇳', short: 'TELUGU' },
+  { code: 'MAL', label: 'Malayalam Dub', nativeLabel: 'മലയാളം', flag: '🇮🇳', short: 'MALAYALAM' },
+  { code: 'BEN', label: 'Bengali Dub', nativeLabel: 'বাংলা', flag: '🇮🇳', short: 'BENGALI' },
 ];
 
 export interface StreamProvider {
@@ -34,7 +40,7 @@ export interface SkipData {
 
 export interface AvailableServerOption {
   name: string;
-  type: string; // SUB, DUB
+  type: string; // SUB, DUB, HIN, TAM, TEL
   linkId: string;
   providerId?: StreamServerId;
 }
@@ -74,7 +80,18 @@ export interface ResolveEpisodeSourceResult {
   message?: string;
 }
 
-// 1. Anikoto HD Servers (1080p Master & Bufferless CDN)
+// 1. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
+const ANIMEWORLD_INDIA: StreamProvider = {
+  id: 'animeworld-india',
+  label: 'AnimeWorld India',
+  category: 'official',
+  description: 'Premier Indian multi-audio anime network (Hindi, Tamil, Telugu, Malayalam, Bengali).',
+  supportedLanguages: ['HIN', 'TAM', 'TEL', 'MAL', 'BEN', 'DUB', 'SUB'],
+  tag: 'Hindi / Regional',
+  apiEndpoint: '/api/animeworld/resolve',
+};
+
+// 2. Anikoto HD Servers (1080p Master & Bufferless CDN)
 const ANIKOTO_HD1: StreamProvider = {
   id: 'anikoto-hd1',
   label: 'Anikoto HD-1',
@@ -124,116 +141,44 @@ const ANIKOTO_ULTRA: StreamProvider = {
   tag: 'Ultra Master',
 };
 
-// 2. Anify API (Eltik Meta-Engine)
-const ANIFY_CLOUD: StreamProvider = {
-  id: 'anify-cloud',
-  label: 'Anify Media Cloud',
-  category: 'anify',
-  description: 'Eltik multi-scraper engine with AniList mapping & multi-source mirrors.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Anify API',
-  apiEndpoint: '/api/anify/resolve',
+// 3. Renime Regional & Global (Hindi, Tamil, Telugu, English & Japanese)
+const RENIME_DUB: StreamProvider = {
+  id: 'renime-dub',
+  label: 'Renime Indian & Global',
+  category: 'renime',
+  description: 'Fast multi-audio stream node with Hindi, Tamil, Telugu, English & Japanese tracks.',
+  supportedLanguages: ['HIN', 'TAM', 'TEL', 'DUB', 'SUB'],
+  tag: 'Multi-Audio',
+  apiEndpoint: '/api/renime/resolve',
 };
 
-const ANIFY_FAST: StreamProvider = {
-  id: 'anify-fast',
-  label: 'Anify Fast Mirror',
-  category: 'anify',
-  description: 'High-bandwidth edge CDN powered by Anify provider mapping.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Edge CDN',
-  apiEndpoint: '/api/anify/resolve',
-};
-
-// 3. Tatakai API (Snozxyx Engine)
+// 4. Tatakai Multi-Source Engine (English, Japanese, Hindi)
 const TATAKAI_MULTI: StreamProvider = {
   id: 'tatakai-multi',
-  label: 'Tatakai Multi-Audio Engine',
+  label: 'Tatakai Multi-Source',
   category: 'tatakai',
-  description: 'Unified Tatakai scraper with English Dub and Japanese Sub tracks.',
-  supportedLanguages: ['SUB', 'DUB'],
+  description: 'Unified Tatakai engine with English Dub, Japanese Sub and Hindi tracks.',
+  supportedLanguages: ['SUB', 'DUB', 'HIN'],
   tag: 'Tatakai HD',
   apiEndpoint: '/api/tatakai/resolve',
 };
 
-const TATAKAI_PAHE: StreamProvider = {
-  id: 'tatakai-pahe',
-  label: 'Tatakai Pahe CDN',
-  category: 'tatakai',
-  description: 'Compact high-efficiency video stream node from Tatakai.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Fast H.265',
-  apiEndpoint: '/api/tatakai/resolve',
-};
-
-// 4. Miruro API
-const MIRURO_STREAM: StreamProvider = {
-  id: 'miruro-stream',
-  label: 'Miruro Ultra HLS',
-  category: 'miruro',
-  description: 'Decrypted Miruro master stream with AniList sync and multi-sub tracks.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Miruro HD',
-  apiEndpoint: '/api/miruro/resolve',
-};
-
-const MIRURO_PRO: StreamProvider = {
-  id: 'miruro-pro',
-  label: 'Miruro Pro Multi-Mirror',
-  category: 'miruro',
-  description: 'Multi-provider fallback (Zoro/HiAnime/Pahe) via Miruro native bridge.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Multi-Mirror',
-  apiEndpoint: '/api/miruro/resolve',
-};
-
-const MIRURO_PAHE: StreamProvider = {
-  id: 'miruro-pahe',
-  label: 'Miruro Pahe Mirror',
-  category: 'miruro',
-  description: 'Compact high-efficiency H.265 mirror powered by Miruro.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Low-Data',
-  apiEndpoint: '/api/miruro/resolve',
-};
-
-// 5. Renime API
-const RENIME_DUB: StreamProvider = {
-  id: 'renime-dub',
-  label: 'Renime Global Master',
-  category: 'renime',
-  description: 'Fast decrypted stream node with English Dub & Japanese Sub.',
-  supportedLanguages: ['SUB', 'DUB'],
-  tag: 'Fast HLS',
-  apiEndpoint: '/api/renime/resolve',
-};
-
 export const STREAM_PROVIDERS: StreamProvider[] = [
-  // 1. Anikoto HD-1 (1080p Master)
+  // 1. Anikoto HD-1 (1080p Master - Default)
   ANIKOTO_HD1,
-  // 2. Anikoto Vidstream (Fast Bufferless CDN)
-  ANIKOTO_VIDSTREAM,
-  // 3. Tatakai Multi-Audio Engine
+  // 2. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
+  ANIMEWORLD_INDIA,
+  // 3. Renime Indian & Global (Hindi, Tamil, Telugu, English, Japanese)
+  RENIME_DUB,
+  // 4. Tatakai Multi-Source (Sub, Dub, Hindi)
   TATAKAI_MULTI,
-  // 4. Anify Media Cloud
-  ANIFY_CLOUD,
-  // 5. Miruro Ultra HLS
-  MIRURO_STREAM,
+  // 5. Anikoto Vidstream (Fast Bufferless CDN)
+  ANIKOTO_VIDSTREAM,
   // 6. Anikoto VidPlay (Dual Sub/Dub)
   ANIKOTO_VIDPLAY,
-  // 7. Miruro Pro Multi-Mirror
-  MIRURO_PRO,
-  // 8. Renime Global Master
-  RENIME_DUB,
-  // 9. Anikoto HD-2 (Backup Mirror)
+  // 7. Anikoto HD-2 (Backup Mirror)
   ANIKOTO_HD2,
-  // 10. Tatakai Pahe CDN
-  TATAKAI_PAHE,
-  // 11. Anify Fast Mirror
-  ANIFY_FAST,
-  // 12. Miruro Pahe Mirror
-  MIRURO_PAHE,
-  // 13. Anikoto Ultra HD
+  // 8. Anikoto Ultra HD
   ANIKOTO_ULTRA,
 ];
 
@@ -252,16 +197,24 @@ export function createDirectStreamSource(
 ): StreamSource {
   const anilistId = anime.id || 1;
   const isDub = language === 'DUB';
+  const isIndian = ['HIN', 'TAM', 'TEL', 'MAL', 'BEN'].includes(language);
   const displayTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const cleanSlug = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-  const availableServers: AvailableServerOption[] = [
-    { name: 'VidLink Ultra HD', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
-    { name: 'AutoEmbed Multi-Source', type: isDub ? 'DUB' : 'SUB', linkId: `https://autoembed.co/anime/anilist/${anilistId}/${episodeNumber}?dub=${isDub ? 1 : 0}` },
-    { name: 'VidSrc Fast Mirror', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidsrc.cc/v2/embed/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
-    { name: 'SmashyStream Engine', type: 'SUB', linkId: `https://player.smashystream.com/anime/${anilistId}/${episodeNumber}` },
-    { name: '2Embed CDN', type: isDub ? 'DUB' : 'SUB', linkId: `https://www.2embed.cc/embedanime/${encodeURIComponent(cleanSlug)}-episode-${episodeNumber}` },
-  ];
+  let availableServers: AvailableServerOption[] = [];
+
+  if (isIndian) {
+    availableServers = [
+      { name: 'AnimeWorld Multi-Audio', type: language, linkId: `https://play.zephyrix.org/video/${cleanSlug}-episode-${episodeNumber}` },
+      { name: 'AnimeWorld Edge Mirror', type: language, linkId: `https://watchanimeworld.top/episode/${cleanSlug}-episode-${episodeNumber}` },
+    ];
+  } else {
+    availableServers = [
+      { name: 'Anikoto Fast Edge', type: isDub ? 'DUB' : 'SUB', linkId: `https://megaplay.buzz/stream/s-2/${anilistId}/${isDub ? 'dub' : 'sub'}` },
+      { name: 'Anikoto Vidstream CDN', type: isDub ? 'DUB' : 'SUB', linkId: `https://megaplay.buzz/stream/s-1/${anilistId}/${isDub ? 'dub' : 'sub'}` },
+      { name: 'Pahe Compact Stream', type: isDub ? 'DUB' : 'SUB', linkId: `https://player.smashystream.com/anime/${anilistId}/${episodeNumber}` },
+    ];
+  }
 
   let selectedUrl = availableServers[0].linkId;
   let selectedServerName = availableServers[0].name;
@@ -283,7 +236,7 @@ export function createDirectStreamSource(
     external: false,
     skipData: { intro: [0, 0], outro: [0, 0] },
     availableServers,
-    availableLanguages: ['SUB', 'DUB'],
+    availableLanguages: isIndian ? ['HIN', 'TAM', 'TEL', 'MAL', 'BEN', 'DUB', 'SUB'] : ['SUB', 'DUB'],
     selectedServerName,
     isDubAvailable: true,
     isFallback: true,
@@ -293,7 +246,7 @@ export function createDirectStreamSource(
 }
 
 /**
- * Universal episode stream resolver supporting Anikoto, Anify, Tatakai, Miruro, and Multi-Engine CDNs
+ * Universal episode stream resolver supporting Anikoto, Anify, Tatakai, Miruro, AnimeWorld India and Multi-Engine CDNs
  */
 export async function resolveEpisodeSource({
   anime,
@@ -304,7 +257,13 @@ export async function resolveEpisodeSource({
   serverName,
 }: ResolveEpisodeSourceInput): Promise<ResolveEpisodeSourceResult> {
   const targetProviderId = (providerId as StreamServerId) || DEFAULT_STREAM_PROVIDER_ID;
-  const provider = STREAM_PROVIDERS.find(item => item.id === targetProviderId) || TATAKAI_MULTI;
+  const isIndianLang = ['HIN', 'TAM', 'TEL', 'MAL', 'BEN'].includes(language);
+  let provider = STREAM_PROVIDERS.find(item => item.id === targetProviderId) || ANIKOTO_HD1;
+
+  // Auto-switch to Indian multi-audio provider if an Indian language was requested and current provider doesn't support it
+  if (isIndianLang && !provider.supportedLanguages.includes(language)) {
+    provider = ANIMEWORLD_INDIA;
+  }
 
   const englishTitle = anime.title?.english || '';
   const romajiTitle = anime.title?.romaji || '';
@@ -312,28 +271,32 @@ export async function resolveEpisodeSource({
   const nativeTitle = anime.title?.native || '';
   const synonyms = (anime as any).synonyms || [];
   const animeTitle = englishTitle || romajiTitle || userTitle || 'Anime';
-  const anilistId = anime.id;
+  const seasonNumber = (anime as any).seasonNumber || (anime as any).season || undefined;
+  const anilistId = anime.id || 1;
 
   let desiredServerName = serverName;
   if (!desiredServerName && provider.serverMatch) {
     desiredServerName = provider.serverMatch;
   }
 
-  // Determine endpoint to hit based on provider
-  let endpoint = '/api/stream/resolve';
-  if (provider.apiEndpoint) {
-    endpoint = provider.apiEndpoint;
-  } else if (provider.category === 'anikoto') {
+  // Determine endpoint to hit based on provider and language
+  // RESPECT user provider choice first
+  let endpoint = provider.apiEndpoint || '/api/stream/resolve';
+
+  if (provider.category === 'anikoto') {
     endpoint = '/api/anikoto/resolve';
+  } else if (isIndianLang && endpoint === '/api/stream/resolve') {
+    // Only default to animeworld if no specific provider endpoint is set
+    endpoint = '/api/animeworld/resolve';
   }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    const timeoutId = setTimeout(() => controller.abort(), 7500);
 
     let res: Response;
     try {
-      res = await fetch(endpoint, {
+      res = await apiFetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -348,6 +311,7 @@ export async function resolveEpisodeSource({
           nativeTitle,
           synonyms,
           episodeNumber,
+          seasonNumber,
           language,
           serverName: desiredServerName,
           format: anime.format || 'TV',
@@ -394,7 +358,7 @@ export async function resolveEpisodeSource({
       try {
         const fbController = new AbortController();
         const fbTimeoutId = setTimeout(() => fbController.abort(), 3500);
-        const fallbackRes = await fetch('/api/stream/resolve', {
+        const fallbackRes = await apiFetch('/api/stream/resolve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

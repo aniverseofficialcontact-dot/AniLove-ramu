@@ -1,4 +1,5 @@
 import { UserMediaListItem, MediaListStatus, Anime, MALUser } from '../types';
+import { apiFetch } from './api';
 
 export const MAL_CLIENT_ID = '6114d00ca681b7701d1e15004a44ba50'; // Default public MAL OAuth client ID
 
@@ -74,7 +75,7 @@ export async function fetchMALUserProfile(username: string): Promise<MALUser | n
 
   // Strategy 1: Server proxy
   try {
-    const res = await fetch(`/api/mal/user/${encodeURIComponent(cleanUser)}/profile`);
+    const res = await apiFetch(`/api/mal/user/${encodeURIComponent(cleanUser)}/profile`);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.user) {
@@ -137,7 +138,7 @@ export async function fetchMALUserAnimelist(username: string): Promise<UserMedia
 
   // Strategy 1: Server proxy
   try {
-    const res = await fetch(`/api/mal/user/${encodeURIComponent(cleanUser)}/animelist`);
+    const res = await apiFetch(`/api/mal/user/${encodeURIComponent(cleanUser)}/animelist`);
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.items) && json.items.length > 0) {

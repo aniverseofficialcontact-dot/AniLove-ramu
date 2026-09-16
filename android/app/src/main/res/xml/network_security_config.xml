@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <!-- Allow cleartext for scraping various anime providers -->
+  <base-config cleartextTrafficPermitted="true" />
+
+  <!-- Allow cleartext for local emulator/hot-reload hosts -->
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="true">10.0.2.2</domain>
+    <domain includeSubdomains="true">localhost</domain>
+  </domain-config>
+
+  <!-- Example: add your backend domain here if it uses http:// (not recommended long-term) -->
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="true">anilove3.ai.studio</domain>
+  </domain-config>
+
+  <!-- Production backend (HTTPS) - keep cleartext disallowed -->
+  <domain-config cleartextTrafficPermitted="false">
+    <domain includeSubdomains="true">anilove-backend.onrender.com</domain>
+  </domain-config>
+</network-security-config>

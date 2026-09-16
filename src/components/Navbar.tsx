@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Search, Gamepad2, Calendar, Bookmark, User, Settings, RefreshCw, Heart, Bot, Compass, Dices, Sparkles, Rotate3d, Layers, Lock, Unlock, Film } from 'lucide-react';
+import { Home, Search, Gamepad2, Calendar, Bookmark, User, Settings, RefreshCw, Heart, Bot, Compass, Dices, Sparkles, Rotate3d, Layers, Lock, Unlock, Film, Download } from 'lucide-react';
 import { UserSettings, AppNotification, Anime } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { DynamicLogo } from './DynamicLogo';
 
-export type TabType = 'home' | 'discover' | 'reels' | 'arcade' | 'schedule' | 'library' | 'cards' | 'account';
+export type TabType = 'home' | 'discover' | 'reels' | 'arcade' | 'schedule' | 'library' | 'cards' | 'account' | 'downloads';
 
 interface NavbarProps {
   currentTab: TabType;
@@ -217,6 +217,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">Gacha</span>
             </button>
           )}
+
+          {/* Offline Downloads Button */}
+          <button
+            id="nav-downloads-btn"
+            onClick={() => onSelectTab('downloads')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer backdrop-blur-md ${
+              currentTab === 'downloads'
+                ? 'bg-violet-600 text-white border border-violet-400 shadow-md shadow-violet-600/30'
+                : 'bg-white/10 hover:bg-white/20 text-violet-300 hover:text-white border border-white/15'
+            }`}
+            title="View downloaded offline episodes"
+          >
+            <Download className="w-3.5 h-3.5 text-violet-400" />
+            <span className="hidden sm:inline">Downloads</span>
+          </button>
 
           {/* Arcade Toggle Button placed at top header in place of AniAI */}
           <button

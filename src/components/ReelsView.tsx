@@ -33,6 +33,7 @@ import {
   clearReelsSession
 } from '../services/reelsService';
 import { reelMediaCache } from '../services/reelMediaCache';
+import { apiUrl } from '../services/api';
 
 interface ReelsViewProps {
   onBack?: () => void;
@@ -594,6 +595,25 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   // Play / Pause Toggle (Single Tap anywhere on canvas)
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
+
+    const isNativeAndroid = typeof window !== 'undefined' && (window as any).Capacitor && (window as any).Capacitor.getPlatform && (window as any).Capacitor.getPlatform() === 'android' && (window as any).Capacitor.isNative;
+
+    // If running inside native Android (Capacitor), hand off playback to native ExoPlayer activity
+    if (isNativeAndroid) {
+      const rawUrl = currentReel?.directUrl || currentReel?.url;
+      if (!rawUrl) return;
+      const finalUrl = rawUrl.startsWith('/') ? apiUrl(rawUrl) : rawUrl;
+      try {
+        // Use a custom intent URI to open native activity without requiring a Capacitor plugin.
+        const intentUri = `anilove-player://play?url=${encodeURIComponent(finalUrl)}`;
+        window.location.href = intentUri;
+        setIsPlaying(true);
+      } catch (err) {
+        // Fallback to web player below if navigation fails
+      }
+      return;
+    }
+
     if (!video) return;
 
     // Sound is ALWAYS active and unmuted
@@ -621,7 +641,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       setShowPlayPauseFeedback('pause');
       setTimeout(() => setShowPlayPauseFeedback(null), 650);
     }
-  }, [getActiveVideo]);
+  }, [getActiveVideo, currentReel]);
 
   // Save / Bookmark Toggle (Both Single Tap on Bookmark button or Double Tap on Video canvas)
   const handleToggleSave = useCallback((targetReel?: AnimeReel) => {

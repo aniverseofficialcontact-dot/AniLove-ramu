@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0A0A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SUBTITLES"
+                android:textColor="#8888FF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.2" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Caption appearance"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:layout_marginTop="14dp" />
+            <ImageButton
+                android:id="@+id/btn_close_captions"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentEnd="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                app:tint="@android:color/white" />
+        </RelativeLayout>
+
+        <!-- Live Preview Area -->
+        <FrameLayout
+            android:id="@+id/preview_container"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:background="#1A1A1A"
+            android:layout_marginBottom="24dp">
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:alpha="0.4"
+                android:src="@android:drawable/presence_video_online" />
+
+            <TextView
+                android:id="@+id/caption_preview"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="16dp"
+                android:text="Preview your subtitle appearance."
+                android:textColor="@android:color/white"
+                android:padding="4dp"
+                android:textSize="16sp"
+                android:fontFamily="sans-serif"
+                android:textStyle="normal"
+                android:visibility="visible" />
+        </FrameLayout>
+
+        <!-- CAPTIONS ON/OFF -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:background="#111111"
+            android:padding="16dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Show Subtitles"
+                android:textColor="@android:color/white"
+                android:textSize="16sp" />
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_subtitles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true" />
+        </RelativeLayout>
+
+        <!-- BACKGROUND OPACITY -->
+        <TextView style="@style/CaptionSettingLabel" android:text="BACKGROUND OPACITY" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_bg_opacity" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- BACKGROUND COLOR -->
+        <TextView style="@style/CaptionSettingLabel" android:text="BACKGROUND COLOR" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_bg_color" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- TEXT SIZE -->
+        <TextView style="@style/CaptionSettingLabel" android:text="TEXT SIZE" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_text_size" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- TEXT WEIGHT -->
+        <TextView style="@style/CaptionSettingLabel" android:text="TEXT WEIGHT" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_text_weight" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- POSITION -->
+        <TextView style="@style/CaptionSettingLabel" android:text="POSITION" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_position" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- BOTTOM MARGIN -->
+        <TextView style="@style/CaptionSettingLabel" android:text="BOTTOM MARGIN" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_margin" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- TEXT COLOR -->
+        <TextView style="@style/CaptionSettingLabel" android:text="TEXT COLOR" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_text_color" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <!-- EDGE STYLE -->
+        <TextView style="@style/CaptionSettingLabel" android:text="EDGE STYLE" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_edge_style" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="This server renders its own subtitles, so it may ignore some of these."
+            android:textColor="#666666"
+            android:textSize="12sp"
+            android:layout_marginTop="16dp" />
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="40dp">
+            <TextView
+                android:id="@+id/btn_reset_captions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Reset"
+                android:textColor="#FF4444"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+            <TextView
+                android:id="@+id/btn_final_close_captions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="Close"
+                android:textColor="#888888"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+        </RelativeLayout>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

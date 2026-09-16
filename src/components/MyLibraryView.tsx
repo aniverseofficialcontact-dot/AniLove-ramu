@@ -37,6 +37,7 @@ interface MyLibraryViewProps {
   onInspect3DCard?: (anime: Anime) => void;
   isTwoWaySyncActive: boolean;
   onOpenSavedReel?: (reel: AnimeReel) => void;
+  onOpenDownloads?: () => void;
 }
 
 export const MyLibraryView: React.FC<MyLibraryViewProps> = ({
@@ -51,6 +52,7 @@ export const MyLibraryView: React.FC<MyLibraryViewProps> = ({
   onInspect3DCard,
   isTwoWaySyncActive,
   onOpenSavedReel,
+  onOpenDownloads,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'ALL' | MediaListStatus>('ALL');
   const [selectedFormat, setSelectedFormat] = useState<string>('ALL');
@@ -204,6 +206,18 @@ export const MyLibraryView: React.FC<MyLibraryViewProps> = ({
               <Bookmark className={`w-4 h-4 ${showSavedReelsView ? 'fill-white text-white' : 'fill-pink-400 text-pink-400'}`} />
               <span>Saved Reels ({savedReelsCount})</span>
             </button>
+
+            {/* Offline Downloads Button */}
+            {onOpenDownloads && (
+              <button
+                onClick={onOpenDownloads}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer shadow-lg bg-slate-900 hover:bg-violet-500/10 text-violet-300 hover:text-violet-200 border-violet-500/30"
+                title="View all offline downloaded anime episodes"
+              >
+                <Download className="w-4 h-4 text-violet-400" />
+                <span>Downloads</span>
+              </button>
+            )}
 
             <button
               onClick={() => setShowStatsDrawer(!showStatsDrawer)}

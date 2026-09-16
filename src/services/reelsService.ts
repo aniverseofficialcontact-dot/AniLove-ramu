@@ -1,4 +1,5 @@
 import { AnimeReel } from '../types';
+import { API_BASE, apiFetch, apiUrl } from './api';
 import { reelMediaCache } from './reelMediaCache';
 import bundledReelsRaw from '../data/animeReels.json';
 
@@ -326,7 +327,7 @@ export function clearAllSavedReels(): void {
 export async function fetchAllReels(shuffle: boolean = true): Promise<AnimeReel[]> {
   try {
     const url = shuffle ? '/api/reels?shuffle=true' : '/api/reels';
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     if (res.ok) {
       const data = await res.json();
       const items = Array.isArray(data?.reels) ? data.reels : (Array.isArray(data) ? data : []);
@@ -365,7 +366,7 @@ export async function fetchReelById(reelId: string): Promise<AnimeReel | null> {
   if (foundLocal) return foundLocal;
 
   try {
-    const res = await fetch(`/api/reels/item/${encodeURIComponent(cleanId)}`);
+    const res = await apiFetch(`/api/reels/item/${encodeURIComponent(cleanId)}`);
     if (res.ok) {
       const data = await res.json();
       if (data?.reel) {
@@ -378,7 +379,7 @@ export async function fetchReelById(reelId: string): Promise<AnimeReel | null> {
 
   // Fallback to searching /api/reels
   try {
-    const res = await fetch(`/api/reels?id=${encodeURIComponent(cleanId)}`);
+    const res = await apiFetch(`/api/reels?id=${encodeURIComponent(cleanId)}`);
     if (res.ok) {
       const data = await res.json();
       const first = data?.reels?.[0];
@@ -412,7 +413,7 @@ export async function preloadReels(reelIds: string[]): Promise<void> {
 
   // 2. Proactive server LRU buffer warming
   try {
-    fetch('/api/reels/preload', {
+    apiFetch('/api/reels/preload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: reelIds })
@@ -436,7 +437,7 @@ export function prewarmInitialReelsOnAppStart(): void {
       // Pre-warm thumbnail posters in browser image cache from both Proxy & Google Edge CDN
       for (const id of topReelIds) {
         const img1 = new Image();
-        img1.src = `/api/reels/thumbnail/${id}`;
+        img1.src = apiUrl(`/api/reels/thumbnail/${id}`);
         const img2 = new Image();
         img2.src = `https://lh3.googleusercontent.com/d/${id}`;
       }
@@ -455,7 +456,7 @@ if (typeof window !== 'undefined') {
 
 export async function syncReelsFromGoogleDrive(): Promise<AnimeReel[]> {
   try {
-    const res = await fetch('/api/reels/sync', { method: 'POST' });
+    const res = await apiFetch('/api/reels/sync', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
       if (data.reels && Array.isArray(data.reels)) {

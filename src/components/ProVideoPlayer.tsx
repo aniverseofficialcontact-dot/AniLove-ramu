@@ -15,6 +15,16 @@ import {
   StreamSource,
   SUPPORTED_LANGUAGES,
 } from '../services/streamingProviders';
+import { registerPlugin, Capacitor } from '@capacitor/core';
+
+interface NativePlayerPlugin {
+  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number }): Promise<void>;
+  updatePosition(options: { y: number }): Promise<void>;
+  addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
+  addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;
+}
+
+const NativePlayer = registerPlugin<NativePlayerPlugin>('NativePlayer');
 
 interface EpisodeItem {
   number: number;
@@ -330,6 +340,36 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     }
   };
 
+  // Native Interface Helper (Format: 00:00)
+  const formatTime = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Synchronize Native Player position with scrolling
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || streamStatus !== 'ready') return;
+
+    const syncPosition = () => {
+      if (playerContainerRef.current) {
+        const rect = playerContainerRef.current.getBoundingClientRect();
+        // Use requestAnimationFrame for ultra-smooth 60fps scrolling sync
+        requestAnimationFrame(() => {
+          NativePlayer.updatePosition({ y: Math.round(rect.top) });
+        });
+      }
+    };
+
+    window.addEventListener('scroll', syncPosition, { passive: true });
+    const interval = setInterval(syncPosition, 32); // 30fps backup pulse
+    return () => {
+      window.removeEventListener('scroll', syncPosition);
+      clearInterval(interval);
+    };
+  }, [streamStatus]);
+
   // Main stream resolution effect
   useEffect(() => {
     let cancelled = false;
@@ -370,6 +410,43 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     };
   }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName]);
 
+  // Inline UI Eraser (Destroys old web buttons inside the box)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !iframeRef.current || streamStatus !== 'ready') return;
+    const interval = setInterval(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
+        if (!doc) return;
+        doc.body.style.backgroundColor = 'black';
+        const v = doc.querySelector('video');
+        if (v) {
+          const all = doc.querySelectorAll('body *');
+          // Hide everything that isn't the video or a caption container
+          const whitelist = '.jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech';
+          all.forEach((el: any) => {
+            if (el === v || el.contains(v) || v.contains(el) || (el.matches && el.matches(whitelist))) {
+              el.style.setProperty('visibility', 'visible', 'important');
+              el.style.setProperty('opacity', '1', 'important');
+              if (el !== v && !el.contains(v)) el.style.setProperty('background', 'transparent', 'important');
+            } else {
+              el.style.setProperty('visibility', 'hidden', 'important');
+              el.style.setProperty('pointer-events', 'none', 'important');
+            }
+          });
+          v.style.setProperty('position', 'fixed', 'important');
+          v.style.setProperty('top', '0', 'important');
+          v.style.setProperty('left', '0', 'important');
+          v.style.setProperty('width', '100%', 'important');
+          v.style.setProperty('height', '100%', 'important');
+          v.style.setProperty('z-index', '1000', 'important');
+          v.controls = false;
+        }
+      } catch {}
+    }, 500);
+    return () => clearInterval(interval);
+  }, [streamStatus]);
+
+
   // Next Server Failover Helper
   const handleSwitchToNextServer = () => {
     const currentIndex = STREAM_PROVIDERS.findIndex(p => p.id === activeServer);
@@ -403,6 +480,48 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     });
   };
 
+  const lastLaunchedUrl = useRef<string | null>(null);
+
+  // Auto-launch Native Player for Inline Experience
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
+      if (lastLaunchedUrl.current === streamSource.url) return;
+      lastLaunchedUrl.current = streamSource.url;
+
+      const currentEpNum = Number(episodeNumber);
+      const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+
+      (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
+      (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
+      NativePlayer.addListener('onEpisodeNavigation', (data) => {
+        if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
+        else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
+      });
+      NativePlayer.addListener('onBackButtonPressed', () => {
+        if (onClosePlayer) onClosePlayer();
+      });
+
+      // Calculate exact position to dock at the very top
+      (NativePlayer as any).play({
+        url: streamSource.url,
+        title: `${dTitle} - Ep ${episodeNumber}`,
+        hasNext: episodesList.length > episodeNumber,
+        hasPrev: episodeNumber > 1,
+        startFullscreen: false,
+        yOffset: 0, // Pin to top for Image 2 look
+        anilistId: anime.id,
+        episodeNumber: Number(episodeNumber),
+        audio: audioMode,
+      }).catch(() => {});
+    }
+  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id]);
+
+  useEffect(() => {
+    return () => {
+      lastLaunchedUrl.current = null;
+    };
+  }, []);
+
   const displayTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const coverUrl = anime.coverImage?.extraLarge || anime.coverImage?.large || anime.coverImage?.medium || undefined;
   const userCount = anime.popularity || (anime.favourites ? anime.favourites * 10 : 0) || 0;
@@ -423,13 +542,24 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           : 'w-full rounded-2xl sm:rounded-3xl border border-slate-800/80 shadow-2xl flex flex-col'
       }`}
     >
-      {/* 1. Unobstructed Video Player Stream Frame */}
+      {/* 1. Video Player Slot (Placeholder for Native Overlay) */}
       <div
         className={`relative w-full bg-black overflow-hidden touch-manipulation flex-1 ${
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {streamSource?.isEmbeddable && streamStatus !== 'error' ? (
+        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
+          <div className="w-full h-full relative group bg-black z-10">
+            {/* Invisible placeholder that hides what's underneath */}
+            <div className="absolute inset-0 bg-black z-0" />
+
+            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
+               {/* Minimalist Sync Indicator */}
+               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
+               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Native Player Active</div>
+            </div>
+          </div>
+        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
           <iframe
             key={`${streamSource.url}-${refreshKey}`}
             ref={iframeRef}
@@ -438,9 +568,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             className="w-full h-full border-0 pointer-events-auto block"
             allowFullScreen
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            onLoad={() => {
-              setStreamStatus('ready');
-            }}
+            onLoad={() => setStreamStatus('ready')}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-black/90 p-4 text-center">
@@ -543,4 +671,3 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     </div>
   );
 };
-

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Anime, UserMediaListItem, UserSettings, MediaListStatus, AnimeTrailer, AppNotification } from './types';
+import { API_BASE, apiFetch, apiUrl } from './services/api';
 import {
   fetchHomeFeed,
   fetchTrendingAnime,
@@ -43,6 +44,7 @@ import { ScheduleView } from './components/ScheduleView';
 import { MyLibraryView } from './components/MyLibraryView';
 import { AccountView } from './components/AccountView';
 import { WatchView } from './components/WatchView';
+import { DownloadsView } from './components/DownloadsView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { ArcadeView } from './components/ArcadeView';
@@ -103,7 +105,7 @@ function parseInitialReelNavigation(): {
       };
     }
 
-    if (tabParam && ['home', 'discover', 'reels', 'arcade', 'schedule', 'library', 'cards', 'account'].includes(tabParam)) {
+    if (tabParam && ['home', 'discover', 'reels', 'arcade', 'schedule', 'library', 'cards', 'account', 'downloads'].includes(tabParam)) {
       return {
         initialTab: tabParam as TabType,
         initialReelId: null,
@@ -420,7 +422,7 @@ export function App() {
       try {
         const malStatus = updates.status ? mapMediaListStatusToMAL(updates.status) : undefined;
         const malAnimeId = anime.idMal || anime.id;
-        await fetch('/api/mal/sync', {
+        await apiFetch('/api/mal/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -529,6 +531,37 @@ export function App() {
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const currentWatchingAnimeRef = React.useRef<Anime | null>(null);
+  const activeWatchEpisodeRef = React.useRef(activeWatchEpisode);
+  activeWatchEpisodeRef.current = activeWatchEpisode;
+  const selectedAnimeRef = React.useRef(selectedAnime);
+  selectedAnimeRef.current = selectedAnime;
+
+  useEffect(() => {
+    if (activeWatchEpisode?.anime) {
+      currentWatchingAnimeRef.current = activeWatchEpisode.anime;
+    }
+  }, [activeWatchEpisode]);
+
+  // Handle native Android player back button navigation -> Redirect to Anime Details Modal (Image 3)
+  useEffect(() => {
+    const handleNativeBack = () => {
+      const target = activeWatchEpisodeRef.current?.anime || currentWatchingAnimeRef.current || selectedAnimeRef.current;
+      setActiveWatchEpisode(null);
+      if (target) {
+        handleOpenDetails(target);
+      }
+    };
+
+    (window as any).closeNativePlayerAndOpenDetails = handleNativeBack;
+    window.addEventListener('nativePlayerBackButtonPressed', handleNativeBack);
+
+    return () => {
+      delete (window as any).closeNativePlayerAndOpenDetails;
+      window.removeEventListener('nativePlayerBackButtonPressed', handleNativeBack);
+    };
+  }, []);
 
   // Open Trailer Modal
   const handleOpenTrailer = (trailer: AnimeTrailer, title: string) => {
@@ -726,7 +759,7 @@ export function App() {
 
     try {
       // 1. Try fast cached AnimeThemes query with parallel resolution
-      const fullRes = await fetch(`/api/theme-full-track?query=${encodeURIComponent(romaji || title || english)}`);
+      const fullRes = await apiFetch(`/api/theme-full-track?query=${encodeURIComponent(romaji || title || english)}`);
       const fullData = await fullRes.json();
 
       if (fullData.audioUrl || fullData.rawAudioUrl || fullData.videoUrl) {
@@ -747,7 +780,7 @@ export function App() {
       }
 
       // 2. Fallback to audio preview
-      const res = await fetch(`/api/theme-preview?query=${encodeURIComponent(title + ' opening')}`);
+      const res = await apiFetch(`/api/theme-preview?query=${encodeURIComponent(title + ' opening')}`);
       const data = await res.json();
       if (data.previewUrl || data.rawAudioUrl || data.videoUrl) {
         setActiveThemeSong({
@@ -792,7 +825,7 @@ export function App() {
       showToast('success', `Now Playing: ${trackTitle}`, 'Theme Player');
     } else {
       // Direct track title lookup with fast cache
-      fetch(`/api/theme-full-track?query=${encodeURIComponent(trackTitle)}`)
+      apiFetch(`/api/theme-full-track?query=${encodeURIComponent(trackTitle)}`)
         .then(res => res.json())
         .then(data => {
           if (data.audioUrl || data.rawAudioUrl || data.videoUrl) {
@@ -856,8 +889,8 @@ export function App() {
       {/* Toast Notification Layer */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Persistent App Header (Visible on desktop so user can navigate/refresh tabs; hidden on mobile during Reels for edge-to-edge view) */}
-      <div className={isReelsActive ? 'hidden lg:block' : 'block'}>
+      {/* Persistent App Header (Visible on desktop so user can navigate/refresh tabs; hidden on mobile during Reels, and hidden when watching an episode for clean top-docked player) */}
+      <div className={isReelsActive ? 'hidden lg:block' : activeWatchEpisode ? 'hidden' : 'block'}>
         <Navbar
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
@@ -887,7 +920,11 @@ export function App() {
             anime={activeWatchEpisode.anime}
             episodeNumber={activeWatchEpisode.episodeNumber}
             initialTime={activeWatchEpisode.startTime || 0}
-            onBack={() => setActiveWatchEpisode(null)}
+            onBack={() => {
+              const currentAnime = activeWatchEpisode.anime;
+              setActiveWatchEpisode(null);
+              handleOpenDetails(currentAnime);
+            }}
             onEpisodeChange={ep => {
               setActiveWatchEpisode(prev => (prev ? { ...prev, episodeNumber: ep, startTime: 0 } : null));
             }}
@@ -900,6 +937,10 @@ export function App() {
             userItem={library.find(item => item.mediaId === activeWatchEpisode.anime.id)}
             isTwoWaySyncActive={Boolean(settings.twoWaySyncEnabled && settings.anilistToken)}
             settings={settings}
+            onOpenDownloadsView={() => {
+              setActiveWatchEpisode(null);
+              handleSelectTab('downloads');
+            }}
           />
         ) : (
           <>
@@ -1208,6 +1249,7 @@ export function App() {
                     setTargetReelFilterMode('saved');
                     setCurrentTab('reels');
                   }}
+                  onOpenDownloads={() => handleSelectTab('downloads')}
                 />
               )
             )}
@@ -1273,6 +1315,14 @@ export function App() {
                   handleSelectTab('reels');
                 }}
                 onReplayIntro={handleReplayIntro}
+              />
+            )}
+
+            {/* VIEW 8: OFFLINE DOWNLOADS MANAGER */}
+            {currentTab === 'downloads' && (
+              <DownloadsView
+                onBack={() => handleSelectTab('home')}
+                onOpenAnimeDetails={handleOpenDetails}
               />
             )}
           </>

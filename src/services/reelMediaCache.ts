@@ -8,6 +8,8 @@
  * 4. Automatic memory reclamation & Object URL revoking
  */
 
+import { API_BASE, apiFetch, apiUrl } from './api';
+
 const CACHE_NAME = 'anime-reels-media-v1';
 const MAX_MEMORY_OBJECT_URLS = 25; // Keep up to 25 reels in instant RAM (~75-100MB)
 const MAX_PERSISTENT_ENTRIES = 50; // Cache Storage limit
@@ -42,7 +44,7 @@ class ReelMediaCache {
     if (this.isCacheStorageSupported) {
       try {
         const cache = await caches.open(CACHE_NAME);
-        const cacheKey = `/api/reels/stream/${reelId}`;
+        const cacheKey = apiUrl(`/api/reels/stream/${reelId}`);
         const match = await cache.match(cacheKey);
         if (match && match.ok) {
           const blob = await match.blob();
@@ -58,7 +60,7 @@ class ReelMediaCache {
     }
 
     // 3. Fallback to direct streaming endpoint
-    return `/api/reels/stream/${reelId}`;
+    return apiUrl(`/api/reels/stream/${reelId}`);
   }
 
   /**
@@ -81,7 +83,7 @@ class ReelMediaCache {
 
     const fetchPromise = (async () => {
       try {
-        const streamUrl = `/api/reels/stream/${reelId}`;
+        const streamUrl = apiUrl(`/api/reels/stream/${reelId}`);
 
         // Check persistent Cache Storage first
         if (this.isCacheStorageSupported) {
@@ -105,7 +107,7 @@ class ReelMediaCache {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-        const response = await fetch(streamUrl, {
+        const response = await apiFetch(streamUrl, {
           signal: controller.signal,
           headers: {
             'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
