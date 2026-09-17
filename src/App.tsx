@@ -541,7 +541,7 @@ export function App() {
     const title = anime.title?.english || anime.title?.romaji || 'Anime';
     if (isCompleted) {
       showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} eps)! 🎉`, 'Completed');
-    } else {
+    } else if (clampedProgress > (existingItem?.progress || 0)) {
       showToast('info', `Updated "${title}" progress to Episode ${clampedProgress}.`, 'Progress Saved');
     }
     performAniListSync(anime, { progress: clampedProgress, status: nextStatus || existingItem?.status });
