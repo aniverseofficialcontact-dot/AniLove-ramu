@@ -196,20 +196,18 @@ export const AccountView: React.FC<AccountViewProps> = ({
           id: 'profile-main',
           name: settings.customDisplayName || 'Anime Explorer',
           avatar: settings.customAvatar || PRESET_AVATARS[0].url,
-          email: currentUser?.email || settings.customEmail || '',
+          email: settings.customEmail || '',
           createdAt: Date.now(),
         },
       ];
 
   const currentProfile = profiles.find(p => p.id === settings.currentProfileId) || profiles[0];
 
-  // Saved Reels State
-  const [savedReels, setSavedReels] = useState<AnimeReel[]>(() => getStoredSavedReels());
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = editName.trim() || 'Anime Explorer';
     const finalAvatar = editAvatar;
-    const masterEmail = currentUser?.email || settings.customEmail || currentProfile.email || '';
+    const masterEmail = settings.customEmail || currentProfile.email || '';
 
     // Update active profile in profiles array
     const updatedProfiles = profiles.map(p => {
@@ -239,7 +237,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   // Switch Active Profile
   const handleSwitchProfile = (profile: UserProfile) => {
-    const masterEmail = currentUser?.email || settings.customEmail || profile.email || '';
+    const masterEmail = settings.customEmail || profile.email || '';
     const newSettings: UserSettings = {
       ...settings,
       currentProfileId: profile.id,
@@ -260,7 +258,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
       return;
     }
 
-    const masterEmail = currentUser?.email || settings.customEmail || '';
+    const masterEmail = settings.customEmail || '';
     const newProf: UserProfile = {
       id: `profile-${Date.now()}`,
       name: newProfileName.trim(),
@@ -513,9 +511,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
     );
   };
 
-  const displayName = currentUser?.displayName || currentProfile.name || settings.customDisplayName || 'Anime Explorer';
-  const email = currentUser?.email || settings.customEmail || currentProfile.email || 'Guest User (Not Signed In)';
-  const avatarUrl = currentUser?.photoURL || currentProfile.avatar || settings.customAvatar || PRESET_AVATARS[0].url;
+  const displayName = currentProfile.name || settings.customDisplayName || 'Anime Explorer';
+  const email = settings.customEmail || currentProfile.email || 'Guest User (Not Signed In)';
+  const avatarUrl = currentProfile.avatar || settings.customAvatar || PRESET_AVATARS[0].url;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -2013,11 +2011,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
                     </div>
                   )}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
               </motion.div>
             )}
           </AnimatePresence>
