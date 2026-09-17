@@ -100,8 +100,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
         setIntent(intent);
+        super.onNewIntent(intent);
     }
 
     public void dispatchBackToDetails() {
