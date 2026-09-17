@@ -1,5 +1,4 @@
 import { UserMediaListItem, UserSettings, Anime, EpisodeNote, AppTheme, WatchHistoryEntry, GachaCard, MediaListStatus } from '../types';
-import { auth, saveGameDataToCloudFirestore, fetchGameDataFromCloudFirestore } from '../lib/firebase';
 import { API_BASE, apiFetch, apiUrl } from './api';
 
 const SETTINGS_KEY = 'anilove_settings_v3';
@@ -167,20 +166,6 @@ export async function pushUserDataToCloud(tokenOrSettings?: string | UserSetting
   const rawDaily = localStorage.getItem(DAILY_GAMES_RECORD_KEY);
   const dailyGameRecords = rawDaily ? JSON.parse(rawDaily) : {};
 
-  // 1. If user is signed in with Firebase, sync with Firestore game state
-  if (auth?.currentUser) {
-    saveGameDataToCloudFirestore(auth.currentUser.uid, {
-      coins,
-      characterCards,
-      cardAwakenings,
-      activeCompanion,
-      watchHistory,
-      dailyGameRecords,
-    }).catch(err => {
-      console.warn('Firebase game data background sync warn:', err);
-    });
-  }
-
   if (!token) return false;
 
   // 2. If browser is offline, don't attempt network fetch
@@ -231,58 +216,6 @@ export async function syncUserDataWithCloud(
   tokenOrSettings?: string | UserSettings | null
 ): Promise<{ success: boolean; coins: number; cardsCount: number; user?: any }> {
   const token = typeof tokenOrSettings === 'string' ? tokenOrSettings : getActiveTrackerToken(tokenOrSettings);
-
-  // 1. If Firebase user is signed in, merge from Firestore
-  if (auth?.currentUser) {
-    try {
-      const cloudGameData = await fetchGameDataFromCloudFirestore(auth.currentUser.uid);
-      if (cloudGameData) {
-        // Merge coins
-        const localCoins = getStoredArcadeCoins();
-        const cloudCoins = typeof cloudGameData.coins === 'number' ? cloudGameData.coins : 10;
-        const mergedCoins = Math.max(localCoins, cloudCoins);
-        localStorage.setItem(ARCADE_COINS_KEY, mergedCoins.toString());
-        window.dispatchEvent(new CustomEvent('arcade_coins_updated', { detail: mergedCoins }));
-
-        // Merge character cards
-        const localCards = getStoredGachaVault();
-        const cloudCards: GachaCard[] = Array.isArray(cloudGameData.characterCards) ? cloudGameData.characterCards : [];
-        const cardMap = new Map<string, GachaCard>();
-        localCards.forEach(c => {
-          if (c && c.id) cardMap.set(c.id, c);
-        });
-        cloudCards.forEach(c => {
-          if (c && c.id) {
-            const current = cardMap.get(c.id);
-            if (!current || (c.obtainedAt && c.obtainedAt > (current.obtainedAt || 0))) {
-              cardMap.set(c.id, c);
-            }
-          }
-        });
-        const mergedCards = Array.from(cardMap.values());
-        localStorage.setItem(GACHA_VAULT_KEY, JSON.stringify(mergedCards));
-        window.dispatchEvent(new CustomEvent('vault_updated', { detail: mergedCards }));
-
-        // Merge awakenings
-        const localAwakenings = getAllCardAwakenings();
-        const cloudAwakenings = cloudGameData.cardAwakenings || {};
-        const mergedAwakenings = { ...localAwakenings };
-        Object.entries(cloudAwakenings).forEach(([cId, lvl]) => {
-          mergedAwakenings[cId] = Math.max(mergedAwakenings[cId] || 1, Number(lvl) || 1);
-        });
-        localStorage.setItem(CARD_AWAKENINGS_KEY, JSON.stringify(mergedAwakenings));
-        window.dispatchEvent(new CustomEvent('character_awakened', { detail: mergedAwakenings }));
-
-        // Active companion
-        if (cloudGameData.activeCompanion) {
-          localStorage.setItem(ACTIVE_COMPANION_KEY, JSON.stringify(cloudGameData.activeCompanion));
-          window.dispatchEvent(new CustomEvent('active_companion_changed', { detail: cloudGameData.activeCompanion }));
-        }
-      }
-    } catch (e) {
-      console.warn('Firestore game data merge notice:', e);
-    }
-  }
 
   if (!token) return { success: true, coins: getStoredArcadeCoins(), cardsCount: getStoredGachaVault().length };
 

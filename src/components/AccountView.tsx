@@ -47,8 +47,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserSettings, UserMediaListItem, UserProfile, GachaCard, StreamServerId, AnimeReel } from '../types';
-import { auth, signInWithGoogle, logoutUser, syncUserProfileToCloud } from '../lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { fetchUserMediaList, fetchAniListUserProfile, fetchViewerProfile, getAniListAuthUrl } from '../services/anilist';
 import { getStoredGachaVault, getCardAwakeningLevel } from '../services/storage';
 import { getSafeCharacterImage, getFallbackAvatarSvg } from '../services/characterPool';
@@ -112,8 +110,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
   onNavigateToReels,
   onReplayIntro,
 }) => {
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Saved Reels State
   const [savedReels, setSavedReels] = useState<AnimeReel[]>(() => getStoredSavedReels());
@@ -208,59 +204,8 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   const currentProfile = profiles.find(p => p.id === settings.currentProfileId) || profiles[0];
 
-  // Listen to Firebase Auth
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, user => {
-      setCurrentUser(user);
-      if (user) {
-        syncUserProfileToCloud(user, settings, libraryCount);
-      }
-    });
-    return () => unsubscribe();
-  }, [settings, libraryCount]);
-
-  // Google Sign-In Handler
-  const handleGoogleSignIn = async () => {
-    setIsAuthLoading(true);
-    try {
-      const user = await signInWithGoogle();
-      if (user) {
-        onShowToast(
-          'success',
-          `Welcome back, ${user.displayName || 'Anime Fan'}! Cloud sync active.`,
-          'Signed In'
-        );
-        syncUserProfileToCloud(user, settings, libraryCount);
-        // Automatically sync email & name from authenticated Google account
-        if (user.displayName || user.email) {
-          const updated: UserSettings = {
-            ...settings,
-            customDisplayName: user.displayName || settings.customDisplayName,
-            customEmail: user.email || settings.customEmail || '',
-            customAvatar: user.photoURL || settings.customAvatar,
-          };
-          onSaveSettings(updated);
-        }
-      }
-    } catch (err: any) {
-      console.error('Google Sign In failed:', err);
-      onShowToast('error', err.message || 'Failed to sign in with Google.', 'Sign-In Failed');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  // Sign Out Handler
-  const handleSignOut = async () => {
-    try {
-      await logoutUser();
-      onShowToast('info', 'Signed out of cloud account. Switched to local profile.', 'Signed Out');
-    } catch (err: any) {
-      onShowToast('error', 'Error signing out.', 'Error');
-    }
-  };
-
-  // Save Edited Profile (Name, Logo - Email is bound to Firebase/Google Account)
+  // Saved Reels State
+  const [savedReels, setSavedReels] = useState<AnimeReel[]>(() => getStoredSavedReels());
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = editName.trim() || 'Anime Explorer';
@@ -553,28 +498,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
     onShowToast('info', 'AniList account disconnected.', 'Disconnected');
   };
 
-  // Force Cloud Resync with Firebase Firestore
-  const handleForceCloudResync = async () => {
-    if (!currentUser) {
-      onShowToast('info', 'Sign in with Google to enable Firebase cross-device cloud sync.', 'Sign In Required');
-      return;
-    }
-    setIsCloudResyncing(true);
-    try {
-      await syncUserProfileToCloud(currentUser, settings, libraryCount);
-      onShowToast(
-        'success',
-        'Your watch history, library, and settings are fully synchronized with Firebase across all your devices.',
-        'Cloud Resynced'
-      );
-    } catch (err: any) {
-      console.error('Cloud resync error:', err);
-      onShowToast('error', 'Could not resync with Firebase cloud.', 'Sync Error');
-    } finally {
-      setIsCloudResyncing(false);
-    }
-  };
-
   // Toggle Content Restrictions (18+ / Mature filter)
   const handleToggleContentRestrictions = () => {
     const updatedVal = !settings.contentRestrictions;
@@ -639,9 +562,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center gap-2">
               <span>{displayName}</span>
-              {currentUser && (
-                <CheckCircle2 className="w-5 h-5 text-pink-400" title="Google Account Verified" />
-              )}
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 font-medium mt-0.5">
               {email}
@@ -669,29 +589,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
               <User className="w-3.5 h-3.5 text-violet-400" />
               <span>Switch Profile</span>
             </button>
-
-            {currentUser ? (
-              <button
-                onClick={handleSignOut}
-                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer backdrop-blur-md"
-              >
-                <LogOut className="w-3.5 h-3.5 text-pink-400" />
-                <span>Sign Out</span>
-              </button>
-            ) : (
-              <button
-                disabled={isAuthLoading}
-                onClick={handleGoogleSignIn}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white text-xs font-extrabold shadow-lg shadow-pink-500/25 transition flex items-center gap-2 cursor-pointer active:scale-95"
-              >
-                {isAuthLoading ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Globe className="w-3.5 h-3.5" />
-                )}
-                <span>Sign In with Google</span>
-              </button>
-            )}
 
             <div className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 backdrop-blur-md flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5 text-pink-400" />
@@ -2122,118 +2019,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
           </AnimatePresence>
         </div>
 
-        {/* SECTION 5: FIREBASE AUTOMATIC CROSS-DEVICE CLOUD SYNC */}
-        <div className={`rounded-3xl transition-all duration-200 border backdrop-blur-xl shadow-lg overflow-hidden ${
-          openSection === 'cloud_sync' ? 'bg-slate-900/80 border-violet-500/30' : 'bg-slate-900/50 border-white/10 hover:border-white/20'
-        }`}>
-          <button
-            type="button"
-            onClick={() => toggleSection('cloud_sync')}
-            className="w-full p-5 sm:p-6 flex items-center justify-between text-left cursor-pointer transition"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className={`p-2.5 rounded-2xl border transition ${
-                openSection === 'cloud_sync' ? 'bg-violet-500/20 text-violet-400 border-violet-500/40' : 'bg-white/5 text-slate-300 border-white/10'
-              }`}>
-                <Cloud className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-black text-white uppercase tracking-wider">Firebase Cloud Synchronization</h2>
-                  {currentUser ? (
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Live Sync Active
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Local Device Only
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Seamless multi-device cloud backup for watch history, library, and user data
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0 ml-2">
-              <span className="text-xs font-bold text-violet-400 hidden sm:inline">
-                {openSection === 'cloud_sync' ? 'Hide' : 'View'}
-              </span>
-              <div className={`p-2 rounded-xl bg-white/5 text-slate-300 transition-transform duration-300 ${
-                openSection === 'cloud_sync' ? 'rotate-180 bg-violet-500/20 text-violet-300' : ''
-              }`}>
-                <ChevronDown className="w-4 h-4" />
-              </div>
-            </div>
-          </button>
-
-          <AnimatePresence initial={false}>
-            {openSection === 'cloud_sync' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: 'easeInOut' }}
-                className="overflow-hidden"
-              >
-                <div className="px-6 pb-6 pt-2 border-t border-white/10 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        {currentUser
-                          ? 'Continuous background synchronization active across your phone, tablet, and PC. Every episode watched, library item added, or setting modified is saved to Firebase Cloud automatically with zero manual effort.'
-                          : 'Sign in with your Google account to automatically sync your watch progress and library across all devices in real-time.'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                      {!currentUser && (
-                        <button
-                          disabled={isAuthLoading}
-                          onClick={handleGoogleSignIn}
-                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700 text-white text-xs font-extrabold transition cursor-pointer shadow-md active:scale-95"
-                        >
-                          {isAuthLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Sign In with Google'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Sync features overview */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                      <div className="flex items-center gap-2 text-pink-400">
-                        <Radio className="w-4 h-4" />
-                        <p className="text-xs font-bold text-white">Live Watch History & Resume</p>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Playback positions and episode completions are instantly mirrored to Firestore so you can pick up exactly where you left off on any screen.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                      <div className="flex items-center gap-2 text-violet-400">
-                        <Database className="w-4 h-4" />
-                        <p className="text-xs font-bold text-white">Watchlist & Ratings</p>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Anime additions, status classifications (Watching, Completed, Dropped), and scores automatically sync seamlessly.
-                      </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                      <div className="flex items-center gap-2 text-sky-400">
-                        <ShieldCheck className="w-4 h-4" />
-                        <p className="text-xs font-bold text-white">Master Account Security</p>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Locked to your authenticated account ({email}) for cross-device authentication and identity preservation.
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2417,26 +2202,19 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   />
                 </div>
 
-                {/* Email / Gmail (Locked to Firebase Master Account) */}
+                {/* Display Name */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Master Account Email
-                    </label>
-                    <span className="text-[10px] font-black text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      Locked & Cloud-Verified
-                    </span>
-                  </div>
-                  <div className="w-full px-4 py-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-sm text-slate-300 flex items-center justify-between">
-                    <span className="font-mono">{email}</span>
-                    <span className="text-[11px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Firebase Primary
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                    Account email is locked to your authenticated Google / Firebase identity for secure cross-device synchronization and cannot be altered.
-                  </p>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder="Enter your name..."
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-white/15 text-sm text-white focus:outline-none focus:border-pink-500"
+                  />
                 </div>
 
                 {/* Save Button */}
