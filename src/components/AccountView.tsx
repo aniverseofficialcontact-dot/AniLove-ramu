@@ -14,7 +14,6 @@ import {
   Volume2,
   Subtitles,
   Database,
-  Cloud,
   CheckCircle2,
   RefreshCw,
   Edit3,
@@ -181,7 +180,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
   const [anilistTokenInput, setAnilistTokenInput] = useState(settings.anilistToken || '');
   const [isSyncingAniList, setIsSyncingAniList] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
-  const [isCloudResyncing, setIsCloudResyncing] = useState(false);
+
 
   // Accordion / Dropdown open section state (default: 'account_security')
   const [openSection, setOpenSection] = useState<string | null>('account_security');
