@@ -460,13 +460,20 @@ export function App() {
         });
 
         const title = anime.title?.english || anime.title?.romaji || 'Anime';
-        triggerNotification(
-          'sync',
-          'AniList Cloud Synced',
-          `Synced updates for "${title}" to your AniList profile.`,
-          anime,
-          updates.progress
-        );
+
+        // Silence notifications for routine progress updates to prevent "every second" popups during playback.
+        // We only show the sync notification for status changes, scores, or when an anime is completed.
+        const shouldNotify = updates.progress === undefined || updates.status === 'COMPLETED' || updates.score !== undefined;
+
+        if (shouldNotify) {
+          triggerNotification(
+            'sync',
+            'AniList Cloud Synced',
+            `Synced updates for "${title}" to your AniList profile.`,
+            anime,
+            updates.progress
+          );
+        }
       } catch (err) {
         console.error('AniList 2-way sync error:', err);
       }
