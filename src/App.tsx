@@ -352,15 +352,34 @@ export function App() {
       const CapacitorApp = registerPlugin('App');
 
       const handleUrl = (urlStr: string) => {
-        if (!urlStr || !urlStr.includes('access_token=')) return;
+        if (!urlStr) return;
+        // Visual alert diagnostic popup to see exactly what string comes from Android
+        alert("DIAGNOSTIC: App received deep link URL:\n" + urlStr);
+
+        if (!urlStr.includes('access_token=')) {
+          alert("DIAGNOSTIC NOTICE: URL does not contain 'access_token='");
+          return;
+        }
         const token = urlStr.split('access_token=')[1].split('&')[0];
-        if (!token) return;
+        if (!token) {
+          alert("DIAGNOSTIC ERROR: Token split failed or token is empty.");
+          return;
+        }
+
+        alert("DIAGNOSTIC: Extracted Token successfully! Verifying with AniList servers...");
 
         fetchAuthenticatedViewer(token)
           .then(async user => {
             if (user) {
-              const cardSyncResult = await syncUserDataWithAniList(token).catch(() => ({ cardsCount: 0, coins: 0 }));
-              const userList = await fetchUserMediaList(user.name).catch(() => []);
+              alert("DIAGNOSTIC SUCCESS: Successfully logged into AniList profile: " + user.name);
+              const cardSyncResult = await syncUserDataWithAniList(token).catch((e) => {
+                alert("DIAGNOSTIC WARNING: syncUserDataWithAniList failed: " + e.message);
+                return { cardsCount: 0, coins: 0 };
+              });
+              const userList = await fetchUserMediaList(user.name).catch((e) => {
+                alert("DIAGNOSTIC WARNING: fetchUserMediaList failed: " + e.message);
+                return [];
+              });
               if (userList && userList.length > 0) {
                 setLibrary(prev => {
                   const map = new Map<number, UserMediaListItem>();
@@ -393,10 +412,13 @@ export function App() {
                 'AniList Account Linked',
                 `Logged in as ${user.name} via App Link. Two-way cloud synchronization is now active.`,
               );
+            } else {
+              alert("DIAGNOSTIC ERROR: fetchAuthenticatedViewer returned empty user.");
             }
           })
           .catch(err => {
             console.error('Deep link OAuth token verification failed:', err);
+            alert("DIAGNOSTIC FETCH EXCEPTION: AniList token verification failed!\nError: " + err.message);
             showToast('error', 'Failed to authenticate AniList token from App Link.', 'Auth Error');
           });
       };
