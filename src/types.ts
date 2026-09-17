@@ -344,7 +344,7 @@ export type StreamServerId =
   | 'miruro-pro'
   | 'miruro-pahe'
   | 'official-link';
-export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'BEN';
+export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN';
 
 export interface UserProfile {
   id: string;
@@ -407,6 +407,7 @@ export interface UserSettings {
   ambientParticlesEnabled?: boolean;
   ambientParticleStyle?: 'sakura' | 'snow' | 'fireflies' | 'none';
   appIntroAnimationEnabled?: boolean;
+  advancePlayerEnabled?: boolean;
 }
 
 export type ThumbnailAppearance = 'snapshot' | 'banner' | 'poster';

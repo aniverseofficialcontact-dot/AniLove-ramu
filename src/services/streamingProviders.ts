@@ -1,7 +1,7 @@
 import { Anime, StreamServerId } from '../types';
 import { API_BASE, apiFetch, apiUrl } from './api';
 
-export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'BEN';
+export type StreamLanguage = 'SUB' | 'DUB' | 'HIN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p';
 
 export interface LanguageOption {
@@ -16,10 +16,6 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'SUB', label: 'Japanese (Sub)', nativeLabel: '日本語', flag: '🇯🇵', short: 'JAP/SUB' },
   { code: 'DUB', label: 'English Dub', nativeLabel: 'English', flag: '🇺🇸', short: 'ENG/DUB' },
   { code: 'HIN', label: 'Hindi Dub', nativeLabel: 'हिन्दी', flag: '🇮🇳', short: 'HINDI' },
-  { code: 'TAM', label: 'Tamil Dub', nativeLabel: 'தமிழ்', flag: '🇮🇳', short: 'TAMIL' },
-  { code: 'TEL', label: 'Telugu Dub', nativeLabel: 'తెలుగు', flag: '🇮🇳', short: 'TELUGU' },
-  { code: 'MAL', label: 'Malayalam Dub', nativeLabel: 'മലയാളം', flag: '🇮🇳', short: 'MALAYALAM' },
-  { code: 'BEN', label: 'Bengali Dub', nativeLabel: 'বাংলা', flag: '🇮🇳', short: 'BENGALI' },
 ];
 
 export interface StreamProvider {
@@ -92,24 +88,24 @@ const ANIKOTO_HD1: StreamProvider = {
   serverMatch: 'HD-1',
 };
 
-// 2. AnimeWorld India (Hindi, Tamil, Telugu, Malayalam, Bengali & Multi-Audio)
+// 2. AnimeWorld India (Hindi & Multi-Audio)
 const ANIMEWORLD_INDIA: StreamProvider = {
   id: 'animeworld-india',
   label: 'AnimeWorld India',
   category: 'official',
-  description: 'Premier Indian multi-audio anime network (Hindi, Tamil, Telugu, Malayalam, Bengali).',
-  supportedLanguages: ['HIN', 'TAM', 'TEL', 'MAL', 'BEN', 'DUB', 'SUB'],
+  description: 'Premier Indian multi-audio anime network (Hindi, English, Japanese).',
+  supportedLanguages: ['HIN', 'DUB', 'SUB'],
   tag: 'Hindi / Regional',
   apiEndpoint: '/api/animeworld-india/resolve',
 };
 
-// 3. Tatakai Ultra (TatakaiAPI Engine with Sub, Dub, Hindi & Regional)
+// 3. Tatakai Ultra (TatakaiAPI Engine with Sub, Dub & Hindi)
 const TATAKAI_MULTI: StreamProvider = {
   id: 'tatakai-multi',
   label: 'Tatakai Ultra',
   category: 'tatakai',
   description: 'Real-time TatakaiAPI engine with 1080p Direct HLS, English Dub, Japanese Sub & Hindi.',
-  supportedLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL'],
+  supportedLanguages: ['SUB', 'DUB', 'HIN'],
   tag: 'Tatakai HD',
   apiEndpoint: '/api/tatakai/resolve',
 };
@@ -147,7 +143,7 @@ export function createDirectStreamSource(
 ): StreamSource {
   const anilistId = anime.id || 1;
   const isDub = language === 'DUB';
-  const isIndian = ['HIN', 'TAM', 'TEL', 'MAL', 'BEN'].includes(language);
+  const isIndian = language === 'HIN';
   const displayTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const cleanSlug = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -187,7 +183,7 @@ export function createDirectStreamSource(
     external: false,
     skipData: { intro: [0, 0], outro: [0, 0] },
     availableServers,
-    availableLanguages: isIndian ? ['HIN', 'TAM', 'TEL', 'MAL', 'BEN', 'DUB', 'SUB'] : ['SUB', 'DUB'],
+    availableLanguages: isIndian ? ['HIN', 'DUB', 'SUB'] : ['SUB', 'DUB'],
     selectedServerName,
     isDubAvailable: true,
     isFallback: true,
@@ -208,7 +204,7 @@ export async function resolveEpisodeSource({
   serverName,
 }: ResolveEpisodeSourceInput): Promise<ResolveEpisodeSourceResult> {
   const targetProviderId = (providerId as StreamServerId) || DEFAULT_STREAM_PROVIDER_ID;
-  const isIndianLang = ['HIN', 'TAM', 'TEL', 'MAL', 'BEN'].includes(language);
+  const isIndianLang = language === 'HIN';
   let provider = STREAM_PROVIDERS.find(item => item.id === targetProviderId) || ANIKOTO_HD1;
 
   // Auto-switch to Indian multi-audio provider if an Indian language was requested and current provider doesn't support it

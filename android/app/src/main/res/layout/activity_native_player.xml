@@ -114,6 +114,39 @@
             android:shadowDy="2"
             android:shadowRadius="3" />
 
+        <!-- Volume/Brightness Indicators -->
+        <TextView
+            android:id="@+id/indicator_volume"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical|end"
+            android:layout_marginEnd="80dp"
+            android:text="Vol: 100%"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:shadowColor="@android:color/black"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4" />
+
+        <TextView
+            android:id="@+id/indicator_brightness"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical|start"
+            android:layout_marginStart="80dp"
+            android:text="Bri: 100%"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:shadowColor="@android:color/black"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4" />
+
         <!-- Native Control Overlay -->
         <RelativeLayout
             android:id="@+id/controls_overlay"

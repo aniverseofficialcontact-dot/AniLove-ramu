@@ -143,7 +143,10 @@ export function App() {
     const s = getUserSettings();
     return !s.profilePinEnabled || !s.profilePin;
   });
-  const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(() => {
+    const s = getUserSettings();
+    return s.profilePinEnabled && s.profilePin ? true : false;
+  });
   const [pendingUnlockTab, setPendingUnlockTab] = useState<TabType | null>(null);
 
   // Reels Navigation State
@@ -539,7 +542,7 @@ export function App() {
     saveUserLibrary(updated);
 
     const title = anime.title?.english || anime.title?.romaji || 'Anime';
-    if (isCompleted) {
+    if (isCompleted && existingItem?.status !== 'COMPLETED') {
       showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} eps)! 🎉`, 'Completed');
     } else if (clampedProgress > (existingItem?.progress || 0)) {
       showToast('info', `Updated "${title}" progress to Episode ${clampedProgress}.`, 'Progress Saved');
@@ -669,27 +672,14 @@ export function App() {
         // silent
       }
     }
-    const isProtected = tab === 'library' || tab === 'cards';
-    const isLocked = Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked);
-
-    if (isProtected && isLocked) {
-      setPendingUnlockTab(tab);
-      setIsPinModalOpen(true);
-      soundEffects.playClick();
-      return;
-    }
-
     setCurrentTab(tab);
   };
 
   // PIN Unlock Verification Callback
   const handlePinUnlockSuccess = () => {
     setIsPinUnlocked(true);
-    const target = pendingUnlockTab || 'library';
-    setCurrentTab(target);
-    setPendingUnlockTab(null);
     setIsPinModalOpen(false);
-    showToast('success', `${target === 'cards' ? 'Cards Binder' : 'My Library'} unlocked successfully.`, 'Access Granted');
+    showToast('success', 'App unlocked successfully.', 'Access Granted');
   };
 
   // Reset PIN when user successfully verifies backup security question
@@ -705,21 +695,18 @@ export function App() {
     showToast('info', 'Profile PIN has been reset via backup question. You now have full access.', 'PIN Reset');
   };
 
-  // Lock Current PIN Protected Session
+  // Lock App Session
   const handleLockSession = () => {
     if (!settings.profilePinEnabled || !settings.profilePin) return;
     setIsPinUnlocked(false);
-    if (currentTab === 'library' || currentTab === 'cards') {
-      setCurrentTab('home');
-    }
+    setIsPinModalOpen(true);
     soundEffects.playClick();
-    showToast('info', 'Library and Cards Binder are now locked with PIN.', 'Session Locked');
+    showToast('info', 'AniLove is now locked with PIN.', 'App Locked');
   };
 
-  // Unlock Session Trigger
+  // Unlock App Trigger
   const handleUnlockSession = () => {
     if (!settings.profilePinEnabled || !settings.profilePin) return;
-    setPendingUnlockTab(currentTab === 'library' || currentTab === 'cards' ? currentTab : 'library');
     setIsPinModalOpen(true);
   };
 
@@ -932,13 +919,15 @@ export function App() {
 
   return (
     <div className={`min-h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white ${isReelsActive ? 'pb-0 overflow-hidden' : 'pb-20 md:pb-10 overflow-x-clip'} relative`}>
-      {/* Dynamic Ambient Particle Overlay (Snow, Sakura, Fireflies) based on User Settings */}
-      {!isReelsActive && (
-        <AmbientParticles
-          enabled={Boolean(settings.ambientParticlesEnabled)}
-          style={settings.ambientParticleStyle || 'sakura'}
-        />
-      )}
+      {/* WRAPPER FOR APP CONTENT (Blurred when locked) */}
+      <div className={`flex flex-col flex-1 transition-all duration-1000 ease-in-out ${!isPinUnlocked ? 'blur-3xl grayscale brightness-[0.2] pointer-events-none select-none' : ''}`}>
+        {/* Dynamic Ambient Particle Overlay (Snow, Sakura, Fireflies) based on User Settings */}
+        {!isReelsActive && (
+          <AmbientParticles
+            enabled={Boolean(settings.ambientParticlesEnabled)}
+            style={settings.ambientParticleStyle || 'sakura'}
+          />
+        )}
 
       {/* Subtle Bottom Ambient Lighting Only (Keeps top header clean without blue tint) */}
       {!isReelsActive && (
@@ -1262,101 +1251,37 @@ export function App() {
               />
             )}
 
-            {/* VIEW 5: MY WATCHLIST & LIBRARY (PIN-PROTECTED) */}
+            {/* VIEW 5: MY WATCHLIST & LIBRARY */}
             {currentTab === 'library' && (
-              Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked) ? (
-                <div className="max-w-md mx-auto my-24 px-6 py-10 rounded-3xl bg-slate-900/90 border border-pink-500/30 backdrop-blur-2xl text-center space-y-6 shadow-2xl shadow-pink-500/10">
-                  <div className="w-16 h-16 rounded-2xl bg-pink-500/20 text-pink-400 flex items-center justify-center mx-auto border border-pink-500/30 shadow-lg shadow-pink-500/20">
-                    <Lock className="w-8 h-8" />
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-black text-white tracking-tight">Library is Locked</h2>
-                    <p className="text-sm text-slate-400 leading-relaxed">
-                      Your personalized anime tracking watchlist and private notes are protected by your 4-digit Profile PIN.
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                    <button
-                      onClick={() => {
-                        setPendingUnlockTab('library');
-                        setIsPinModalOpen(true);
-                      }}
-                      className="px-6 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white font-bold text-xs shadow-lg shadow-pink-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Unlock className="w-4 h-4" />
-                      <span>Enter PIN to Unlock</span>
-                    </button>
-                    <button
-                      onClick={() => handleSelectTab('home')}
-                      className="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs transition cursor-pointer"
-                    >
-                      Return to Home
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <MyLibraryView
-                  library={library}
-                  onOpenDetails={handleOpenDetails}
-                  onPlayStream={handlePlayStream}
-                  onUpdateStatus={handleUpdateStatus}
-                  onUpdateProgress={handleUpdateProgress}
-                  onGoToDiscover={() => handleSelectTab('home')}
-                  onSelectGenre={handleSelectGenre}
-                  onSelectStudio={handleSelectStudio}
-                  onInspect3DCard={handleInspect3DCard}
-                  isTwoWaySyncActive={Boolean(settings.twoWaySyncEnabled && (settings.anilistToken || settings.importUsername))}
-                  onOpenSavedReel={(reel) => {
-                    setTargetReelId(reel.id);
-                    setTargetReelFilterMode('saved');
-                    setCurrentTab('reels');
-                  }}
-                  onOpenDownloads={() => handleSelectTab('downloads')}
-                />
-              )
+              <MyLibraryView
+                library={library}
+                onOpenDetails={handleOpenDetails}
+                onPlayStream={handlePlayStream}
+                onUpdateStatus={handleUpdateStatus}
+                onUpdateProgress={handleUpdateProgress}
+                onGoToDiscover={() => handleSelectTab('home')}
+                onSelectGenre={handleSelectGenre}
+                onSelectStudio={handleSelectStudio}
+                onInspect3DCard={handleInspect3DCard}
+                isTwoWaySyncActive={Boolean(settings.twoWaySyncEnabled && (settings.anilistToken || settings.importUsername))}
+                onOpenSavedReel={(reel) => {
+                  setTargetReelId(reel.id);
+                  setTargetReelFilterMode('saved');
+                  setCurrentTab('reels');
+                }}
+                onOpenDownloads={() => handleSelectTab('downloads')}
+              />
             )}
 
-            {/* VIEW 6: CARDS & CHARACTER BINDER INVENTORY (PIN-PROTECTED) */}
+            {/* VIEW 6: CARDS & CHARACTER BINDER INVENTORY */}
             {currentTab === 'cards' && (
-              Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked) ? (
-                <div className="max-w-md mx-auto my-24 px-6 py-10 rounded-3xl bg-slate-900/90 border border-purple-500/30 backdrop-blur-2xl text-center space-y-6 shadow-2xl shadow-purple-500/10">
-                  <div className="w-16 h-16 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center mx-auto border border-purple-500/30 shadow-lg shadow-purple-500/20">
-                    <Lock className="w-8 h-8" />
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-black text-white tracking-tight">Cards Binder Locked</h2>
-                    <p className="text-sm text-slate-400 leading-relaxed">
-                      Your holographic cards and character binder collections are protected with your 4-digit Profile PIN.
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                    <button
-                      onClick={() => {
-                        setPendingUnlockTab('cards');
-                        setIsPinModalOpen(true);
-                      }}
-                      className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold text-xs shadow-lg shadow-purple-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Unlock className="w-4 h-4" />
-                      <span>Enter PIN to Unlock</span>
-                    </button>
-                    <button
-                      onClick={() => handleSelectTab('home')}
-                      className="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs transition cursor-pointer"
-                    >
-                      Return to Home
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <CardInventoryView
-                  library={library}
-                  onOpenDetails={handleOpenDetails}
-                  onInspect3DCard={handleInspect3DCard}
-                  onNavigateToArcade={() => handleSelectTab('arcade')}
-                  onNavigateToLibrary={() => handleSelectTab('library')}
-                />
-              )
+              <CardInventoryView
+                library={library}
+                onOpenDetails={handleOpenDetails}
+                onInspect3DCard={handleInspect3DCard}
+                onNavigateToArcade={() => handleSelectTab('arcade')}
+                onNavigateToLibrary={() => handleSelectTab('library')}
+              />
             )}
 
             {/* VIEW 7: ACCOUNT & SETTINGS PERSISTENCE */}
@@ -1390,10 +1315,11 @@ export function App() {
           </>
         )}
       </main>
+    </div>
 
-      {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels) */}
+    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels) */}
       {!isReelsActive && (
-        <div className="fixed bottom-16 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2">
+        <div className={`fixed bottom-16 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <button
             onClick={() => setIsShortcutsModalOpen(true)}
             className="hidden sm:flex p-3 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700/70 backdrop-blur-xl shadow-xl transition active:scale-95 cursor-pointer"
@@ -1417,17 +1343,19 @@ export function App() {
       )}
 
       {/* Mobile Bottom Bar (Always available on mobile for smooth navigation and tab refresh) */}
-      <MobileBottomNav
-        currentTab={currentTab}
-        onSelectTab={handleSelectTab}
-        settings={settings}
-        libraryCount={library.length}
-        isPinLocked={Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked)}
-        onOpenAiSensei={() => {
-          setAiContextAnime(null);
-          setIsAiModalOpen(true);
-        }}
-      />
+      <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <MobileBottomNav
+          currentTab={currentTab}
+          onSelectTab={handleSelectTab}
+          settings={settings}
+          libraryCount={library.length}
+          isPinLocked={Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked)}
+          onOpenAiSensei={() => {
+            setAiContextAnime(null);
+            setIsAiModalOpen(true);
+          }}
+        />
+      </div>
 
       {/* 360° Interactive 3D Holographic Anime Card Showcase Modal */}
       <InteractiveAnime3DCardModal
@@ -1504,20 +1432,21 @@ export function App() {
       <PinUnlockModal
         isOpen={isPinModalOpen}
         onClose={() => {
-          setIsPinModalOpen(false);
-          setPendingUnlockTab(null);
+          // Only allow closing if already unlocked (e.g. user opened it from settings manually)
+          if (isPinUnlocked) {
+            setIsPinModalOpen(false);
+          }
         }}
         onSuccess={handlePinUnlockSuccess}
-        targetSectionName={pendingUnlockTab === 'cards' ? 'Cards Binder' : 'My Library'}
+        targetSectionName="AniLove App"
         correctPin={settings.profilePin}
         backupQuestion={settings.profilePinBackupQuestion}
         backupAnswer={settings.profilePinBackupAnswer}
         onResetPin={handleResetPinFromRecovery}
-        onNavigateToAccount={() => {
+        onNavigateToAccount={isPinUnlocked ? () => {
           setIsPinModalOpen(false);
-          setPendingUnlockTab(null);
           setCurrentTab('account');
-        }}
+        } : undefined}
       />
 
       {/* Keyboard Shortcuts Guide Modal */}

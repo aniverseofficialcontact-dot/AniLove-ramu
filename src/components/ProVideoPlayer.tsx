@@ -18,7 +18,18 @@ import {
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
 interface NativePlayerPlugin {
-  play(options: { url: string; title: string; hasNext?: boolean; hasPrev?: boolean; startFullscreen?: boolean; yOffset?: number; anilistId?: number; episodeNumber?: number; audio?: string }): Promise<void>;
+  play(options: {
+    url: string;
+    title: string;
+    hasNext?: boolean;
+    hasPrev?: boolean;
+    startFullscreen?: boolean;
+    yOffset?: number;
+    anilistId?: number;
+    episodeNumber?: number;
+    audio?: string;
+    advancePlayer?: boolean;
+  }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
   close(): Promise<void>;
   addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
@@ -70,6 +81,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   onThumbnailStyleChange,
   onProgressUpdate,
   initialThumbnailStyle = 'snapshot',
+  settings,
 }) => {
   // Player state
   const [currentTime, setCurrentTime] = useState<number>(initialTime);
@@ -539,9 +551,10 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         anilistId: anime.id,
         episodeNumber: Number(episodeNumber),
         audio: audioMode,
+        advancePlayer: settings?.advancePlayerEnabled ?? false,
       }).catch(() => {});
     }
-  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id]);
+  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings]);
 
   useEffect(() => {
     return () => {

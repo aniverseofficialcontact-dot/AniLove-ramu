@@ -75,11 +75,13 @@ public class NativePlayerPlugin extends Plugin {
             Boolean hasNext = call.getBoolean("hasNext");
             Boolean hasPrev = call.getBoolean("hasPrev");
             Boolean startFullscreen = call.getBoolean("startFullscreen");
-            Log.i("NativePlayerPlugin", ">>> hasNext: " + hasNext + ", hasPrev: " + hasPrev + ", startFullscreen: " + startFullscreen);
+            Boolean advancePlayer = call.getBoolean("advancePlayer", false);
+            Log.i("NativePlayerPlugin", ">>> hasNext: " + hasNext + ", hasPrev: " + hasPrev + ", startFullscreen: " + startFullscreen + ", advancePlayer: " + advancePlayer);
             
             intent.putExtra("hasNext", hasNext != null ? hasNext : false);
             intent.putExtra("hasPrev", hasPrev != null ? hasPrev : false);
             intent.putExtra("startFullscreen", startFullscreen != null ? startFullscreen : false);
+            intent.putExtra("advancePlayer", advancePlayer != null ? advancePlayer : false);
             intent.putExtra("yOffset", call.getInt("yOffset", 320));
             intent.putExtra("anilistId", call.getInt("anilistId", 0));
             intent.putExtra("episodeNumber", call.getInt("episodeNumber", 0));

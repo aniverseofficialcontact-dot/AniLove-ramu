@@ -19,6 +19,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -101,6 +102,13 @@ public class NativePlayerActivity extends AppCompatActivity {
     private SeekBar seekBar;
     private TextView textCurrentTime, textTotalTime, textTimeLeft, indicator2x;
     private TextView indicatorRewind, indicatorForward;
+    
+    // Volume / Brightness
+    private boolean isAdvancePlayerEnabled = false;
+    private TextView indicatorVolume, indicatorBrightness;
+    private AudioManager audioManager;
+    private int initialVolume = -1;
+    private float initialBrightness = -1.0f;
     
     // Scrubber Preview
     private View scrubberContainer;
@@ -455,6 +463,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         indicatorRewind = findViewById(R.id.indicator_rewind);
         indicatorForward = findViewById(R.id.indicator_forward);
         
+        // Volume / Brightness Init
+        isAdvancePlayerEnabled = getIntent().getBooleanExtra("advancePlayer", false);
+        indicatorVolume = findViewById(R.id.indicator_volume);
+        indicatorBrightness = findViewById(R.id.indicator_brightness);
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        
         findViewById(R.id.close_button).setOnClickListener(v -> {
             if (navigationListener != null) {
                 navigationListener.onBack();
@@ -504,11 +518,42 @@ public class NativePlayerActivity extends AppCompatActivity {
                 return true;
             }
             @Override public void onLongPress(MotionEvent e) { setPlaybackSpeed(2.0f, false); hideControlsQuietly(); }
+            
+            @Override
+            public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+                if (!isAdvancePlayerEnabled || e1 == null || e2 == null) return false;
+                
+                if (Math.abs(distanceY) > Math.abs(distanceX)) {
+                    float screenWidth = getResources().getDisplayMetrics().widthPixels;
+                    float screenHeight = getResources().getDisplayMetrics().heightPixels;
+                    
+                    if (initialVolume == -1) {
+                        initialVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        initialBrightness = getWindow().getAttributes().screenBrightness;
+                        if (initialBrightness < 0) initialBrightness = 0.5f;
+                    }
+
+                    float deltaY = e1.getY() - e2.getY(); // Drag UP is positive
+                    float percent = deltaY / screenHeight;
+
+                    if (e1.getX() < screenWidth / 2) {
+                        updateBrightness(percent);
+                    } else {
+                        updateVolume(percent);
+                    }
+                    return true;
+                }
+                return false;
+            }
         });
 
         View.OnTouchListener touchListener = (v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                 if (is2xSpeed) setPlaybackSpeed(currentPermanentSpeed, true);
+                if (indicatorVolume != null) indicatorVolume.setVisibility(View.GONE);
+                if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
+                initialVolume = -1;
+                initialBrightness = -1.0f;
             }
             return gestureDetector.onTouchEvent(event);
         };
@@ -1343,10 +1388,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "    if (target === 'dub' || target === 'eng' || target === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
                         "    if (target === 'sub' || target === 'jpn' || target === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
                         "    if (target === 'hin' || target === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                        "    if (target === 'tam' || target === 'tamil') return all.indexOf('tam') !== -1 || all.indexOf('ta') !== -1;" +
-                        "    if (target === 'tel' || target === 'telugu') return all.indexOf('tel') !== -1 || all.indexOf('te') !== -1;" +
-                        "    if (target === 'mal' || target === 'malayalam') return all.indexOf('mal') !== -1 || all.indexOf('ml') !== -1;" +
-                        "    if (target === 'ben' || target === 'bengali') return all.indexOf('ben') !== -1 || all.indexOf('bn') !== -1;" +
                         "    return false;" +
                         "  }" +
                         "  function applyJwTrack(p) {" +
@@ -1448,10 +1489,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "    if (targetAudio === 'dub' || targetAudio === 'eng' || targetAudio === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
                     "    if (targetAudio === 'sub' || targetAudio === 'jpn' || targetAudio === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
                     "    if (targetAudio === 'hin' || targetAudio === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                    "    if (targetAudio === 'tam' || targetAudio === 'tamil') return all.indexOf('tam') !== -1 || all.indexOf('ta') !== -1;" +
-                    "    if (targetAudio === 'tel' || targetAudio === 'telugu') return all.indexOf('tel') !== -1 || all.indexOf('te') !== -1;" +
-                    "    if (targetAudio === 'mal' || targetAudio === 'malayalam') return all.indexOf('mal') !== -1 || all.indexOf('ml') !== -1;" +
-                    "    if (targetAudio === 'ben' || targetAudio === 'bengali') return all.indexOf('ben') !== -1 || all.indexOf('bn') !== -1;" +
                     "    return false;" +
                     "  }" +
                     "  if (Hls.isSupported()) {" +
@@ -1609,6 +1646,43 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (exoPlayer != null && !isInPictureInPictureMode()) {
             exoPlayer.stop();
         }
+    }
+
+    private void updateVolume(float percent) {
+        if (audioManager == null || indicatorVolume == null || initialVolume == -1) return;
+        int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        
+        // Calculate new hardware volume step
+        // We use 1.2f sensitivity for a good drag feel
+        int newVol = initialVolume + (int) (percent * maxVol * 1.2f);
+        if (newVol < 0) newVol = 0;
+        if (newVol > maxVol) newVol = maxVol;
+        
+        // Set hardware volume without showing system UI (flag 0)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0);
+        
+        int displayPercent = (int) (((float)newVol / maxVol) * 100);
+        indicatorVolume.setText("Vol: " + displayPercent + "%");
+        indicatorVolume.setVisibility(View.VISIBLE);
+        if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
+    }
+
+    private void updateBrightness(float percent) {
+        if (indicatorBrightness == null || initialBrightness == -1.0f) return;
+        Window window = getWindow();
+        WindowManager.LayoutParams lp = window.getAttributes();
+        
+        float newBrightness = initialBrightness + percent;
+        if (newBrightness < 0.01f) newBrightness = 0.01f;
+        if (newBrightness > 1.0f) newBrightness = 1.0f;
+        
+        lp.screenBrightness = newBrightness;
+        window.setAttributes(lp);
+        
+        int displayPercent = (int) (newBrightness * 100);
+        indicatorBrightness.setText("Bri: " + displayPercent + "%");
+        indicatorBrightness.setVisibility(View.VISIBLE);
+        if (indicatorVolume != null) indicatorVolume.setVisibility(View.GONE);
     }
 
     @Override 

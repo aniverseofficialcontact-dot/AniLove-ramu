@@ -410,7 +410,7 @@ public class EpisodeDownloadService extends Service {
 
             String safeProviderId = "anikoto-hd1";
             if (safeServer.toLowerCase().contains("animeworld") || safeServer.toLowerCase().contains("indian") || safeServer.toLowerCase().contains("zephyrix")
-                    || "HIN".equals(lang) || "TAM".equals(lang) || "TEL".equals(lang) || "MAL".equals(lang) || "BEN".equals(lang)) {
+                    || "HIN".equals(lang)) {
                 safeProviderId = "animeworld-india";
             } else if (safeServer.toLowerCase().contains("tatakai")) {
                 safeProviderId = "tatakai-multi";
