@@ -343,6 +343,61 @@ export function App() {
     }
   }, [settings, showToast, triggerNotification]);
 
+  // 1.6. Listen for automatic token injections from the native Android Hardware layer
+  useEffect(() => {
+    const handleNativeToken = (event: any) => {
+      const token = event.detail;
+      if (!token) return;
+
+      fetchAuthenticatedViewer(token)
+        .then(async user => {
+          if (user) {
+            await syncUserDataWithAniList(token).catch(() => ({ cardsCount: 0, coins: 0 }));
+            const userList = await fetchUserMediaList(user.name).catch(() => []);
+            if (userList && userList.length > 0) {
+              setLibrary(prev => {
+                const map = new Map<number, UserMediaListItem>();
+                prev.forEach(i => map.set(i.mediaId, i));
+                userList.forEach(i => map.set(i.mediaId, i));
+                const merged = Array.from(map.values());
+                saveUserLibrary(merged);
+                return merged;
+              });
+            }
+
+            setSettings(prevSettings => {
+              const updated = {
+                ...prevSettings,
+                anilistToken: token,
+                importUsername: user.name,
+                anilistUser: user,
+                customDisplayName: user.name,
+                customAvatar: user.avatar?.large || prevSettings.customAvatar,
+                twoWaySyncEnabled: true,
+                lastSyncTimestamp: Date.now(),
+              };
+              saveUserSettings(updated);
+              return updated;
+            });
+
+            showToast('sync', `Welcome ${user.name}! AniList 2-Way Sync fully active automatically.`, 'AniList Connected');
+            triggerNotification(
+              'sync',
+              'AniList Account Linked',
+              `Logged in as ${user.name} via Native Bridge. Two-way cloud synchronization is active.`,
+            );
+          }
+        })
+        .catch(err => {
+          console.error('Native bridge token login failed:', err);
+          showToast('error', 'Failed to synchronize AniList profile via native bridge.', 'Sync Error');
+        });
+    };
+
+    window.addEventListener('nativeAniListToken', handleNativeToken);
+    return () => window.removeEventListener('nativeAniListToken', handleNativeToken);
+  }, [showToast, triggerNotification]);
+
   // Initial URL tab and reel query parameter check & browser navigation listener
   useEffect(() => {
     // Proactively pre-buffer initial reels into client memory on site entry

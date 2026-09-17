@@ -96,12 +96,49 @@ public class MainActivity extends BridgeActivity {
             pendingBackToDetails = false;
             dispatchBackToDetails();
         }
+
+        // Process any deep link token on activity resume (handles cold boots)
+        if (getIntent() != null && getIntent().getData() != null) {
+            handleDeepLinkIntent(getIntent());
+            getIntent().setData(null); // Clear to ensure it only processes once
+        }
     }
 
     @Override
     public void onNewIntent(Intent intent) {
         setIntent(intent);
         super.onNewIntent(intent);
+        // Process deep link token on new intent (handles background resumes)
+        handleDeepLinkIntent(intent);
+    }
+
+    private void handleDeepLinkIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        String url = intent.getData().toString();
+        if (url.contains("access_token=")) {
+            try {
+                String[] parts = url.split("access_token=");
+                if (parts.length > 1) {
+                    final String token = parts[1].split("&")[0];
+                    if (token != null && !token.isEmpty()) {
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            try {
+                                WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+                                if (webView != null) {
+                                    String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: '" + token + "' }));";
+                                    webView.evaluateJavascript(js, null);
+                                    Log.i("MainActivity", "Injected AniList token into web context successfully!");
+                                }
+                            } catch (Exception e) {
+                                Log.e("MainActivity", "Error injecting token into webview", e);
+                            }
+                        }, 800); // stable buffer duration to let react listeners hydrate completely
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("MainActivity", "Error splitting token from intent URL", e);
+            }
+        }
     }
 
     public void dispatchBackToDetails() {
