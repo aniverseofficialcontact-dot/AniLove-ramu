@@ -3,6 +3,7 @@ package com.anilove.app;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -114,10 +115,20 @@ public class MainActivity extends BridgeActivity {
 
     private void handleDeepLinkIntent(Intent intent) {
         if (intent == null || intent.getData() == null) return;
-        String url = intent.getData().toString();
-        if (url.contains("access_token=")) {
+        Uri data = intent.getData();
+        String url = data.toString();
+        String fragment = data.getFragment();
+        
+        String tokenPayload = null;
+        if (url != null && url.contains("access_token=")) {
+            tokenPayload = url;
+        } else if (fragment != null && fragment.contains("access_token=")) {
+            tokenPayload = fragment;
+        }
+
+        if (tokenPayload != null) {
             try {
-                String[] parts = url.split("access_token=");
+                String[] parts = tokenPayload.split("access_token=");
                 if (parts.length > 1) {
                     final String token = parts[1].split("&")[0];
                     if (token != null && !token.isEmpty()) {
