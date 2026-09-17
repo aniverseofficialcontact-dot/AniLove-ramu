@@ -50,6 +50,7 @@ interface ProVideoPlayerProps {
   onEpisodeChange?: (episodeNumber: number) => void;
   onClosePlayer?: () => void;
   onThumbnailStyleChange?: (style: ThumbnailAppearance) => void;
+  onProgressUpdate?: (anime: Anime, progress: number) => void;
   initialThumbnailStyle?: ThumbnailAppearance;
   settings?: UserSettings;
 }
@@ -67,6 +68,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   onAudioLanguageChange,
   onEpisodeChange,
   onThumbnailStyleChange,
+  onProgressUpdate,
   initialThumbnailStyle = 'snapshot',
 }) => {
   // Player state
@@ -164,10 +166,35 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           duration,
           thumbnailStyle,
         });
+        if (onProgressUpdate) onProgressUpdate(anime, episodeNumber);
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [anime, episodeNumber, episodeTitle, seasonTitle, currentTime, duration, thumbnailStyle, streamStatus]);
+  }, [anime, episodeNumber, episodeTitle, seasonTitle, currentTime, duration, thumbnailStyle, streamStatus, onProgressUpdate]);
+
+  // Native Android progress listener (Syncs from NativePlayerActivity)
+  useEffect(() => {
+    const handleNativeProgress = (event: any) => {
+      const { anilistId, episodeNumber: nativeEp, currentTime: nativeTime, duration: nativeDur } = event.detail || {};
+
+      // Ensure we only record progress for the currently active anime
+      if (anilistId === anime.id) {
+        recordWatchProgress({
+          anime,
+          episodeNumber: nativeEp || episodeNumber,
+          episodeTitle,
+          seasonTitle,
+          currentTime: nativeTime,
+          duration: nativeDur,
+          thumbnailStyle,
+        });
+        if (onProgressUpdate) onProgressUpdate(anime, nativeEp || episodeNumber);
+      }
+    };
+
+    window.addEventListener('nativeVideoProgress', handleNativeProgress);
+    return () => window.removeEventListener('nativeVideoProgress', handleNativeProgress);
+  }, [anime, episodeNumber, episodeTitle, seasonTitle, thumbnailStyle, onProgressUpdate]);
 
   // PostMessage command sender to iframe player (Universal Cross-Server Protocol)
   const sendIframeCommand = useCallback((command: string, value?: any) => {

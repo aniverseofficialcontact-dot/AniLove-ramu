@@ -14,15 +14,18 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
 import android.view.GestureDetector;
@@ -58,6 +61,8 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
+import java.io.File;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -65,8 +70,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
+import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.datasource.DataSource;
@@ -193,7 +200,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private int getPhysicalScreenWidth() {
-        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        DisplayMetrics dm = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getRealMetrics(dm);
         return Math.min(dm.widthPixels, dm.heightPixels);
     }
@@ -523,7 +530,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 isDragging = false; 
                 if (isOfflineMode && exoPlayer != null) {
                     long duration = exoPlayer.getDuration();
-                    if (duration > 0 && duration != androidx.media3.common.C.TIME_UNSET) {
+                    if (duration > 0 && duration != C.TIME_UNSET) {
                         long targetMs = s.getProgress() * 1000L;
                         exoPlayer.seekTo(Math.min(targetMs, duration));
                     }
@@ -562,13 +569,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayerView.setPlayer(exoPlayer);
 
             MediaItem.Builder mediaBuilder = new MediaItem.Builder()
-                    .setUri(android.net.Uri.fromFile(new java.io.File(videoPath)));
+                    .setUri(Uri.fromFile(new File(videoPath)));
 
-            if (subPath != null && !subPath.isEmpty() && new java.io.File(subPath).exists()) {
-                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(new java.io.File(subPath)))
+            if (subPath != null && !subPath.isEmpty() && new File(subPath).exists()) {
+                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(new File(subPath)))
                         .setMimeType(MimeTypes.TEXT_VTT)
                         .setLanguage("en")
-                        .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                         .build();
                 mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
             }
@@ -607,7 +614,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                public void onPlayerError(PlaybackException error) {
                     Log.e("AniLove", "ExoPlayer error: " + error.getMessage());
                     loadingProgress.setVisibility(View.GONE);
                 }
@@ -704,7 +711,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             .setAspectRatio(new Rational(16, 9));
 
                     if (playerWebView != null) {
-                        android.graphics.Rect visibleRect = new android.graphics.Rect();
+                        Rect visibleRect = new Rect();
                         playerWebView.getGlobalVisibleRect(visibleRect);
                         if (visibleRect.width() > 0 && visibleRect.height() > 0) {
                             pipBuilder.setSourceRectHint(visibleRect);
@@ -1131,11 +1138,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void seekVideo(int delta) {
         if (isOfflineMode && exoPlayer != null) {
             long duration = exoPlayer.getDuration();
-            if (duration <= 0 || duration == androidx.media3.common.C.TIME_UNSET) {
+            if (duration <= 0 || duration == C.TIME_UNSET) {
                 duration = Long.MAX_VALUE;
             }
             long current = exoPlayer.getCurrentPosition();
-            if (current == androidx.media3.common.C.TIME_UNSET) {
+            if (current == C.TIME_UNSET) {
                 current = 0;
             }
             long newPos = Math.max(0, Math.min(duration, current + (delta * 1000L)));
@@ -1158,7 +1165,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (isOfflineMode && exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
-            if (durationMs > 0 && durationMs != androidx.media3.common.C.TIME_UNSET) {
+            if (durationMs > 0 && durationMs != C.TIME_UNSET) {
                 int current = (int) (currentMs / 1000);
                 int duration = (int) (durationMs / 1000);
                 textCurrentTime.setText(formatTime(current));
@@ -1207,11 +1214,44 @@ public class NativePlayerActivity extends AppCompatActivity {
                             isPlaying = !pausedInWeb; 
                             btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play); 
                             if (isPlaying) resetHideTimer(); else stopHideTimer(); 
-                        } 
+                        }
+
+                        // Broadcast progress to main app for "Continue Watching" sync
+                        if (isPlaying && current > 0) {
+                            broadcastProgress(current, duration);
+                        }
                     } 
                 } catch (Exception e) {} 
             } 
         }); 
+    }
+
+    private void broadcastProgress(double current, double duration) {
+        if (MainActivity.instance == null || MainActivity.instance.getBridge() == null) return;
+        
+        final int anilistId = getIntent().getIntExtra("anilistId", 0);
+        final int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
+        
+        if (anilistId <= 0) return;
+
+        MainActivity.instance.runOnUiThread(() -> {
+            try {
+                WebView mainWebView = MainActivity.instance.getBridge().getWebView();
+                if (mainWebView != null) {
+                    String js = "window.dispatchEvent(new CustomEvent('nativeVideoProgress', { " +
+                            "detail: { " +
+                            "anilistId: " + anilistId + ", " +
+                            "episodeNumber: " + episodeNumber + ", " +
+                            "currentTime: " + current + ", " +
+                            "duration: " + duration + " " +
+                            "} " +
+                            "}));";
+                    mainWebView.evaluateJavascript(js, null);
+                }
+            } catch (Exception e) {
+                Log.e("NativePlayer", "Failed to broadcast progress to bridge", e);
+            }
+        });
     }
 
     private void sendVideoCommand(String jsAction) { 
@@ -1447,7 +1487,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 baseUrl = "https://justanime.to/";
             } else {
                 try {
-                    baseUrl = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";
+                    baseUrl = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
                 } catch (Exception ignored) {}
             }
 
@@ -1465,7 +1505,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             referer = "https://justanime.to/";
         } else {
             try {
-                referer = new java.net.URL(url).getProtocol() + "://" + new java.net.URL(url).getHost() + "/";
+                referer = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
             } catch (Exception ignored) {}
         }
         Map<String, String> headers = new HashMap<>(); 

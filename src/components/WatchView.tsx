@@ -396,6 +396,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
             }}
             onClosePlayer={onBack}
             onThumbnailStyleChange={style => setThumbnailStyle(style)}
+            onProgressUpdate={onUpdateProgress}
             initialThumbnailStyle={thumbnailStyle}
             settings={settings}
           />
