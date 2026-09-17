@@ -2053,6 +2053,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
                               href={getAniListAuthUrl()}
                               target="_blank"
                               rel="noreferrer"
+                              onClick={() => {
+                                if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
+                                  setShowTokenInput(true);
+                                }
+                              }}
                               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-extrabold shadow-lg shadow-sky-500/25 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                             >
                               <Globe className="w-3.5 h-3.5" />
@@ -2073,6 +2078,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       {/* Token Input Drawer */}
                       {showTokenInput && (
                         <div className="p-4 rounded-2xl bg-slate-950 border border-sky-500/30 space-y-3">
+                          {typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform() && (
+                            <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-[11px] text-sky-300 leading-relaxed">
+                              💡 <strong>Android Instruction:</strong> After clicking authorization in the browser, copy the token text from the page address bar and paste it below to establish immediate 2-way cloud synchronization!
+                            </div>
+                          )}
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-bold text-sky-300">
                               Paste AniList OAuth Access Token
