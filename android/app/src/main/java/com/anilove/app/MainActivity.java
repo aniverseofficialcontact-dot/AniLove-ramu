@@ -42,6 +42,11 @@ public class MainActivity extends BridgeActivity {
         // UI tweaks after activity is created
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         hideSystemBars();
+
+        // 100% Sure Fix: Clear all WebView cache on every launch to prevent old versions from showing
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().clearCache(true);
+        }
     }
 
     private void hideSystemBars() {
