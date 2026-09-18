@@ -27,6 +27,14 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body class="bg-slate-950 text-slate-100 select-none overflow-x-hidden antialiased">
+    <div id="app-global-loader" style="position: fixed; inset: 0; width: 100vw; height: 100vh; background-color: #090d16; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999999; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <div style="display: flex; gap: 4px;">
+        <span style="font-size: 3.5rem; font-weight: 900; background: linear-gradient(to right, #818cf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 25px rgba(168,85,247,0.55));">Ani</span>
+        <span style="font-size: 3.5rem; font-weight: 900; background: linear-gradient(to right, #ec4899, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 25px rgba(236,72,153,0.55));">Love</span>
+      </div>
+      <p style="margin-top: 16px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.25em; text-transform: uppercase; color: rgba(216,180,254,0.45);">Loading Your Universe</p>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>

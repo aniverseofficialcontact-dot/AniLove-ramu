@@ -1079,3 +1079,40 @@ export function setStoredActiveCompanion(card: any | null): void {
     console.error('Error saving companion:', e);
   }
 }
+
+// =============================================================
+// HOME FEED CACHE ENGINE (24-HOUR AUTO EXPIRY)
+// =============================================================
+const HOME_CACHE_KEY = 'anilove_home_feed_cache_v1';
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+export function getHomeFeedCache(): any | null {
+  try {
+    const raw = localStorage.getItem(HOME_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.timestamp || !parsed.feed) return null;
+
+    // Check if cache has automatically expired after 24 hours
+    if (Date.now() - parsed.timestamp > CACHE_DURATION) {
+      localStorage.removeItem(HOME_CACHE_KEY);
+      return null;
+    }
+    return parsed.feed;
+  } catch (e) {
+    console.error('Error reading home feed cache:', e);
+    return null;
+  }
+}
+
+export function saveHomeFeedCache(feed: any): void {
+  try {
+    const cacheData = {
+      timestamp: Date.now(),
+      feed: feed
+    };
+    localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(cacheData));
+  } catch (e) {
+    console.error('Error saving home feed cache:', e);
+  }
+}

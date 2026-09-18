@@ -29,6 +29,8 @@ import {
   getStoredWatchHistory,
   saveStoredWatchHistory,
   syncUserDataWithAniList,
+  getHomeFeedCache,
+  saveHomeFeedCache,
 } from './services/storage';
 
 import { Navbar, TabType } from './components/Navbar';
@@ -212,6 +214,16 @@ export function App() {
     soundEffects.setEnabled(settings.soundEffectsEnabled ?? true);
     soundEffects.setVolume(settings.soundVolume ?? 0.8);
   }, [settings.theme, settings.soundEffectsEnabled, settings.soundVolume]);
+
+  // Clean up the global HTML loading splash instantly once data is ready
+  useEffect(() => {
+    if (!isMainLoading) {
+      const globalLoader = document.getElementById('app-global-loader');
+      if (globalLoader) {
+        globalLoader.remove();
+      }
+    }
+  }, [isMainLoading]);
 
   // Persist notifications on change
   useEffect(() => {
@@ -403,8 +415,23 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 2. Fetch Initial Catalog from AniList GraphQL (Live AniList Sync)
+  // 2. Fetch Initial Catalog from AniList GraphQL (Live AniList Sync with 24h Cache)
   const loadHomeContent = useCallback(async () => {
+    const cachedFeed = getHomeFeedCache();
+    if (cachedFeed) {
+      setTrendingAnime(cachedFeed.trending || []);
+      setPopularAnime(cachedFeed.popular || []);
+      setTopRatedAnime(cachedFeed.topRated || []);
+      setNewestAnime(cachedFeed.newest || []);
+      setUpcomingAnime(cachedFeed.upcoming || []);
+      setMoviesAnime(cachedFeed.movies || []);
+      setActionAnime(cachedFeed.action || []);
+      setFantasyAnime(cachedFeed.fantasy || []);
+      setRomComAnime(cachedFeed.romcom || []);
+      setIsMainLoading(false);
+      return;
+    }
+
     setIsMainLoading(true);
     try {
       const feed = await fetchHomeFeed(24);
@@ -417,6 +444,7 @@ export function App() {
       setActionAnime(feed.action);
       setFantasyAnime(feed.fantasy);
       setRomComAnime(feed.romcom);
+      saveHomeFeedCache(feed);
     } catch (err: any) {
       console.error('Error loading home content:', err);
       // Only notify if we don't already have catalog in state
@@ -425,12 +453,13 @@ export function App() {
       }
     } finally {
       setIsMainLoading(false);
-      // SIGNAL NATIVE DISMISSAL ONLY WHEN DATA HAS FULLY LOADED
-      (window as any).isWebReady = true;
     }
   }, [showToast, trendingAnime.length]);
 
   useEffect(() => {
+    // SIGNAL NATIVE DISMISSAL IMMEDIATELY for the fastest possible launch experience
+    // This allows our custom web-based "CoolLoadingSplash" to take over instantly!
+    (window as any).isWebReady = true;
     loadHomeContent();
   }, [loadHomeContent]);
 
@@ -1447,7 +1476,6 @@ export function App() {
         />
       )}
 
-      {/* Intro animations removed for instant launch */}
     </div>
   );
 }
