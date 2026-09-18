@@ -350,6 +350,8 @@ export async function resolveEpisodeSource({
                 fallbackReason: fbData.fallbackReason,
                 requestedLanguage: fbData.requestedLanguage || language,
                 actualLanguage: fbData.actualLanguage || fbData.language || language,
+                subtitleUrl: fbData.subtitleUrl,
+                subtitleLang: fbData.subtitleLang || 'English',
               },
             };
           }

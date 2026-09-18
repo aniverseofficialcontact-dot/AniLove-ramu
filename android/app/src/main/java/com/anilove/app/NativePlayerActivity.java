@@ -1008,7 +1008,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         String selectors = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
                      ".subtitles, .captions, .art-subtitle, .artplayer-subtitles, .art-subtitles, .plyr__captions, " +
-                     ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
+                     ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
+                     ".jw-captions-text, .vjs-caption-content, .art-subtitle p";
 
         String css = selectors + ", " + selectors + " * { " +
                      "visibility: " + visibility + " !important; display: " + display + " !important; opacity: " + opacity + " !important; }";
@@ -1643,7 +1644,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      if (v) { " +
                 "        doc.body.style.setProperty('background', 'black', 'important'); " +
                 "        var all = doc.querySelectorAll('body *'); " +
-                "        var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay'; " +
+                "        var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p'; " +
                 "        var whitelist = doc.querySelectorAll(subSelectors); " +
                 "        all.forEach(function(el) { " +
                 "          if (el === v || el.contains(v)) { " +

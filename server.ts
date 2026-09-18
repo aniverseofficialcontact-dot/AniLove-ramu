@@ -3163,6 +3163,8 @@ function generateUniversalFallbackStream(input: {
   episodeNumber?: number;
   language?: string;
   serverName?: string;
+  subtitleUrl?: string;
+  subtitleLang?: string;
 }) {
   const {
     anilistId = 1,
@@ -3172,6 +3174,8 @@ function generateUniversalFallbackStream(input: {
     episodeNumber = 1,
     language = 'DUB',
     serverName = 'VidLink Ultra HD',
+    subtitleUrl = '',
+    subtitleLang = 'English',
   } = input;
 
   const epNum = Number(episodeNumber) || 1;
@@ -3196,6 +3200,8 @@ function generateUniversalFallbackStream(input: {
   return {
     success: true,
     streamUrl: selected.linkId,
+    subtitleUrl,
+    subtitleLang,
     skipData: { intro: [0, 0], outro: [0, 0] },
     animeMatch: {
       id: String(anilistId),
