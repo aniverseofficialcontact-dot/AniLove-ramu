@@ -1002,42 +1002,45 @@ public class NativePlayerActivity extends AppCompatActivity {
     
     private void toggleWebSubtitles(boolean enabled) { 
         isSubtitlesEnabled = enabled;
-        String display = enabled ? "block" : "none";
         String visibility = enabled ? "visible" : "hidden";
         String opacity = enabled ? "1" : "0";
 
+        // Powerful selector that catches almost all player subtitles
         String selectors = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
                      ".subtitles, .captions, .art-subtitle, .artplayer-subtitles, .art-subtitles, .plyr__captions, " +
                      ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
-                     ".jw-captions-text, .vjs-caption-content, .art-subtitle p";
+                     "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
 
-        String css = selectors + ", " + selectors + " * { " +
-                     "visibility: " + visibility + " !important; display: " + display + " !important; opacity: " + opacity + " !important; }";
+        String css = selectors + " { visibility: " + visibility + " !important; opacity: " + opacity + " !important; display: block !important; } " +
+                     selectors + " * { visibility: " + visibility + " !important; opacity: " + opacity + " !important; }";
 
         String js = "(function() { " +
                 "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "'; " +
                 "  var remoteSubLang = '" + (subtitleLang != null ? subtitleLang : "English") + "'; " +
                 "  function toggle(win) { try { " +
-                "    var style = win.document.getElementById('anilove-caption-toggle-style') || win.document.createElement('style'); " +
+                "    var doc = win.document; " +
+                "    var style = doc.getElementById('anilove-caption-toggle-style') || doc.createElement('style'); " +
                 "    style.id = 'anilove-caption-toggle-style'; " +
                 "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) win.document.head.appendChild(style); " +
-                "    var v = win.document.querySelector('video'); " +
-                "    if (v && v.textTracks) { " +
-                "      if (remoteSubUrl && !win.document.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
-                "        var t = win.document.createElement('track'); " +
+                "    if(!style.parentNode) doc.head.appendChild(style); " +
+                "    var videos = doc.querySelectorAll('video'); " +
+                "    videos.forEach(function(v) { " +
+                "      if (remoteSubUrl && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
+                "        var t = doc.createElement('track'); " +
                 "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
                 "      } " +
-                "      var hasCustom = win.document.querySelector('" + selectors + "'); " +
-                "      for (var i = 0; i < v.textTracks.length; i++) { " +
-                "        if (!" + enabled + ") { " +
-                "          v.textTracks[i].mode = 'disabled'; " +
-                "        } else { " +
-                "          v.textTracks[i].mode = (hasCustom && hasCustom.offsetHeight > 0) ? 'hidden' : 'showing'; " +
+                "      if (v.textTracks) { " +
+                "        var hasCustom = doc.querySelector('" + selectors + "'); " +
+                "        var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
+                "        for (var i = 0; i < v.textTracks.length; i++) { " +
+                "          var tr = v.textTracks[i]; " +
+                "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
+                "          else if (tr.label === remoteSubLang) { tr.mode = 'showing'; } " +
+                "          else { tr.mode = customVisible ? 'hidden' : 'showing'; } " +
                 "        } " +
                 "      } " +
-                "    } " +
+                "    }); " +
                 "  } catch(e) {} " +
                 "  for (var i = 0; i < win.frames.length; i++) { try { toggle(win.frames[i]); } catch(e) {} } } " +
                 "  toggle(window); " +
@@ -1074,7 +1077,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
                 ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
                 ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions, " +
-                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
+                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
+                "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
 
         String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
                 ".artplayer-subtitles p, .artplayer-subtitles span, " +
@@ -1125,11 +1129,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         String js = "(function() { " +
                 "  function apply(win) { try { " +
-                "    var style = win.document.getElementById('anilove-caption-style') || win.document.createElement('style'); " +
+                "    var doc = win.document; " +
+                "    var style = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
                 "    style.id = 'anilove-caption-style'; " +
                 "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) win.document.head.appendChild(style); " +
-                "    var artSubs = win.document.querySelectorAll('.art-subtitle'); " +
+                "    if(!style.parentNode) doc.head.appendChild(style); " +
+                "    var artSubs = doc.querySelectorAll('.art-subtitle'); " +
                 "    artSubs.forEach(function(sub) { " +
                 "      sub.style.setProperty('position', 'absolute', 'important'); " +
                 "      " + (isTop ? "sub.style.setProperty('top', '" + bottomMargin + "%', 'important'); sub.style.setProperty('bottom', 'auto', 'important');" : "sub.style.setProperty('bottom', '" + bottomMargin + "%', 'important'); sub.style.setProperty('top', 'auto', 'important');") + " " +
@@ -1141,10 +1146,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        sub.style.setProperty('border-radius', '" + (opacityVal > 0 ? "4px" : "0") + "', 'important'); " +
                 "      } " +
                 "    }); " +
-                "    var v = win.document.querySelector('video'); " +
+                "    var v = doc.querySelector('video'); " +
                 "    if (v && v.textTracks) { " +
-                "      var hasCustom = win.document.querySelector('" + containerSelectors + "'); " +
-                "      if (hasCustom && hasCustom.offsetHeight > 0) { " +
+                "      var hasCustom = doc.querySelector('" + containerSelectors + "'); " +
+                "      var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
+                "      if (customVisible) { " +
                 "        for(var i=0; i<v.textTracks.length; i++) { " +
                 "          if (v.textTracks[i].mode === 'showing') v.textTracks[i].mode = 'hidden'; " +
                 "        } " +
@@ -1639,46 +1645,70 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  function absoluteCleanse(win) { " +
                 "    try { " +
                 "      var doc = win.document; " +
+                "      var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"]'; " +
+                "      " +
+                "      // 1. Force all potential captions to be visible instantly in this frame" +
+                "      var subs = doc.querySelectorAll(subSelectors); " +
+                "      subs.forEach(function(s) { " +
+                "        s.style.setProperty('visibility', 'visible', 'important'); " +
+                "        s.style.setProperty('opacity', '1', 'important'); " +
+                "        s.style.setProperty('display', 'block', 'important'); " +
+                "        s.style.setProperty('z-index', '2147483647', 'important'); " +
+                "        s.style.setProperty('pointer-events', 'auto', 'important'); " +
+                "      }); " +
+                "      " +
+                "      // 2. Find video or frame containing video" +
                 "      var v = doc.querySelector('video'); " +
-                "      if (!v) { for (var i = 0; i < win.frames.length; i++) { try { var fv = win.frames[i].document.querySelector('video'); if (fv) { v = fv; break; } } catch(e) {} } } " +
+                "      if (!v) { " +
+                "        for (var i = 0; i < win.frames.length; i++) { " +
+                "          try { if (win.frames[i].document.querySelector('video')) { v = win.frames[i].frameElement; break; } } catch(e) {} " +
+                "        } " +
+                "      } " +
+                "      " +
+                "      // 3. Only hide things if we have a primary video/frame to protect" +
                 "      if (v) { " +
                 "        doc.body.style.setProperty('background', 'black', 'important'); " +
                 "        var all = doc.querySelectorAll('body *'); " +
-                "        var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p'; " +
-                "        var whitelist = doc.querySelectorAll(subSelectors); " +
                 "        all.forEach(function(el) { " +
                 "          if (el === v || el.contains(v)) { " +
                 "            el.style.setProperty('visibility', 'visible', 'important'); " +
                 "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            if (el !== v && !el.contains(v)) el.style.setProperty('background', 'transparent', 'important'); " +
                 "            return; " +
                 "          } " +
-                "          var isWhite = false; whitelist.forEach(w => { if (w === el || w.contains(el) || el.contains(w)) isWhite = true; }); " +
-                "          if (isWhite) { " +
+                "          " +
+                "          // Check if it's a whitelisted caption (either direct match or contains one)" +
+                "          var isSafe = false; " +
+                "          subs.forEach(function(s) { if (s === el || el.contains(s)) isSafe = true; }); " +
+                "          " +
+                "          if (isSafe) { " +
                 "            el.style.setProperty('visibility', 'visible', 'important'); " +
                 "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            el.style.setProperty('z-index', '2147483647', 'important'); " +
+                "            el.style.setProperty('pointer-events', 'auto', 'important'); " +
                 "          } else { " +
                 "            el.style.setProperty('visibility', 'hidden', 'important'); " +
                 "            el.style.setProperty('pointer-events', 'none', 'important'); " +
                 "          } " +
                 "        }); " +
-                "        v.style.setProperty('visibility', 'visible', 'important'); " +
-                "        v.style.setProperty('opacity', '1', 'important'); " +
-                "        v.style.setProperty('position', 'fixed', 'important'); " +
-                "        v.style.setProperty('top', '0', 'important'); " +
-                "        v.style.setProperty('left', '0', 'important'); " +
-                "        v.style.setProperty('width', '100%', 'important'); " +
-                "        v.style.setProperty('height', '100%', 'important'); " +
-                "        v.style.setProperty('object-fit', 'contain', 'important'); " +
-                "        v.style.setProperty('z-index', '1000', 'important'); " +
+                "        " +
+                "        if (v.tagName !== 'IFRAME') { " +
+                "          v.style.setProperty('visibility', 'visible', 'important'); " +
+                "          v.style.setProperty('opacity', '1', 'important'); " +
+                "          v.style.setProperty('position', 'fixed', 'important'); " +
+                "          v.style.setProperty('top', '0', 'important'); " +
+                "          v.style.setProperty('left', '0', 'important'); " +
+                "          v.style.setProperty('width', '100%', 'important'); " +
+                "          v.style.setProperty('height', '100%', 'important'); " +
+                "          v.style.setProperty('object-fit', 'contain', 'important'); " +
+                "          v.style.setProperty('z-index', '1000', 'important'); " +
+                "        } " +
                 "      } " +
                 "    } catch(e) {} " +
+                "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
                 "  } " +
-                "  function penetrate(win) { absoluteCleanse(win); for (var i = 0; i < win.frames.length; i++) { try { penetrate(win.frames[i]); } catch(e) {} } } " +
-                "  setInterval(function() { penetrate(window); }, 1000); " +
+                "  absoluteCleanse(window); " +
                 "})();", null); 
     }
+
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {

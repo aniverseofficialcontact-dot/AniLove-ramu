@@ -9,13 +9,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
@@ -23,10 +23,17 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     public static MainActivity instance;
     public static boolean pendingBackToDetails = false;
+    public static boolean isWebReady = false;
+    private final Handler splashHandler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         instance = this;
+        
+        // Keep the native splash screen visible until the web code signals it's ready
+        splashScreen.setKeepOnScreenCondition(() -> !isWebReady);
+        
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(DownloadPlugin.class);
         
@@ -47,6 +54,42 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().clearCache(true);
         }
+
+        // High-frequency polling to dismiss native logo the moment the homepage is actually loaded in background
+        startWebReadyPolling();
+    }
+
+    private void startWebReadyPolling() {
+        // Safety Timeout: Force dismiss after 500 milliseconds to ensure instant feel
+        splashHandler.postDelayed(() -> {
+            if (!isWebReady) {
+                Log.w("MainActivity", "WebReady timeout. Transitioning to home screen.");
+                isWebReady = true;
+            }
+        }, 500);
+
+        // Polling loop: Check WebView every 100ms for the ready flag from React
+        Runnable pollTask = new Runnable() {
+            @Override
+            public void run() {
+                if (isWebReady) return;
+
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript("window.isWebReady", value -> {
+                        if ("true".equals(value)) {
+                            Log.i("MainActivity", "Web signaled READY. Revealing homepage.");
+                            isWebReady = true;
+                        } else {
+                            // Ultra-aggressive polling (50ms) for an instant feel
+                            splashHandler.postDelayed(this, 50);
+                        }
+                    });
+                } else {
+                    splashHandler.postDelayed(this, 50);
+                }
+            }
+        };
+        splashHandler.post(pollTask);
     }
 
     private void hideSystemBars() {
@@ -85,6 +128,8 @@ public class MainActivity extends BridgeActivity {
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);
                 settings.setDomStorageEnabled(true);
                 settings.setDatabaseEnabled(true);
+                // Allow autoplaying videos without user interaction
+                settings.setMediaPlaybackRequiresUserGesture(false);
             }
         } catch (Exception e) {
             Log.w("MainActivity", "WebSettings adjustment error: " + e.getMessage());
@@ -137,18 +182,12 @@ public class MainActivity extends BridgeActivity {
                 if (parts.length > 1) {
                     final String token = parts[1].split("&")[0];
                     if (token != null && !token.isEmpty()) {
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            try {
-                                WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-                                if (webView != null) {
-                                    String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: '" + token + "' }));";
-                                    webView.evaluateJavascript(js, null);
-                                    Log.i("MainActivity", "Injected AniList token into web context successfully!");
-                                }
-                            } catch (Exception e) {
-                                Log.e("MainActivity", "Error injecting token into webview", e);
-                            }
-                        }, 800); // stable buffer duration to let react listeners hydrate completely
+                        // Use bridge to inject token into WebView
+                        if (getBridge() != null && getBridge().getWebView() != null) {
+                            String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: '" + token + "' }));";
+                            getBridge().getWebView().evaluateJavascript(js, null);
+                            Log.i("MainActivity", "Injected AniList token into web context successfully!");
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -158,20 +197,13 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void dispatchBackToDetails() {
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-                if (webView != null) {
-                    String js = "if (window.closeNativePlayerAndOpenDetails) { " +
-                                "  window.closeNativePlayerAndOpenDetails(); " +
-                                "} else { " +
-                                "  window.dispatchEvent(new CustomEvent('nativePlayerBackButtonPressed')); " +
-                                "}";
-                    webView.evaluateJavascript(js, null);
-                }
-            } catch (Exception e) {
-                Log.e("MainActivity", "Error dispatching back to details", e);
-            }
-        }, 120);
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            String js = "if (window.closeNativePlayerAndOpenDetails) { " +
+                        "  window.closeNativePlayerAndOpenDetails(); " +
+                        "} else { " +
+                        "  window.dispatchEvent(new CustomEvent('nativePlayerBackButtonPressed')); " +
+                        "}";
+            getBridge().getWebView().evaluateJavascript(js, null);
+        }
     }
 }

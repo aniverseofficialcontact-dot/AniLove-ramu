@@ -655,6 +655,30 @@ async function startServer() {
   });
 
   // ==========================================
+  // SUBTITLE PROXY (Fixes CORS issues for web captions)
+  // ==========================================
+  app.get('/api/proxy/subtitle', async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) return res.status(400).send('Missing url');
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': new URL(url).origin,
+        },
+      });
+
+      const data = await response.text();
+      res.setHeader('Content-Type', 'text/vtt');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(data);
+    } catch (err) {
+      res.status(500).send('Failed to proxy subtitle');
+    }
+  });
+
+  // ==========================================
   // ANIMETHEMES.MOE API & HIGH-SPEED STREAMING PROXY (WITH IN-MEMORY CACHING & PARALLEL RESOLUTION)
   // ==========================================
   const animeThemesCache = new Map<string, { data: any; timestamp: number }>();

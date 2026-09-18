@@ -56,7 +56,6 @@ import { CardInventoryView } from './components/CardInventoryView';
 import { PinUnlockModal } from './components/PinUnlockModal';
 import { QuoteOfTheDay } from './components/QuoteOfTheDay';
 import { AniListSyncBar } from './components/AniListSyncBar';
-import { AppIntroSplash } from './components/AppIntroSplash';
 import GlobalThemePlayer, { ThemeSongPayload } from './components/GlobalThemePlayer';
 import AmbientParticles from './components/AmbientParticles';
 import { soundEffects } from './services/soundEffects';
@@ -187,30 +186,13 @@ export function App() {
   // Global Anime Theme Song Jukebox Player State (Full Song Track or Audio Preview)
   const [activeThemeSong, setActiveThemeSong] = useState<ThemeSongPayload | null>(null);
 
-  // Crunchyroll-Style App Opening Splash Animation State
-  const [showIntroSplash, setShowIntroSplash] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const s = getUserSettings();
-    if (s.appIntroAnimationEnabled === false) return false;
-    // Don't show splash if deep linking directly to a specific reel or watch page via URL query/path
-    const search = window.location.search || '';
-    if (search.includes('reel=') || search.includes('reelId=') || window.location.pathname.startsWith('/reel/')) {
-      return false;
-    }
-    // Check if splash was already shown in the current browser session
-    try {
-      const sessionViewed = sessionStorage.getItem('anilove_app_intro_viewed');
-      return !sessionViewed;
-    } catch {
-      return true;
-    }
-  });
+  // Cinematic App Opening Splash State - Always show on fresh boot
+  // Cinematic App Opening Splash State - Disabled
+  const [showIntroSplash, setShowIntroSplash] = useState<boolean>(false);
+  const [isIntroReadyToDismiss, setIsIntroReadyToDismiss] = useState(true);
 
   const handleFinishIntro = useCallback(() => {
     setShowIntroSplash(false);
-    try {
-      sessionStorage.setItem('anilove_app_intro_viewed', 'true');
-    } catch {}
   }, []);
 
   const handleReplayIntro = useCallback(() => {
@@ -443,6 +425,8 @@ export function App() {
       }
     } finally {
       setIsMainLoading(false);
+      // SIGNAL NATIVE DISMISSAL ONLY WHEN DATA HAS FULLY LOADED
+      (window as any).isWebReady = true;
     }
   }, [showToast, trendingAnime.length]);
 
@@ -1463,15 +1447,7 @@ export function App() {
         />
       )}
 
-      {/* AniLove 6–7 Second Cinematic Logo Opening Animation */}
-      {showIntroSplash && (
-        <AppIntroSplash
-          isDataReady={!isMainLoading && trendingAnime.length > 0}
-          onFinish={handleFinishIntro}
-          soundEnabled={settings.soundEffectsEnabled ?? true}
-          minDuration={7000}
-        />
-      )}
+      {/* Intro animations removed for instant launch */}
     </div>
   );
 }

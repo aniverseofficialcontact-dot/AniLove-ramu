@@ -297,7 +297,7 @@ export async function resolveEpisodeSource({
             fallbackReason: data.fallbackReason,
             requestedLanguage: data.requestedLanguage || language,
             actualLanguage: data.actualLanguage || data.language || language,
-            subtitleUrl: data.subtitleUrl,
+            subtitleUrl: data.subtitleUrl ? apiUrl(`/api/proxy/subtitle?url=${encodeURIComponent(data.subtitleUrl)}`) : undefined,
             subtitleLang: data.subtitleLang || 'English',
           },
         };
