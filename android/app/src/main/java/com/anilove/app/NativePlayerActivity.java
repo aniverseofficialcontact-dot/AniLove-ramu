@@ -135,6 +135,8 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String captionColorName = "White";
     private String captionColorHex = "#FFFFFF";
     private String edgeStyle = "Outline";
+    private String subtitleUrl = null;
+    private String subtitleLang = "English";
     
     private Handler updateHandler = new Handler(Looper.getMainLooper());
     private Handler hideHandler = new Handler(Looper.getMainLooper());
@@ -223,6 +225,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             animeTitle = "Now Playing";
         }
         int epNum = intent.getIntExtra("episodeNumber", 1);
+        startTime = intent.getIntExtra("startTime", 0);
+        subtitleUrl = intent.getStringExtra("subtitleUrl");
+        subtitleLang = intent.getStringExtra("subtitleLang");
+        if (subtitleLang == null || subtitleLang.isEmpty()) subtitleLang = "English";
         String audio = intent.getStringExtra("audio");
         if (audio == null || audio.isEmpty()) audio = "DUB";
 
@@ -238,6 +244,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private int currentY = 0;
+    private int startTime = 0;
 
     private void applyWindowSettings(Intent intent) {
         if (intent == null) intent = getIntent();
@@ -616,13 +623,28 @@ public class NativePlayerActivity extends AppCompatActivity {
             MediaItem.Builder mediaBuilder = new MediaItem.Builder()
                     .setUri(Uri.fromFile(new File(videoPath)));
 
-            if (subPath != null && !subPath.isEmpty() && new File(subPath).exists()) {
-                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(new File(subPath)))
-                        .setMimeType(MimeTypes.TEXT_VTT)
-                        .setLanguage("en")
-                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                        .build();
-                mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
+            String effectiveSubPath = (subPath != null && !subPath.isEmpty()) ? subPath : subtitleUrl;
+            if (effectiveSubPath != null && !effectiveSubPath.isEmpty()) {
+                Uri subUri;
+                if (effectiveSubPath.startsWith("http")) {
+                    subUri = Uri.parse(effectiveSubPath);
+                } else {
+                    File subFile = new File(effectiveSubPath);
+                    if (subFile.exists()) {
+                        subUri = Uri.fromFile(subFile);
+                    } else {
+                        subUri = null;
+                    }
+                }
+                
+                if (subUri != null) {
+                    MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(subUri)
+                            .setMimeType(MimeTypes.TEXT_VTT)
+                            .setLanguage("en")
+                            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                            .build();
+                    mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
+                }
             }
 
             DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
@@ -634,6 +656,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .createMediaSource(mediaBuilder.build());
 
             exoPlayer.setMediaSource(mediaSource);
+            if (startTime > 0) {
+                exoPlayer.seekTo(startTime * 1000L);
+            }
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);
             loadingProgress.setVisibility(View.GONE);
@@ -981,13 +1006,16 @@ public class NativePlayerActivity extends AppCompatActivity {
         String visibility = enabled ? "visible" : "hidden";
         String opacity = enabled ? "1" : "0";
 
-        String css = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
+        String selectors = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
                      ".subtitles, .captions, .art-subtitle, .artplayer-subtitles, .art-subtitles, .plyr__captions, " +
-                     ".jw-captions *, .vjs-text-track-display *, .ytp-caption-window-container *, .caption-window *, " +
-                     ".subtitles *, .captions *, .art-subtitle *, .artplayer-subtitles *, .art-subtitles *, .plyr__captions * { " +
+                     ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
+
+        String css = selectors + ", " + selectors + " * { " +
                      "visibility: " + visibility + " !important; display: " + display + " !important; opacity: " + opacity + " !important; }";
 
-        playerWebView.evaluateJavascript("(function() { " +
+        String js = "(function() { " +
+                "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "'; " +
+                "  var remoteSubLang = '" + (subtitleLang != null ? subtitleLang : "English") + "'; " +
                 "  function toggle(win) { try { " +
                 "    var style = win.document.getElementById('anilove-caption-toggle-style') || win.document.createElement('style'); " +
                 "    style.id = 'anilove-caption-toggle-style'; " +
@@ -995,19 +1023,26 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    if(!style.parentNode) win.document.head.appendChild(style); " +
                 "    var v = win.document.querySelector('video'); " +
                 "    if (v && v.textTracks) { " +
-                "      var hasCustom = win.document.querySelector('.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .vjs-text-track-display, .subtitles, .captions, .caption-window'); " +
+                "      if (remoteSubUrl && !win.document.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
+                "        var t = win.document.createElement('track'); " +
+                "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
+                "        v.appendChild(t); " +
+                "      } " +
+                "      var hasCustom = win.document.querySelector('" + selectors + "'); " +
                 "      for (var i = 0; i < v.textTracks.length; i++) { " +
                 "        if (!" + enabled + ") { " +
                 "          v.textTracks[i].mode = 'disabled'; " +
                 "        } else { " +
-                "          v.textTracks[i].mode = hasCustom ? 'hidden' : 'showing'; " +
+                "          v.textTracks[i].mode = (hasCustom && hasCustom.offsetHeight > 0) ? 'hidden' : 'showing'; " +
                 "        } " +
                 "      } " +
                 "    } " +
                 "  } catch(e) {} " +
                 "  for (var i = 0; i < win.frames.length; i++) { try { toggle(win.frames[i]); } catch(e) {} } } " +
                 "  toggle(window); " +
-                "})();", null);
+                "})();";
+
+        playerWebView.evaluateJavascript(js, null);
 
         if (enabled) {
             applyCaptionStyle();
@@ -1037,7 +1072,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
                 ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
-                ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions";
+                ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions, " +
+                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
 
         String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
                 ".artplayer-subtitles p, .artplayer-subtitles span, " +
@@ -1045,6 +1081,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 ".jw-text-track-cue, .jw-caption-content, .jw-captions span, " +
                 ".vjs-text-track-cue, .vjs-text-track-cue *, " +
                 ".ytp-caption-segment, .plyr__caption, " +
+                ".shaka-text-container span, .fluid_subtitles span, " +
                 ".caption-window span, .subtitles span, .captions span";
 
         String padding = opacityVal > 0 ? "2px 8px !important;" : "0 !important;";
@@ -1105,8 +1142,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    }); " +
                 "    var v = win.document.querySelector('video'); " +
                 "    if (v && v.textTracks) { " +
-                "      var hasCustom = win.document.querySelector('.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .vjs-text-track-display'); " +
-                "      if (hasCustom) { " +
+                "      var hasCustom = win.document.querySelector('" + containerSelectors + "'); " +
+                "      if (hasCustom && hasCustom.offsetHeight > 0) { " +
                 "        for(var i=0; i<v.textTracks.length; i++) { " +
                 "          if (v.textTracks[i].mode === 'showing') v.textTracks[i].mode = 'hidden'; " +
                 "        } " +
@@ -1358,7 +1395,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     view.loadUrl("javascript:(function() { " +
                             "  var style = document.createElement('style'); " +
                             "  style.innerHTML = 'body, html { background: black !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } " +
-                            "  video, .jw-video, .vjs-tech, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions { " +
+                            "  video, .jw-video, .vjs-tech, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay { " +
                             "    visibility: visible !important; opacity: 1 !important; display: block !important; " +
                             "  } " +
                             "  video, .jw-video, .vjs-tech { " +
@@ -1374,6 +1411,40 @@ public class NativePlayerActivity extends AppCompatActivity {
                 loadingProgress.setVisibility(View.GONE); 
                 if (!isDirectHls) {
                     injectAdEraser(); 
+                    
+                    if (startTime > 0) {
+                        String resumeScript = "(function() {" +
+                                "  var startT = " + startTime + ";" +
+                                "  var seeked = false;" +
+                                "  function trySeek(win) {" +
+                                "    try {" +
+                                "      var videos = win.document.querySelectorAll('video');" +
+                                "      for (var i = 0; i < videos.length; i++) {" +
+                                "        var v = videos[i];" +
+                                "        if (v && v.duration > 0 && !seeked) {" +
+                                "          v.currentTime = startT;" +
+                                "          seeked = true;" +
+                                "          return true;" +
+                                "        } else if (v && !seeked) {" +
+                                "          v.addEventListener('loadedmetadata', function() {" +
+                                "            if (!seeked) { this.currentTime = startT; seeked = true; }" +
+                                "          }, {once: true});" +
+                                "        }" +
+                                "      }" +
+                                "    } catch(e) {}" +
+                                "    for (var j = 0; j < win.frames.length; j++) {" +
+                                "      try { if (trySeek(win.frames[j])) return true; } catch(e) {}" +
+                                "    }" +
+                                "    return false;" +
+                                "  }" +
+                                "  trySeek(window);" +
+                                "  var interval = setInterval(function() {" +
+                                "    if (trySeek(window) || seeked) clearInterval(interval);" +
+                                "  }, 500);" +
+                                "  setTimeout(function() { clearInterval(interval); }, 10000);" +
+                                "})();";
+                        view.evaluateJavascript(resumeScript, null);
+                    }
                 }
                 applyCaptionStyle(); 
                 toggleWebSubtitles(true); 
@@ -1479,11 +1550,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; position: fixed; top: 0; left: 0; }" +
                     "</style>" +
                     "</head><body>" +
-                    "<video id='player' playsinline autoplay controlsList='nodownload'></video>" +
+                    "<video id='player' playsinline autoplay controlsList='nodownload'>" +
+                    (subtitleUrl != null && !subtitleUrl.isEmpty() ? "<track label='" + subtitleLang + "' kind='subtitles' srclang='en' src='" + subtitleUrl + "' default>" : "") +
+                    "</video>" +
                     "<script>" +
                     "  var v = document.getElementById('player');" +
                     "  var streamUrl = '" + url.replace("'", "\\'") + "';" +
                     "  var targetAudio = '" + targetAudio + "';" +
+                    "  var startT = " + startTime + ";" +
+                    "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "';" +
+                    "  var hasSeeked = false;" +
                     "  function matchHlsTrack(t) {" +
                     "    var all = ((t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.url || '')).toLowerCase();" +
                     "    if (targetAudio === 'dub' || targetAudio === 'eng' || targetAudio === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
@@ -1506,8 +1582,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "        }" +
                     "      }" +
                     "    }" +
-                    "    hls.on(Hls.Events.MANIFEST_PARSED, function() { selectAudioTrack(); v.play().catch(function(){}); });" +
+                    "    hls.on(Hls.Events.MANIFEST_PARSED, function() { " +
+                    "      selectAudioTrack(); " +
+                    "      if (hls.subtitleTracks && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } " +
+                    "      if (startT > 0 && !hasSeeked) { v.currentTime = startT; hasSeeked = true; } " +
+                    "      v.play().catch(function(){}); " +
+                    "    });" +
                     "    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function() { selectAudioTrack(); });" +
+                    "    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function() { if (hls.subtitleTrack === -1 && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } });" +
                     "  } else if (v.canPlayType('application/vnd.apple.mpegurl')) {" +
                     "    v.src = streamUrl;" +
                     "    v.addEventListener('loadedmetadata', function() { v.play().catch(function(){}); });" +
@@ -1561,7 +1643,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      if (v) { " +
                 "        doc.body.style.setProperty('background', 'black', 'important'); " +
                 "        var all = doc.querySelectorAll('body *'); " +
-                "        var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech'; " +
+                "        var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay'; " +
                 "        var whitelist = doc.querySelectorAll(subSelectors); " +
                 "        all.forEach(function(el) { " +
                 "          if (el === v || el.contains(v)) { " +

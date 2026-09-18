@@ -1603,9 +1603,14 @@ async function startServer() {
             linkId: s.url || s.embed || '',
           }));
 
+          const subtitles = anifySources.subtitles || [];
+          const engSub = subtitles.find((s: any) => s.lang === 'English' || s.label === 'English') || subtitles[0];
+
           res.json({
             success: true,
             streamUrl,
+            subtitleUrl: engSub?.url || '',
+            subtitleLang: engSub?.lang || engSub?.label || 'English',
             skipData: anifySources.intro ? { intro: [anifySources.intro.start || 0, anifySources.intro.end || 0], outro: [0, 0] } : { intro: [0, 0], outro: [0, 0] },
             availableServers,
             selectedServer: serverName || 'Anify Cloud 1080p',

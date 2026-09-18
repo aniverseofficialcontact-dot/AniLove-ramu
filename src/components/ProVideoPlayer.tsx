@@ -29,6 +29,7 @@ interface NativePlayerPlugin {
     episodeNumber?: number;
     audio?: string;
     advancePlayer?: boolean;
+    startTime?: number;
   }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
   close(): Promise<void>;
@@ -543,6 +544,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
       NativePlayer.play({
         url: streamSource.url,
+        subtitleUrl: streamSource.subtitleUrl,
+        subtitleLang: streamSource.subtitleLang,
         title: `${dTitle} - Ep ${episodeNumber}`,
         hasNext: episodesList.length > episodeNumber,
         hasPrev: episodeNumber > 1,
@@ -552,6 +555,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         episodeNumber: Number(episodeNumber),
         audio: audioMode,
         advancePlayer: settings?.advancePlayerEnabled ?? false,
+        startTime: initialTime || 0,
       }).catch(() => {});
     }
   }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings]);

@@ -57,6 +57,8 @@ export interface StreamSource {
   fallbackReason?: string;
   requestedLanguage?: StreamLanguage;
   actualLanguage?: StreamLanguage;
+  subtitleUrl?: string;
+  subtitleLang?: string;
 }
 
 export type StreamSourceStatus = 'available' | 'unavailable' | 'error';
@@ -295,6 +297,8 @@ export async function resolveEpisodeSource({
             fallbackReason: data.fallbackReason,
             requestedLanguage: data.requestedLanguage || language,
             actualLanguage: data.actualLanguage || data.language || language,
+            subtitleUrl: data.subtitleUrl,
+            subtitleLang: data.subtitleLang || 'English',
           },
         };
       }
