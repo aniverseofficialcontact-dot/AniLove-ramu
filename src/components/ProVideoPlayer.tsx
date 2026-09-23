@@ -597,15 +597,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
-          <div className="w-full h-full relative group bg-black z-10">
-            <div className="absolute inset-0 bg-black z-0" />
-            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
-               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
-               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Player Active</div>
-            </div>
-          </div>
-        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
+        {streamSource?.url && streamStatus !== 'error' ? (
           <iframe
             key={`${streamSource.url}-${refreshKey}`}
             ref={iframeRef}
@@ -701,8 +693,28 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Only Refresh Button */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Right: Server 1 / Server 2 / Server 3 Buttons & Refresh Button */}
+          <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+            {(streamSource?.availableServers || []).map((srv, idx) => {
+              const activeName = selectedSubServerName || streamSource?.selectedServerName || 'Server 1';
+              const isSelected = activeName.toLowerCase() === srv.name.toLowerCase();
+              return (
+                <button
+                  key={`pvp-srv-${idx}`}
+                  type="button"
+                  onClick={() => setSelectedSubServerName(srv.name)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-400'
+                      : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-700/80 hover:bg-neutral-800'
+                  }`}
+                >
+                  <Server className="w-3 h-3" />
+                  <span>{srv.name}</span>
+                </button>
+              );
+            })}
+
             <button
               type="button"
               onClick={handleReloadStream}
