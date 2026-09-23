@@ -1,5 +1,6 @@
 import { Anime, StreamServerId } from '../types';
 import { API_BASE, apiFetch, apiUrl } from './api';
+import { CapacitorHttp, Capacitor } from '@capacitor/core';
 
 export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'KAN' | 'BEN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p';
@@ -187,86 +188,98 @@ export async function resolveEpisodeSource({
   const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
   const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
 
-  try {
+  let data: any = null;
+
+  // On native Android/iOS Capacitor app, use native CapacitorHttp to bypass webview CORS checks completely
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const httpRes = await CapacitorHttp.get({
+        url: streamUrlReq,
+        headers: { 'Accept': 'application/json' },
+      });
+      if (httpRes.status === 200 && httpRes.data) {
+        data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  if (!data) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 9500);
 
-    let res: Response;
     try {
-      res = await fetch(streamUrlReq, {
+      const res = await fetch(streamUrlReq, {
         headers: { 'Accept': 'application/json' },
         signal: controller.signal,
       });
+      if (res.ok) {
+        data = await res.json();
+      }
+    } catch {
+      // Fallback
     } finally {
       clearTimeout(timeoutId);
     }
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.stream) {
-        const streamInfo = data.stream;
-        const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
+  if (data && data.success && data.stream) {
+    const streamInfo = data.stream;
+    const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-        // STRICT FILTER: Keep ONLY Server 1, Server 2, and Server 3
-        let targetServers = rawServers.filter(s =>
-          s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
-        );
+    // STRICT FILTER: Keep ONLY Server 1, Server 2, and Server 3
+    let targetServers = rawServers.filter(s =>
+      s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
+    );
 
-        if (targetServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
-          targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
-        }
+    if (targetServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
+      targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
+    }
 
-        const availableServers: AvailableServerOption[] = targetServers.map(srv => ({
-          name: srv.name,
-          type: language,
-          linkId: srv.url,
-        }));
+    const availableServers: AvailableServerOption[] = targetServers.map(srv => ({
+      name: srv.name,
+      type: language,
+      linkId: srv.url,
+    }));
 
-        let selectedServer = targetServers[0];
-        if (serverName) {
-          const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
-          if (matched) {
-            selectedServer = matched;
-          }
-        }
-
-        const selectedUrl = selectedServer?.url || streamInfo.streamLink || streamInfo.file;
-
-        if (selectedUrl) {
-          return {
-            status: 'available',
-            source: {
-              provider,
-              url: selectedUrl,
-              language,
-              resolution,
-              isEmbeddable: true,
-              external: false,
-              skipData: { intro: [0, 0], outro: [0, 0] },
-              availableServers,
-              availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
-              selectedServerName: selectedServer?.name || 'Server 1',
-              isDubAvailable: true,
-              isFallback: false,
-              requestedLanguage: language,
-              actualLanguage: language,
-            },
-          };
-        }
+    let selectedServer = targetServers[0];
+    if (serverName) {
+      const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
+      if (matched) {
+        selectedServer = matched;
       }
     }
 
-    // Direct fallback embed
-    const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
-    return {
-      status: 'available',
-      source: directSource,
-    };
-  } catch (_err) {
-    const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
-    return {
-      status: 'available',
-      source: directSource,
-    };
+    const selectedUrl = selectedServer?.url || streamInfo.streamLink || streamInfo.file;
+
+    if (selectedUrl) {
+      return {
+        status: 'available',
+        source: {
+          provider,
+          url: selectedUrl,
+          language,
+          resolution,
+          isEmbeddable: true,
+          external: false,
+          skipData: { intro: [0, 0], outro: [0, 0] },
+          availableServers,
+          availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
+          selectedServerName: selectedServer?.name || 'Server 1',
+          isDubAvailable: true,
+          isFallback: false,
+          requestedLanguage: language,
+          actualLanguage: language,
+        },
+      };
+    }
   }
+
+  // Direct fallback embed
+  const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
+  return {
+    status: 'available',
+    source: directSource,
+  };
 }
