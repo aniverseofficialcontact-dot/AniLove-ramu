@@ -1,7 +1,7 @@
 import { Anime, StreamServerId } from '../types';
 import { API_BASE, apiFetch, apiUrl } from './api';
 
-export type StreamLanguage = 'SUB' | 'DUB' | 'HIN';
+export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'KAN' | 'BEN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p';
 
 export interface LanguageOption {
@@ -16,6 +16,11 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'SUB', label: 'Japanese (Sub)', nativeLabel: '日本語', flag: '🇯🇵', short: 'JAP/SUB' },
   { code: 'DUB', label: 'English Dub', nativeLabel: 'English', flag: '🇺🇸', short: 'ENG/DUB' },
   { code: 'HIN', label: 'Hindi Dub', nativeLabel: 'हिन्दी', flag: '🇮🇳', short: 'HINDI' },
+  { code: 'TAM', label: 'Tamil Dub', nativeLabel: 'தமிழ்', flag: '🇮🇳', short: 'TAMIL' },
+  { code: 'TEL', label: 'Telugu Dub', nativeLabel: 'తెలుగు', flag: '🇮🇳', short: 'TELUGU' },
+  { code: 'MAL', label: 'Malayalam Dub', nativeLabel: 'മലയാളം', flag: '🇮🇳', short: 'MALAYALAM' },
+  { code: 'KAN', label: 'Kannada Dub', nativeLabel: 'கன்னட', flag: '🇮🇳', short: 'KANNADA' },
+  { code: 'BEN', label: 'Bengali Dub', nativeLabel: 'বাংলা', flag: '🇮🇳', short: 'BENGALI' },
 ];
 
 export interface StreamProvider {
@@ -85,7 +90,7 @@ const ANIME_WORLD_V1: StreamProvider = {
   label: 'AnimeWorld Ultra',
   category: 'official',
   description: 'Custom AnimeWorld India v1 PHP Stream API with Redis caching & multi-server failover.',
-  supportedLanguages: ['SUB', 'DUB', 'HIN'],
+  supportedLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
   tag: 'v1 Ultra',
   apiEndpoint: '/api/anime-world-india/v1/stream',
 };
@@ -254,7 +259,7 @@ export async function resolveEpisodeSource({
               external: false,
               skipData: { intro: [0, 0], outro: [0, 0] },
               availableServers,
-              availableLanguages: ['SUB', 'DUB', 'HIN'],
+              availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
               selectedServerName,
               isDubAvailable: true,
               isFallback: false,
