@@ -1576,15 +1576,10 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (onPlayStream) {
-                                  onClose();
-                                  onPlayStream(currentAnime, ep.number, 0);
-                                } else {
-                                  setPlayingEpisode(ep.number);
-                                  setTimeout(() => {
-                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }, 100);
-                                }
+                                setPlayingEpisode(ep.number);
+                                setTimeout(() => {
+                                  playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
                               }}
                               className="group relative flex flex-col bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-200 cursor-pointer shadow-md"
                             >
@@ -1680,15 +1675,10 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (onPlayStream) {
-                                  onClose();
-                                  onPlayStream(currentAnime, ep.number, 0);
-                                } else {
-                                  setPlayingEpisode(ep.number);
-                                  setTimeout(() => {
-                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }, 100);
-                                }
+                                setPlayingEpisode(ep.number);
+                                setTimeout(() => {
+                                  playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
                               }}
                               className="group flex items-center justify-between gap-4 p-3 rounded-2xl bg-[#101424] hover:bg-[#151a30] border border-slate-800/80 hover:border-slate-700 transition cursor-pointer select-none"
                             >

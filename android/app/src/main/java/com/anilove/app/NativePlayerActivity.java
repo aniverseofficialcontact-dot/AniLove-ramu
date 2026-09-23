@@ -124,6 +124,10 @@ public class NativePlayerActivity extends AppCompatActivity {
     private float currentPermanentSpeed = 1.0f;
     private boolean isVolumeBoosted = false;
     private boolean isSubtitlesEnabled = true;
+
+    // Quality & Audio state
+    private String currentSelectedQuality = "Auto";
+    private String currentSelectedAudio = "DUB";
     
     // Caption State
     private String bgOpacity = "0";
@@ -231,6 +235,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (subtitleLang == null || subtitleLang.isEmpty()) subtitleLang = "English";
         String audio = intent.getStringExtra("audio");
         if (audio == null || audio.isEmpty()) audio = "DUB";
+        currentSelectedAudio = audio.toUpperCase();
 
         TextView videoTitleView = findViewById(R.id.video_title);
         TextView portraitAnimeTitle = findViewById(R.id.portrait_anime_title);
@@ -240,7 +245,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (videoTitleView != null) videoTitleView.setText(animeTitle + " - EP " + epNum);
         if (portraitAnimeTitle != null) portraitAnimeTitle.setText(animeTitle);
         if (portraitEpSubtitle != null) portraitEpSubtitle.setText("Episode " + epNum);
-        if (portraitBadgeAudio != null) portraitBadgeAudio.setText(audio.toUpperCase());
+        if (portraitBadgeAudio != null) portraitBadgeAudio.setText(currentSelectedAudio);
     }
 
     private int currentY = 0;
@@ -415,7 +420,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         btnSkipIntro.setBackground(border);
 
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override public boolean onSingleTapConfirmed(MotionEvent e) { toggleControlsVisibility(); return true; }
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) { 
+                toggleControlsVisibility(); 
+                return true; 
+            }
             @Override public boolean onDoubleTap(MotionEvent e) {
                 float screenWidthPx = getResources().getDisplayMetrics().widthPixels;
                 if (e.getX() < screenWidthPx / 2) { seekVideo(-10); showSeekIndicator(false); }
@@ -464,11 +472,17 @@ public class NativePlayerActivity extends AppCompatActivity {
             return gestureDetector.onTouchEvent(event);
         };
 
+        // Set touch listener on entire background canvas & views so single tap ALWAYS toggles controls
         View touchWall = findViewById(R.id.touch_wall);
         if (touchWall != null) {
-            touchWall.setVisibility(View.GONE);
-            touchWall.setClickable(false);
-            touchWall.setFocusable(false);
+            touchWall.setVisibility(View.VISIBLE);
+            touchWall.setBackgroundColor(Color.TRANSPARENT);
+            touchWall.setOnTouchListener(touchListener);
+        }
+        
+        View videoRoot = findViewById(R.id.video_root_container);
+        if (videoRoot != null) {
+            videoRoot.setOnTouchListener(touchListener);
         }
 
         controlsOverlay.setOnTouchListener(touchListener);
@@ -672,20 +686,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 exoPlayer.setMediaSource(progSource);
             }
 
-            // Audio track preference
-            if (audioLang != null) {
-                TrackSelectionParameters.Builder trackParams = exoPlayer.getTrackSelectionParameters().buildUpon();
-                String al = audioLang.toLowerCase();
-                if (al.contains("dub") || al.contains("eng")) trackParams.setPreferredAudioLanguage("en");
-                else if (al.contains("sub") || al.contains("jpn") || al.contains("jap")) trackParams.setPreferredAudioLanguage("ja");
-                else if (al.contains("hin")) trackParams.setPreferredAudioLanguage("hi");
-                else if (al.contains("tam")) trackParams.setPreferredAudioLanguage("ta");
-                else if (al.contains("tel")) trackParams.setPreferredAudioLanguage("te");
-                else if (al.contains("mal")) trackParams.setPreferredAudioLanguage("ml");
-                else if (al.contains("kan")) trackParams.setPreferredAudioLanguage("kn");
-                else if (al.contains("ben")) trackParams.setPreferredAudioLanguage("bn");
-                exoPlayer.setTrackSelectionParameters(trackParams.build());
-            }
+            // Quality & Audio track preference
+            setVideoQuality(currentSelectedQuality);
+            setAudioLanguage(audioLang != null ? audioLang : currentSelectedAudio);
 
             if (startTime > 0) {
                 exoPlayer.seekTo(startTime * 1000L);
@@ -729,6 +732,54 @@ public class NativePlayerActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e("AniLove", "Error setting up ExoPlayer online", e);
         }
+    }
+
+    private void setVideoQuality(String quality) {
+        currentSelectedQuality = quality;
+        if (exoPlayer != null) {
+            TrackSelectionParameters.Builder builder = exoPlayer.getTrackSelectionParameters().buildUpon();
+            if (quality.equalsIgnoreCase("Auto")) {
+                builder.clearVideoSizeConstraints();
+                builder.setMaxVideoBitrate(Integer.MAX_VALUE);
+            } else if (quality.equalsIgnoreCase("1080p")) {
+                builder.setMaxVideoSize(1920, 1080).setMinVideoSize(1920, 1080);
+            } else if (quality.equalsIgnoreCase("720p")) {
+                builder.setMaxVideoSize(1280, 720).setMinVideoSize(1280, 720);
+            } else if (quality.equalsIgnoreCase("480p")) {
+                builder.setMaxVideoSize(854, 480).setMinVideoSize(854, 480);
+            } else if (quality.equalsIgnoreCase("360p")) {
+                builder.setMaxVideoSize(640, 360).setMinVideoSize(640, 360);
+            }
+            exoPlayer.setTrackSelectionParameters(builder.build());
+        }
+    }
+
+    private void setAudioLanguage(String langCode) {
+        currentSelectedAudio = langCode;
+        getIntent().putExtra("audio", langCode);
+        if (exoPlayer != null) {
+            TrackSelectionParameters.Builder builder = exoPlayer.getTrackSelectionParameters().buildUpon();
+            if (langCode.equalsIgnoreCase("DUB") || langCode.equalsIgnoreCase("ENG") || langCode.equalsIgnoreCase("English")) {
+                builder.setPreferredAudioLanguage("en");
+            } else if (langCode.equalsIgnoreCase("SUB") || langCode.equalsIgnoreCase("JAP") || langCode.equalsIgnoreCase("JPN") || langCode.equalsIgnoreCase("Japanese")) {
+                builder.setPreferredAudioLanguage("ja");
+            } else if (langCode.equalsIgnoreCase("HIN") || langCode.equalsIgnoreCase("Hindi")) {
+                builder.setPreferredAudioLanguage("hi");
+            } else if (langCode.equalsIgnoreCase("TAM") || langCode.equalsIgnoreCase("Tamil")) {
+                builder.setPreferredAudioLanguage("ta");
+            } else if (langCode.equalsIgnoreCase("TEL") || langCode.equalsIgnoreCase("Telugu")) {
+                builder.setPreferredAudioLanguage("te");
+            } else if (langCode.equalsIgnoreCase("MAL") || langCode.equalsIgnoreCase("Malayalam")) {
+                builder.setPreferredAudioLanguage("ml");
+            } else if (langCode.equalsIgnoreCase("KAN") || langCode.equalsIgnoreCase("Kannada")) {
+                builder.setPreferredAudioLanguage("kn");
+            } else if (langCode.equalsIgnoreCase("BEN") || langCode.equalsIgnoreCase("Bengali")) {
+                builder.setPreferredAudioLanguage("bn");
+            }
+            exoPlayer.setTrackSelectionParameters(builder.build());
+        }
+        TextView portraitBadgeAudio = findViewById(R.id.portrait_badge_audio);
+        if (portraitBadgeAudio != null) portraitBadgeAudio.setText(langCode.toUpperCase());
     }
 
     public void updatePosition(int y) {
@@ -879,24 +930,93 @@ public class NativePlayerActivity extends AppCompatActivity {
         dialog.setContentView(view);
         BottomSheetBehavior behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
-        switchBoost.setChecked(isVolumeBoosted); 
-        switchBoost.setOnCheckedChangeListener((b, checked) -> {
-            isVolumeBoosted = checked;
-            applyVolumeBoost(checked);
-        });
-        TextView[] speedBtns = { view.findViewById(R.id.speed_btn_05), view.findViewById(R.id.speed_btn_1), view.findViewById(R.id.speed_btn_125), view.findViewById(R.id.speed_btn_15), view.findViewById(R.id.speed_btn_2) };
+
+        // 1. Video Quality Selection
+        TextView[] qualityBtns = {
+            view.findViewById(R.id.quality_btn_auto),
+            view.findViewById(R.id.quality_btn_1080),
+            view.findViewById(R.id.quality_btn_720),
+            view.findViewById(R.id.quality_btn_480),
+            view.findViewById(R.id.quality_btn_360)
+        };
+        String[] qualities = {"Auto", "1080p", "720p", "480p", "360p"};
+        for (int i = 0; i < qualityBtns.length; i++) {
+            final String qVal = qualities[i];
+            final TextView btn = qualityBtns[i];
+            if (btn != null) {
+                highlightButton(btn, currentSelectedQuality.equalsIgnoreCase(qVal));
+                btn.setOnClickListener(v -> {
+                    setVideoQuality(qVal);
+                    for (TextView b : qualityBtns) if (b != null) highlightButton(b, b == btn);
+                });
+            }
+        }
+
+        // 2. Audio Language Selection
+        TextView[] audioBtns = {
+            view.findViewById(R.id.audio_btn_sub),
+            view.findViewById(R.id.audio_btn_dub),
+            view.findViewById(R.id.audio_btn_hin),
+            view.findViewById(R.id.audio_btn_tam),
+            view.findViewById(R.id.audio_btn_tel),
+            view.findViewById(R.id.audio_btn_mal),
+            view.findViewById(R.id.audio_btn_kan),
+            view.findViewById(R.id.audio_btn_ben)
+        };
+        String[] audioCodes = {"SUB", "DUB", "HIN", "TAM", "TEL", "MAL", "KAN", "BEN"};
+        for (int i = 0; i < audioBtns.length; i++) {
+            final String aCode = audioCodes[i];
+            final TextView btn = audioBtns[i];
+            if (btn != null) {
+                highlightButton(btn, currentSelectedAudio.equalsIgnoreCase(aCode));
+                btn.setOnClickListener(v -> {
+                    setAudioLanguage(aCode);
+                    for (TextView b : audioBtns) if (b != null) highlightButton(b, b == btn);
+                });
+            }
+        }
+
+        // 3. Playback Speed Selection
+        TextView[] speedBtns = {
+            view.findViewById(R.id.speed_btn_05),
+            view.findViewById(R.id.speed_btn_1),
+            view.findViewById(R.id.speed_btn_125),
+            view.findViewById(R.id.speed_btn_15),
+            view.findViewById(R.id.speed_btn_2)
+        };
         float[] speeds = {0.5f, 1.0f, 1.25f, 1.5f, 2.0f};
         for (int i = 0; i < speedBtns.length; i++) { 
             final float speedVal = speeds[i]; 
             final TextView btn = speedBtns[i]; 
-            highlightButton(btn, currentPermanentSpeed == speedVal); 
-            btn.setOnClickListener(v -> { 
-                currentPermanentSpeed = speedVal; 
-                setPlaybackSpeed(speedVal, true); 
-                for (TextView b : speedBtns) highlightButton(b, b == btn); 
-            }); 
+            if (btn != null) {
+                highlightButton(btn, currentPermanentSpeed == speedVal); 
+                btn.setOnClickListener(v -> { 
+                    currentPermanentSpeed = speedVal; 
+                    setPlaybackSpeed(speedVal, true); 
+                    for (TextView b : speedBtns) if (b != null) highlightButton(b, b == btn); 
+                });
+            }
         }
+
+        // 4. Captions Customizer Button
+        View btnOpenCaptions = view.findViewById(R.id.btn_open_captions_sheet);
+        if (btnOpenCaptions != null) {
+            btnOpenCaptions.setOnClickListener(v -> {
+                dialog.dismiss();
+                showCaptionMenu();
+            });
+        }
+
+        // 5. Volume Boost Switch
+        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
+        if (switchBoost != null) {
+            switchBoost.setChecked(isVolumeBoosted); 
+            switchBoost.setOnCheckedChangeListener((b, checked) -> {
+                isVolumeBoosted = checked;
+                applyVolumeBoost(checked);
+            });
+        }
+
         dialog.show();
     }
 
@@ -1222,6 +1342,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         playerWebView.setVisibility(View.GONE);
 
         String audio = getIntent().getStringExtra("audio");
+        if (audio != null && !audio.isEmpty()) currentSelectedAudio = audio.toUpperCase();
 
         // 1. If direct stream URL, play directly in ExoPlayer without loading WebView
         if (url.contains(".m3u8") || url.contains(".mp4") || url.contains("/cdn/hls/") || url.contains("/hls/")) {
@@ -1230,7 +1351,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
                 headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
             } catch (Exception ignored) {}
-            setupExoPlayerOnline(url, subtitleUrl, audio, headers);
+            setupExoPlayerOnline(url, subtitleUrl, currentSelectedAudio, headers);
             return;
         }
 
@@ -1256,7 +1377,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
                             headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
                         } catch (Exception ignored) {}
-                        setupExoPlayerOnline(streamUrl, (subUrl != null && !subUrl.isEmpty()) ? subUrl : subtitleUrl, audio, headers);
+                        setupExoPlayerOnline(streamUrl, (subUrl != null && !subUrl.isEmpty()) ? subUrl : subtitleUrl, currentSelectedAudio, headers);
                         try { playerWebView.stopLoading(); } catch (Exception ignored) {}
                     });
                 }
@@ -1295,7 +1416,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
                             headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
                         } catch (Exception ignored) {}
-                        setupExoPlayerOnline(reqUrl, subtitleUrl, audioIntent, headers);
+                        setupExoPlayerOnline(reqUrl, subtitleUrl, currentSelectedAudio, headers);
                         try { playerWebView.stopLoading(); } catch (Exception ignored) {}
                     });
                 }

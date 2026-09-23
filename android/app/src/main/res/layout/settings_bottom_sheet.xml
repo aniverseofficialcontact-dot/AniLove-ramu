@@ -18,9 +18,74 @@
             android:textColor="@android:color/white"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="20dp" />
 
-        <!-- Video Speed -->
+        <!-- 1. Video Quality -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Video Quality"
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.1" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:id="@+id/quality_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView android:id="@+id/quality_btn_auto" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="64dp" android:text="Auto" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/quality_btn_1080" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="64dp" android:text="1080p" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/quality_btn_720" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="64dp" android:text="720p" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/quality_btn_480" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="64dp" android:text="480p" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/quality_btn_360" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="64dp" android:text="360p" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:textSize="12sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- 2. Audio Language -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Audio Language"
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.1" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:id="@+id/audio_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView android:id="@+id/audio_btn_sub" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="JAP (Sub)" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_dub" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="ENG (Dub)" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_hin" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Hindi" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_tam" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Tamil" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_tel" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Telugu" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_mal" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Malayalam" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_kan" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Kannada" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:layout_marginEnd="8dp" android:textSize="12sp" />
+                <TextView android:id="@+id/audio_btn_ben" android:layout_width="wrap_content" android:layout_height="32dp" android:minWidth="72dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="Bengali" android:gravity="center" android:textColor="@android:color/white" android:background="@drawable/speed_btn_bg" android:clickable="true" android:focusable="true" android:textSize="12sp" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- 3. Playback Speed -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -35,7 +100,7 @@
             android:layout_height="wrap_content"
             android:scrollbars="none"
             android:layout_marginTop="8dp"
-            android:layout_marginBottom="24dp">
+            android:layout_marginBottom="20dp">
 
             <LinearLayout
                 android:id="@+id/speed_container"
@@ -51,12 +116,49 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Volume Booster -->
+        <!-- 4. Subtitles Customizer Link -->
+        <RelativeLayout
+            android:id="@+id/btn_open_captions_sheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="4dp">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Subtitles / Captions"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Change language &amp; customize appearance"
+                    android:textColor="#888888"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:src="@android:drawable/ic_media_play"
+                app:tint="#888888" />
+        </RelativeLayout>
+
+        <!-- 5. Volume Booster -->
         <RelativeLayout
             android:id="@+id/container_volume_boost"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
+            android:layout_marginBottom="12dp"
             android:padding="4dp">
             <LinearLayout
                 android:layout_width="wrap_content"
