@@ -10,10 +10,11 @@ async function startServer() {
   // Enable CORS for Android APK WebViews (capacitor://localhost, http://localhost) & Web Clients
   app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
     allowedHeaders: ['*'],
     exposedHeaders: ['Content-Range', 'Content-Length', 'Accept-Ranges', 'Content-Disposition'],
   }));
+  app.options('*', cors());
 
   // Increase payload limit for sync, library backup, and cards data (default is 100kb)
   app.use(express.json({ limit: '50mb' }));
