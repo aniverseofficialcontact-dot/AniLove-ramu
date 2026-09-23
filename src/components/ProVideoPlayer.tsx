@@ -3,6 +3,7 @@ import {
   RefreshCw,
   AlertCircle,
   Server,
+  Play,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';
@@ -608,16 +609,72 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         }`}
       >
         {streamSource?.url && streamStatus !== 'error' ? (
-          <iframe
-            key={`${streamSource.url}-${refreshKey}`}
-            ref={iframeRef}
-            src={streamSource.url}
-            title={`${displayTitle} - Episode ${episodeNumber}`}
-            className="w-full h-full border-0 pointer-events-auto block"
-            allowFullScreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            onLoad={() => setStreamStatus('ready')}
-          />
+          Capacitor.isNativePlatform() ? (
+            <div 
+              onClick={() => {
+                if (streamSource?.url) {
+                  const currentEpNum = Number(episodeNumber);
+                  const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+                  NativePlayer.play({
+                    url: streamSource.url,
+                    subtitleUrl: streamSource.subtitleUrl,
+                    subtitleLang: streamSource.subtitleLang,
+                    title: `${dTitle} - Ep ${episodeNumber}`,
+                    hasNext: episodesList.length > episodeNumber,
+                    hasPrev: episodeNumber > 1,
+                    startFullscreen: false,
+                    yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
+                    anilistId: anime.id,
+                    episodeNumber: Number(episodeNumber),
+                    audio: audioMode,
+                    advancePlayer: settings?.advancePlayerEnabled ?? false,
+                    startTime: initialTime || 0,
+                  }).catch(() => {});
+                }
+              }}
+              className="w-full h-full relative flex flex-col items-center justify-center bg-black cursor-pointer group overflow-hidden"
+            >
+              {coverUrl && (
+                <img
+                  src={coverUrl}
+                  alt={displayTitle}
+                  className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-sm scale-105 transition duration-500 group-hover:scale-110"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/85" />
+              <div className="relative z-10 flex flex-col items-center justify-center text-center p-4 space-y-2.5">
+                <div className="w-14 h-14 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl shadow-indigo-600/40 group-hover:scale-110 transition duration-300">
+                  <Play className="w-7 h-7 fill-current ml-1" />
+                </div>
+                <div className="text-sm font-bold text-white tracking-wide truncate max-w-[280px]">
+                  {displayTitle}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-neutral-300">
+                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 font-semibold text-indigo-300">
+                    Episode {episodeNumber}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 font-semibold text-amber-300">
+                    {audioMode}
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-400 font-medium pt-1">
+                  Playing in Native Player • Tap to resume controls
+                </div>
+              </div>
+            </div>
+          ) : (
+            <iframe
+              key={`${streamSource.url}-${refreshKey}`}
+              ref={iframeRef}
+              src={streamSource.url}
+              title={`${displayTitle} - Episode ${episodeNumber}`}
+              className="w-full h-full border-0 pointer-events-auto block"
+              allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              onLoad={() => setStreamStatus('ready')}
+            />
+          )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-black/90 p-4 text-center">
             {streamStatus === 'loading' ? (

@@ -71,13 +71,19 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
+import androidx.media3.ui.CaptionStyleCompat;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.SubtitleView;
 
 public class NativePlayerActivity extends AppCompatActivity {
     public interface PlayerNavigationListener {
@@ -248,122 +254,75 @@ public class NativePlayerActivity extends AppCompatActivity {
             currentY = intent.getIntExtra("yOffset", 0);
         }
         
-        final Window window = getWindow();
-        final View decorView = window.getDecorView();
-        
-        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        
-        decorView.post(() -> {
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, decorView);
-            if (controller != null) {
-                if (isFullscreenMode) {
-                    controller.hide(WindowInsetsCompat.Type.statusBars());
-                    controller.hide(WindowInsetsCompat.Type.navigationBars());
-                    window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                } else {
-                    controller.show(WindowInsetsCompat.Type.statusBars());
-                    controller.setAppearanceLightStatusBars(false);
-                    window.setStatusBarColor(Color.BLACK);
-                    controller.show(WindowInsetsCompat.Type.navigationBars());
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                }
-                controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }
-        });
-
-        WindowManager.LayoutParams params = window.getAttributes();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-        }
+        final View statusBarFiller = findViewById(R.id.status_bar_filler);
+        final View bottomGapFiller = findViewById(R.id.bottom_gap_filler);
+        final View portraitBottom = findViewById(R.id.portrait_bottom_container);
+        final View videoRoot = findViewById(R.id.video_root_container);
+        final View topBar = findViewById(R.id.top_bar);
 
         if (isFullscreenMode) {
-            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            
+            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
 
-            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
-
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            WindowManager.LayoutParams params = getWindow().getAttributes();
             params.gravity = Gravity.FILL;
             params.x = 0;
             params.y = 0;
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            getWindow().setAttributes(params);
 
-            decorView.post(() -> {
-                View videoRoot = findViewById(R.id.video_root_container);
-                View portraitBottom = findViewById(R.id.portrait_bottom_container);
-                View statusBarFiller = findViewById(R.id.status_bar_filler);
-                View topBar = findViewById(R.id.top_bar);
-                
-                if (videoRoot != null) {
-                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                    videoRoot.setLayoutParams(lp);
-                }
-                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
-                if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
-                if (topBar != null) {
-                    topBar.setPadding(topBar.getPaddingLeft(), 0, topBar.getPaddingRight(), topBar.getPaddingBottom());
-                }
-            });
+            if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
+            if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
+            if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
+            if (topBar != null) topBar.setVisibility(View.VISIBLE);
+            
+            if (videoRoot != null) {
+                ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                videoRoot.setLayoutParams(lp);
+            }
         } else {
-            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
+            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            controller.show(WindowInsetsCompat.Type.systemBars());
 
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            WindowManager.LayoutParams params = getWindow().getAttributes();
             params.gravity = Gravity.FILL;
             params.x = 0;
             params.y = 0;
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            getWindow().setAttributes(params);
 
-            int physicalWidth = getPhysicalScreenWidth();
-            int videoHeight = (int) (physicalWidth * 0.5625);
+            if (statusBarFiller != null) statusBarFiller.setVisibility(View.VISIBLE);
+            if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
+            if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
+            if (topBar != null) topBar.setVisibility(View.VISIBLE);
             
-            int statusBarHeight = 0;
-            int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
-            
-            final int finalStatusBarHeight = statusBarHeight;
-            decorView.post(() -> {
-                View videoRoot = findViewById(R.id.video_root_container);
-                View portraitBottom = findViewById(R.id.portrait_bottom_container);
-                View statusBarFiller = findViewById(R.id.status_bar_filler);
-                View topBar = findViewById(R.id.top_bar);
-                
-                if (videoRoot != null) {
-                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = videoHeight + finalStatusBarHeight;
-                    videoRoot.setLayoutParams(lp);
-                }
-                if (portraitBottom != null) portraitBottom.setVisibility(isOfflineMode ? View.VISIBLE : View.GONE);
-                if (statusBarFiller != null) {
-                    statusBarFiller.setVisibility(View.VISIBLE);
-                    ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
-                    lp.height = finalStatusBarHeight;
-                    statusBarFiller.setLayoutParams(lp);
-                }
-                if (topBar != null) {
-                    topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
-                }
-            });
+            if (videoRoot != null) {
+                ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                int screenW = getPhysicalScreenWidth();
+                lp.height = (int) (screenW * 9.0f / 16.0f);
+                videoRoot.setLayoutParams(lp);
+            }
         }
-        
-        window.setAttributes(params);
     }
 
     private void toggleFullscreenInPlace() {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            isFullscreenMode = !isFullscreenMode;
-            Intent intent = getIntent();
-            intent.putExtra("startFullscreen", isFullscreenMode);
-            applyWindowSettings(intent);
-        });
+        isFullscreenMode = !isFullscreenMode;
+        getIntent().putExtra("startFullscreen", isFullscreenMode);
+        applyWindowSettings(getIntent());
     }
 
     @Override
@@ -386,8 +345,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         // UI Initialization
         playerWebView = findViewById(R.id.player_webview);
         playerWebView.setBackgroundColor(Color.BLACK);
+        playerWebView.setVisibility(View.GONE); // ALWAYS GONE - Background extractor only
 
         exoPlayerView = findViewById(R.id.player_exoplayer);
+        exoPlayerView.setVisibility(View.VISIBLE); // ALWAYS VISIBLE - Pure native video playback
         
         loadingProgress = findViewById(R.id.loading_progress);
         controlsOverlay = findViewById(R.id.controls_overlay);
@@ -525,14 +486,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             @Override public void onStopTrackingTouch(SeekBar s) { 
                 isDragging = false; 
-                if (isOfflineMode && exoPlayer != null) {
+                if (exoPlayer != null) {
                     long duration = exoPlayer.getDuration();
                     if (duration > 0 && duration != C.TIME_UNSET) {
                         long targetMs = s.getProgress() * 1000L;
                         exoPlayer.seekTo(Math.min(targetMs, duration));
                     }
-                } else {
-                    sendVideoCommand("action: 'seekTo', value: " + s.getProgress()); 
                 }
                 resetHideTimer(); 
                 scrubberContainer.setVisibility(View.GONE);
@@ -540,12 +499,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         if (isOfflineMode) {
-            playerWebView.setVisibility(View.GONE);
-            exoPlayerView.setVisibility(View.VISIBLE);
-            setupExoPlayer(getIntent().getStringExtra("localFilePath"), getIntent().getStringExtra("localSubPath"));
+            setupExoPlayerLocal(getIntent().getStringExtra("localFilePath"), getIntent().getStringExtra("localSubPath"));
         } else {
-            exoPlayerView.setVisibility(View.GONE);
-            playerWebView.setVisibility(View.VISIBLE);
             setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
         }
         startUpdateLoop();
@@ -579,7 +534,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
-    private void setupExoPlayer(String videoPath, String subPath) {
+    private void setupExoPlayerLocal(String videoPath, String subPath) {
         if (videoPath == null || videoPath.isEmpty()) return;
         try {
             if (exoPlayer != null) {
@@ -629,6 +584,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (startTime > 0) {
                 exoPlayer.seekTo(startTime * 1000L);
             }
+            applyCaptionStyle();
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);
             loadingProgress.setVisibility(View.GONE);
@@ -647,20 +603,131 @@ public class NativePlayerActivity extends AppCompatActivity {
                         loadingProgress.setVisibility(View.VISIBLE);
                     } else if (playbackState == Player.STATE_READY) {
                         loadingProgress.setVisibility(View.GONE);
+                        isPlaying = exoPlayer.isPlaying();
+                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
                     } else if (playbackState == Player.STATE_ENDED) {
                         isPlaying = false;
                         btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        navigateEpisode(true);
                     }
                 }
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
-                    Log.e("AniLove", "ExoPlayer error: " + error.getMessage());
+                    Log.e("AniLove", "ExoPlayer local error: " + error.getMessage(), error);
                     loadingProgress.setVisibility(View.GONE);
                 }
             });
         } catch (Exception e) {
-            Log.e("AniLove", "Error setting up ExoPlayer", e);
+            Log.e("AniLove", "Error setting up ExoPlayer local", e);
+        }
+    }
+
+    private void setupExoPlayerOnline(String streamUrl, String subUrl, String audioLang, Map<String, String> requestHeaders) {
+        if (streamUrl == null || streamUrl.isEmpty()) return;
+        try {
+            if (exoPlayer != null) {
+                exoPlayer.stop();
+                exoPlayer.release();
+                exoPlayer = null;
+            }
+
+            exoPlayer = new ExoPlayer.Builder(this).build();
+            exoPlayerView.setPlayer(exoPlayer);
+
+            DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(15000);
+
+            if (requestHeaders != null && !requestHeaders.isEmpty()) {
+                httpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
+            }
+
+            DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(this, httpDataSourceFactory);
+
+            MediaItem.Builder mediaBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(streamUrl));
+
+            String effectiveSub = (subUrl != null && !subUrl.isEmpty()) ? subUrl : subtitleUrl;
+            if (effectiveSub != null && !effectiveSub.isEmpty()) {
+                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(effectiveSub))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage("en")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build();
+                mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
+            }
+
+            if (streamUrl.contains(".m3u8") || streamUrl.contains("/hls/") || streamUrl.contains("m3u8")) {
+                mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+                HlsMediaSource hlsSource = new HlsMediaSource.Factory(dataSourceFactory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(mediaBuilder.build());
+                exoPlayer.setMediaSource(hlsSource);
+            } else {
+                ProgressiveMediaSource progSource = new ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaBuilder.build());
+                exoPlayer.setMediaSource(progSource);
+            }
+
+            // Audio track preference
+            if (audioLang != null) {
+                TrackSelectionParameters.Builder trackParams = exoPlayer.getTrackSelectionParameters().buildUpon();
+                String al = audioLang.toLowerCase();
+                if (al.contains("dub") || al.contains("eng")) trackParams.setPreferredAudioLanguage("en");
+                else if (al.contains("sub") || al.contains("jpn") || al.contains("jap")) trackParams.setPreferredAudioLanguage("ja");
+                else if (al.contains("hin")) trackParams.setPreferredAudioLanguage("hi");
+                else if (al.contains("tam")) trackParams.setPreferredAudioLanguage("ta");
+                else if (al.contains("tel")) trackParams.setPreferredAudioLanguage("te");
+                else if (al.contains("mal")) trackParams.setPreferredAudioLanguage("ml");
+                else if (al.contains("kan")) trackParams.setPreferredAudioLanguage("kn");
+                else if (al.contains("ben")) trackParams.setPreferredAudioLanguage("bn");
+                exoPlayer.setTrackSelectionParameters(trackParams.build());
+            }
+
+            if (startTime > 0) {
+                exoPlayer.seekTo(startTime * 1000L);
+            }
+
+            applyCaptionStyle();
+            applyVolumeBoost(isVolumeBoosted);
+            exoPlayer.prepare();
+            exoPlayer.setPlayWhenReady(true);
+            loadingProgress.setVisibility(View.GONE);
+
+            exoPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onIsPlayingChanged(boolean playing) {
+                    isPlaying = playing;
+                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                    if (isPlaying) resetHideTimer(); else stopHideTimer();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_BUFFERING) {
+                        loadingProgress.setVisibility(View.VISIBLE);
+                    } else if (playbackState == Player.STATE_READY) {
+                        loadingProgress.setVisibility(View.GONE);
+                        isPlaying = exoPlayer.isPlaying();
+                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false;
+                        btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        navigateEpisode(true);
+                    }
+                }
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    Log.e("AniLove", "ExoPlayer online error: " + error.getMessage(), error);
+                    loadingProgress.setVisibility(View.GONE);
+                }
+            });
+        } catch (Exception e) {
+            Log.e("AniLove", "Error setting up ExoPlayer online", e);
         }
     }
 
@@ -698,7 +765,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void togglePlayPause() {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             if (exoPlayer.isPlaying()) {
                 exoPlayer.pause();
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
@@ -709,19 +776,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 resetHideTimer();
             }
             isPlaying = exoPlayer.isPlaying();
-            return;
         }
-
-        if (isPlaying) {
-            sendVideoCommand("action: 'pause'");
-            btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
-            stopHideTimer();
-        } else {
-            sendVideoCommand("action: 'play'");
-            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-            resetHideTimer();
-        }
-        isPlaying = !isPlaying;
     }
 
     private void toggleControlsVisibility() {
@@ -767,9 +822,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                     PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder()
                             .setAspectRatio(new Rational(16, 9));
 
-                    if (playerWebView != null) {
+                    if (exoPlayerView != null) {
                         Rect visibleRect = new Rect();
-                        playerWebView.getGlobalVisibleRect(visibleRect);
+                        exoPlayerView.getGlobalVisibleRect(visibleRect);
                         if (visibleRect.width() > 0 && visibleRect.height() > 0) {
                             pipBuilder.setSourceRectHint(visibleRect);
                         }
@@ -846,11 +901,26 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void applyVolumeBoost(boolean boost) {
-        sendVideoCommand("action: 'volumeBoost', value: " + (boost ? "true" : "false"));
+        if (exoPlayer != null) {
+            exoPlayer.setVolume(boost ? 2.5f : 1.0f);
+        }
     }
 
     private void toggleWebSubtitles(boolean show) {
-        sendVideoCommand("action: 'toggleSubtitles', value: " + (show ? "true" : "false"));
+        isSubtitlesEnabled = show;
+        if (exoPlayer != null) {
+            TrackSelectionParameters.Builder trackParams = exoPlayer.getTrackSelectionParameters().buildUpon();
+            if (!show) {
+                trackParams.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT | C.SELECTION_FLAG_FORCED);
+                trackParams.setPreferredTextLanguage(null);
+            } else {
+                trackParams.setPreferredTextLanguage("en");
+            }
+            exoPlayer.setTrackSelectionParameters(trackParams.build());
+        }
+        if (exoPlayerView != null && exoPlayerView.getSubtitleView() != null) {
+            exoPlayerView.getSubtitleView().setVisibility(show ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void showCaptionMenu() {
@@ -986,7 +1056,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void applyCaptionStyle() {
-        if (playerWebView == null) return;
+        if (exoPlayerView == null) return;
+        SubtitleView subtitleView = exoPlayerView.getSubtitleView();
+        if (subtitleView == null) return;
 
         float opacityVal = 0f;
         if (!bgOpacity.equals("Off")) {
@@ -997,60 +1069,27 @@ public class NativePlayerActivity extends AppCompatActivity {
                 : (bgColor.equalsIgnoreCase("Navy") ? Color.BLUE
                 : (bgColor.equalsIgnoreCase("White") ? Color.WHITE : Color.BLACK));
 
-        String bgRgba = String.format(Locale.US, "rgba(%d,%d,%d,%.2f)",
-                Color.red(bgColorInt), Color.green(bgColorInt), Color.blue(bgColorInt), opacityVal);
+        int bgArgb = Color.argb((int)(opacityVal * 255), Color.red(bgColorInt), Color.green(bgColorInt), Color.blue(bgColorInt));
+        int fgColor = Color.parseColor(captionColorHex);
 
-        boolean isTop = captionPosition.equalsIgnoreCase("Top");
-        String posCss = isTop ? "top: " + bottomMargin + "% !important; bottom: auto !important;"
-                : "bottom: " + bottomMargin + "% !important; top: auto !important;";
+        int edgeType = CaptionStyleCompat.EDGE_TYPE_NONE;
+        if (edgeStyle.equalsIgnoreCase("Outline")) {
+            edgeType = CaptionStyleCompat.EDGE_TYPE_OUTLINE;
+        } else if (edgeStyle.equalsIgnoreCase("Shadow")) {
+            edgeType = CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW;
+        }
 
-        String padding = opacityVal > 0 ? "2px 8px !important;" : "0 !important;";
-        String borderRadius = opacityVal > 0 ? "4px !important;" : "0 !important;";
+        CaptionStyleCompat style = new CaptionStyleCompat(
+                fgColor,
+                bgArgb,
+                Color.TRANSPARENT,
+                edgeType,
+                Color.BLACK,
+                captionWeight.equalsIgnoreCase("Bold") ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT
+        );
 
-        String shadowCss = "0 0 2px #000";
-        if (edgeStyle.equalsIgnoreCase("Outline")) shadowCss = "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000";
-        else if (edgeStyle.equalsIgnoreCase("Shadow")) shadowCss = "2px 2px 4px #000";
-        else if (edgeStyle.equalsIgnoreCase("None")) shadowCss = "none";
-
-        String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
-        String textSelectors = ".jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"]";
-
-        String css = "::cue { " +
-                "  background-color: " + bgRgba + " !important; " +
-                "  color: " + captionColorHex + " !important; " +
-                "  font-size: " + (captionFontSize * 0.01) + "em !important; " +
-                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
-                "  text-shadow: " + shadowCss + " !important; " +
-                "} " +
-                containerSelectors + " { " +
-                "  position: absolute !important; " +
-                "  left: 0 !important; " +
-                "  right: 0 !important; " +
-                "  width: 100% !important; " +
-                "  text-align: center !important; " +
-                "  margin: 0 !important; " +
-                "  pointer-events: none !important; " +
-                "  z-index: 2147483647 !important; " +
-                "  background: transparent !important; " +
-                "  background-color: transparent !important; " +
-                "  " + posCss + " " +
-                "} " +
-                containerSelectors + ", " + containerSelectors + " * { " +
-                "  color: " + captionColorHex + " !important; " +
-                "  -webkit-text-fill-color: " + captionColorHex + " !important; " +
-                "  font-size: " + (captionFontSize * 0.02) + "vw !important; " +
-                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
-                "  text-shadow: " + shadowCss + " !important; " +
-                "} " +
-                textSelectors + " { " +
-                "  background: " + bgRgba + " !important; " +
-                "  background-color: " + bgRgba + " !important; " +
-                "  padding: " + padding + " " +
-                "  border-radius: " + borderRadius + " " +
-                "  display: inline-block !important; " +
-                "} ";
-
-        sendVideoCommand("action: 'applyCss', value: '" + css.replace("'", "\\'") + "'");
+        subtitleView.setStyle(style);
+        subtitleView.setFractionalTextSize(0.0533f * (captionFontSize / 100.0f));
     }
 
     private void highlightButton(TextView tv, boolean selected) {
@@ -1073,11 +1112,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             is2xSpeed = false; 
             indicator2x.setVisibility(View.GONE); 
         } 
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
-            return;
         }
-        sendVideoCommand("action: 'speed', value: " + speed); 
     }
     
     private void navigateEpisode(boolean next) {
@@ -1100,7 +1137,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void seekVideo(int delta) {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             long duration = exoPlayer.getDuration();
             if (duration <= 0 || duration == C.TIME_UNSET) {
                 duration = Long.MAX_VALUE;
@@ -1111,9 +1148,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             long newPos = Math.max(0, Math.min(duration, current + (delta * 1000L)));
             exoPlayer.seekTo(newPos);
-            return;
         }
-        sendVideoCommand("action: 'seekDelta', value: " + delta);
     }
 
     private void startUpdateLoop() { 
@@ -1126,7 +1161,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void syncPlayerState() {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
             if (durationMs > 0 && durationMs != C.TIME_UNSET) {
@@ -1141,61 +1176,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                     seekBar.setMax(duration);
                     seekBar.setProgress(current);
                 }
+
+                if (exoPlayer.isPlaying() && current > 0) {
+                    broadcastProgress(current, duration);
+                }
             }
-            return;
         }
-
-        String checkScript = "(function() { " +
-                "  function probe(win) { " +
-                "    try { " +
-                "      var v = win.document.querySelector('video'); " +
-                "      if (v && !isNaN(v.duration) && v.duration > 0) { " +
-                "        return [v.currentTime, v.duration, v.paused]; " +
-                "      } " +
-                "    } catch(e) {} " +
-                "    for (var i = 0; i < win.frames.length; i++) { " +
-                "      try { " +
-                "        var r = probe(win.frames[i]); " +
-                "        if (r) return r; " +
-                "      } catch(e) {} " +
-                "    } " +
-                "    return null; " +
-                "  } " +
-                "  return probe(window); " +
-                "})();";
-
-        playerWebView.evaluateJavascript(checkScript, value -> { 
-            if (value != null && !value.equals("null") && !value.isEmpty()) { 
-                try { 
-                    String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); 
-                    if (parts.length >= 3) { 
-                        double current = Double.parseDouble(parts[0]); 
-                        double duration = Double.parseDouble(parts[1]); 
-                        boolean pausedInWeb = Boolean.parseBoolean(parts[2]); 
-                        
-                        textCurrentTime.setText(formatTime((int) current)); 
-                        textTotalTime.setText(formatTime((int) duration)); 
-                        
-                        int timeLeft = (int) (duration - current);
-                        textTimeLeft.setText("-" + formatTime(timeLeft));
-
-                        if (!isDragging && duration > 0) { 
-                            seekBar.setMax((int) duration); 
-                            seekBar.setProgress((int) current); 
-                        } 
-                        if (pausedInWeb == isPlaying) { 
-                            isPlaying = !pausedInWeb; 
-                            btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play); 
-                            if (isPlaying) resetHideTimer(); else stopHideTimer(); 
-                        }
-
-                        if (isPlaying && current > 0) {
-                            broadcastProgress(current, duration);
-                        }
-                    } 
-                } catch (Exception e) {} 
-            } 
-        }); 
     }
 
     private void broadcastProgress(double current, double duration) {
@@ -1226,94 +1212,29 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void sendVideoCommand(String jsCommand) { 
-        if (playerWebView != null) {
-            String script = "(function() { " +
-                    "  function setupFrameListener(win) { " +
-                    "    try { " +
-                    "      if (!win._aniCmdHooked) { " +
-                    "        win._aniCmdHooked = true; " +
-                    "        win.addEventListener('message', function(e) { " +
-                    "          if (!e.data || e.data.type !== 'ANILOVE_CMD') return; " +
-                    "          var v = win.document.querySelector('video'); " +
-                    "          if (!v) return; " +
-                    "          var act = e.data.action; " +
-                    "          var val = e.data.value; " +
-                    "          if (act === 'play') { v.play(); } " +
-                    "          else if (act === 'pause') { v.pause(); } " +
-                    "          else if (act === 'toggle') { if (v.paused) v.play(); else v.pause(); } " +
-                    "          else if (act === 'seekDelta') { v.currentTime += val; } " +
-                    "          else if (act === 'seekTo') { v.currentTime = val; } " +
-                    "          else if (act === 'speed') { v.playbackRate = val; } " +
-                    "          else if (act === 'applyCss') { " +
-                    "            var doc = win.document; " +
-                    "            var st = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
-                    "            st.id = 'anilove-caption-style'; " +
-                    "            st.innerHTML = val; " +
-                    "            if (!st.parentNode && doc.head) doc.head.appendChild(st); " +
-                    "          } " +
-                    "          else if (act === 'toggleSubtitles') { " +
-                    "            if (v.textTracks) { " +
-                    "              for (var i = 0; i < v.textTracks.length; i++) { " +
-                    "                v.textTracks[i].mode = (val === 'true' || val === true) ? 'showing' : 'disabled'; " +
-                    "              } " +
-                    "            } " +
-                    "          } " +
-                    "          else if (act === 'volumeBoost') { " +
-                    "            try { " +
-                    "              if (!win._aniAudioCtx) { " +
-                    "                var AC = win.AudioContext || win.webkitAudioContext; " +
-                    "                if (AC) { " +
-                    "                  var ctx = new AC(); " +
-                    "                  var src = ctx.createMediaElementSource(v); " +
-                    "                  var gain = ctx.createGain(); " +
-                    "                  gain.gain.value = (val === 'true' || val === true) ? 2.5 : 1.0; " +
-                    "                  src.connect(gain); " +
-                    "                  gain.connect(ctx.destination); " +
-                    "                  win._aniAudioCtx = ctx; " +
-                    "                  win._aniGain = gain; " +
-                    "                } " +
-                    "              } else if (win._aniGain) { " +
-                    "                win._aniGain.gain.value = (val === 'true' || val === true) ? 2.5 : 1.0; " +
-                    "              } " +
-                    "            } catch(err) {} " +
-                    "          } " +
-                    "        }); " +
-                    "      } " +
-                    "    } catch(e) {} " +
-                    "    for (var i = 0; i < win.frames.length; i++) { " +
-                    "      try { setupFrameListener(win.frames[i]); } catch(e) {} " +
-                    "    } " +
-                    "  } " +
-                    "  setupFrameListener(window); " +
-                    "  function broadcast(win, msg) { " +
-                    "    try { win.postMessage(msg, '*'); } catch(e) {} " +
-                    "    for (var i = 0; i < win.frames.length; i++) { " +
-                    "      try { broadcast(win.frames[i], msg); } catch(e) {} " +
-                    "    } " +
-                    "  } " +
-                    "  var cmdObj = { type: 'ANILOVE_CMD', " + jsCommand + " }; " +
-                    "  broadcast(window, cmdObj); " +
-                    "  var v = document.querySelector('video'); " +
-                    "  if (v) { " +
-                    "    var act = cmdObj.action; var val = cmdObj.value; " +
-                    "    if (act === 'play') v.play(); " +
-                    "    else if (act === 'pause') v.pause(); " +
-                    "    else if (act === 'seekDelta') v.currentTime += val; " +
-                    "    else if (act === 'seekTo') v.currentTime = val; " +
-                    "    else if (act === 'speed') v.playbackRate = val; " +
-                    "  } " +
-                    "})();";
-            playerWebView.evaluateJavascript(script, null); 
-        }
-    }
-
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
-    private boolean isDirectHls = false;
 
     private void setupHybridEngine(String url) {
-        if (url == null || url.isEmpty() || playerWebView == null) return;
+        if (url == null || url.isEmpty()) return;
         
+        loadingProgress.setVisibility(View.VISIBLE);
+        exoPlayerView.setVisibility(View.VISIBLE);
+        playerWebView.setVisibility(View.GONE);
+
+        String audio = getIntent().getStringExtra("audio");
+
+        // 1. If direct stream URL, play directly in ExoPlayer without loading WebView
+        if (url.contains(".m3u8") || url.contains(".mp4") || url.contains("/cdn/hls/") || url.contains("/hls/")) {
+            Map<String, String> headers = new HashMap<>();
+            try {
+                headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
+                headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
+            } catch (Exception ignored) {}
+            setupExoPlayerOnline(url, subtitleUrl, audio, headers);
+            return;
+        }
+
+        // 2. If embed webpage, use invisible background sniffer to resolve stream for ExoPlayer
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -1324,210 +1245,141 @@ public class NativePlayerActivity extends AppCompatActivity {
         settings.setAllowContentAccess(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-        
-        playerWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                Log.d("PlayerDiagnostics", consoleMessage.message() + " -- From line "
-                        + consoleMessage.lineNumber() + " of "
-                        + consoleMessage.sourceId());
-                return true;
-            }
-        });
 
-        playerWebView.setWebViewClient(new WebViewClient() { 
+        playerWebView.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public void onStreamExtracted(String streamUrl, String subUrl) {
+                if (streamUrl != null && !streamUrl.isEmpty()) {
+                    runOnUiThread(() -> {
+                        Map<String, String> headers = new HashMap<>();
+                        try {
+                            headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
+                            headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
+                        } catch (Exception ignored) {}
+                        setupExoPlayerOnline(streamUrl, (subUrl != null && !subUrl.isEmpty()) ? subUrl : subtitleUrl, audio, headers);
+                        try { playerWebView.stopLoading(); } catch (Exception ignored) {}
+                    });
+                }
+            }
+        }, "NativeBridge");
+
+        playerWebView.setWebViewClient(new WebViewClient() {
+            private boolean streamCaptured = false;
+
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-                String audio = getIntent().getStringExtra("audio");
+                String audioIntent = getIntent().getStringExtra("audio");
 
-                if (anilistId > 0 && episodeNumber > 0) {
-                    if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                        StreamCache.putSubtitle(anilistId, episodeNumber, audio, reqUrl);
+                if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
+                    if (anilistId > 0 && episodeNumber > 0) {
+                        StreamCache.putSubtitle(anilistId, episodeNumber, audioIntent, reqUrl);
                     }
-                    if ((lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m4s")) &&
-                        !lower.contains("/ads/") && !lower.contains("google-analytics") && !lower.contains("doubleclick")) {
-                        StreamCache.put(anilistId, episodeNumber, audio, reqUrl);
-                    }
+                    subtitleUrl = reqUrl;
                 }
+
+                if (!streamCaptured && (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m4s") || lower.contains("/hls/")) &&
+                    !lower.contains("/ads/") && !lower.contains("google-analytics") && !lower.contains("doubleclick") && !lower.contains("facebook")) {
+                    
+                    streamCaptured = true;
+                    if (anilistId > 0 && episodeNumber > 0) {
+                        StreamCache.put(anilistId, episodeNumber, audioIntent, reqUrl);
+                    }
+                    
+                    runOnUiThread(() -> {
+                        Map<String, String> headers = new HashMap<>();
+                        try {
+                            headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
+                            headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
+                        } catch (Exception ignored) {}
+                        setupExoPlayerOnline(reqUrl, subtitleUrl, audioIntent, headers);
+                        try { playerWebView.stopLoading(); } catch (Exception ignored) {}
+                    });
+                }
+
                 return super.shouldInterceptRequest(view, request);
             }
 
-            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) { 
-                super.onPageStarted(view, url, favicon); 
-                if (!isDirectHls) {
-                    injectHybridCSS(view);
-                    injectAdEraser(); 
-                }
-            } 
-            @Override public void onPageFinished(WebView view, String url) { 
-                super.onPageFinished(view, url); 
-                loadingProgress.setVisibility(View.GONE); 
-                if (!isDirectHls) {
-                    injectHybridCSS(view);
-                    injectAdEraser(); 
-                }
-            } 
-        }); 
-
-        if (url.contains(".m3u8") || url.contains(".mp4") || url.contains("/cdn/hls/") || url.contains("/hls/")) {
-            isDirectHls = true;
-            String audio = getIntent().getStringExtra("audio");
-            final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
-
-            String hlsHtml = "<!DOCTYPE html>" +
-                    "<html><head>" +
-                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
-                    "<script src='https://cdn.jsdelivr.net/npm/hls.js@latest'></script>" +
-                    "<style>" +
-                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
-                    "  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }" +
-                    "  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; position: fixed; top: 0; left: 0; }" +
-                    "</style>" +
-                    "</head><body>" +
-                    "<video id='player' playsinline autoplay controlsList='nodownload'>" +
-                    (subtitleUrl != null && !subtitleUrl.isEmpty() ? "<track label='" + subtitleLang + "' kind='subtitles' srclang='en' src='" + subtitleUrl + "' default>" : "") +
-                    "</video>" +
-                    "<script>" +
-                    "  var v = document.getElementById('player');" +
-                    "  var streamUrl = '" + url.replace("'", "\\'") + "';" +
-                    "  var targetAudio = '" + targetAudio + "';" +
-                    "  var startT = " + startTime + ";" +
-                    "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "';" +
-                    "  var hasSeeked = false;" +
-                    "  function matchHlsTrack(t) {" +
-                    "    var all = ((t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.url || '')).toLowerCase();" +
-                    "    if (targetAudio === 'dub' || targetAudio === 'eng' || targetAudio === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
-                    "    if (targetAudio === 'sub' || targetAudio === 'jpn' || targetAudio === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
-                    "    if (targetAudio === 'hin' || targetAudio === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                    "    return false;" +
-                    "  }" +
-                    "  if (Hls.isSupported()) {" +
-                    "    var hls = new Hls({ enableWorker: true, lowLatencyMode: false });" +
-                    "    hls.loadSource(streamUrl);" +
-                    "    hls.attachMedia(v);" +
-                    "    function selectAudioTrack() {" +
-                    "      var tracks = hls.audioTracks;" +
-                    "      if (tracks && tracks.length > 0) {" +
-                    "        for (var i = 0; i < tracks.length; i++) {" +
-                    "          if (matchHlsTrack(tracks[i])) {" +
-                    "            hls.audioTrack = i;" +
-                    "            break;" +
-                    "          }" +
-                    "        }" +
-                    "      }" +
-                    "    }" +
-                    "    hls.on(Hls.Events.MANIFEST_PARSED, function() { " +
-                    "      selectAudioTrack(); " +
-                    "      if (hls.subtitleTracks && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } " +
-                    "      if (startT > 0 && !hasSeeked) { v.currentTime = startT; hasSeeked = true; } " +
-                    "      v.play().catch(function(){}); " +
-                    "    });" +
-                    "    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function() { selectAudioTrack(); });" +
-                    "    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function() { if (hls.subtitleTrack === -1 && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } });" +
-                    "  } else if (v.canPlayType('application/vnd.apple.mpegurl')) {" +
-                    "    v.src = streamUrl;" +
-                    "    v.addEventListener('loadedmetadata', function() { v.play().catch(function(){}); });" +
-                    "  } else {" +
-                    "    v.src = streamUrl;" +
-                    "    v.play().catch(function(){});" +
-                    "  }" +
-                    "</script></body></html>";
-
-            String baseUrl = "https://vidlink.pro/";
-            if (url.contains("justanime.to")) {
-                baseUrl = "https://justanime.to/";
-            } else {
-                try {
-                    baseUrl = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
-                } catch (Exception ignored) {}
+            @Override
+            public void onPageFinished(WebView view, String finishedUrl) {
+                super.onPageFinished(view, finishedUrl);
+                String snifferJs = "(function() { " +
+                        "  function findMedia() { " +
+                        "    try { " +
+                        "      var v = document.querySelector('video'); " +
+                        "      if (v && v.src && v.src.indexOf('http') === 0 && v.src.indexOf('blob:') === -1) { " +
+                        "        window.NativeBridge.onStreamExtracted(v.src, ''); " +
+                        "        return true; " +
+                        "      } " +
+                        "      if (window.jwplayer && typeof window.jwplayer === 'function') { " +
+                        "        var jw = window.jwplayer(); " +
+                        "        var item = jw.getPlaylistItem ? jw.getPlaylistItem() : null; " +
+                        "        if (item && item.file) { " +
+                        "          window.NativeBridge.onStreamExtracted(item.file, ''); " +
+                        "          return true; " +
+                        "        } " +
+                        "      } " +
+                        "      if (window.art && window.art.url) { " +
+                        "        window.NativeBridge.onStreamExtracted(window.art.url, ''); " +
+                        "        return true; " +
+                        "      } " +
+                        "    } catch(e) {} " +
+                        "    return false; " +
+                        "  } " +
+                        "  if (!findMedia()) { " +
+                        "    try { " +
+                        "      var btn = document.getElementById('vid_play') || document.querySelector('.play-button') || document.querySelector('button'); " +
+                        "      if (btn) btn.click(); " +
+                        "      var v = document.querySelector('video'); " +
+                        "      if (v && v.paused) v.play().catch(function(){}); " +
+                        "    } catch(e) {} " +
+                        "    setTimeout(findMedia, 1000); " +
+                        "    setTimeout(findMedia, 2500); " +
+                        "  } " +
+                        "})();";
+                view.evaluateJavascript(snifferJs, null);
             }
+        });
 
-            playerWebView.loadDataWithBaseURL(baseUrl, hlsHtml, "text/html", "UTF-8", null);
-            return;
-        }
-
-        isDirectHls = false;
         String referer = "https://www.google.com/";
-        if (url.contains("justanime.to")) {
-            referer = "https://justanime.to/";
-        } else {
+        try {
+            referer = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
+        } catch (Exception ignored) {}
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Referer", referer);
+        playerWebView.loadUrl(url, headers);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (exoPlayer != null && !isInPictureInPictureMode()) {
+            exoPlayer.pause();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        currentInstance = null;
+        updateHandler.removeCallbacksAndMessages(null);
+        hideHandler.removeCallbacksAndMessages(null);
+        try {
+            unregisterReceiver(pipReceiver);
+        } catch (Exception ignored) {}
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+            exoPlayer.release();
+            exoPlayer = null;
+        }
+        if (playerWebView != null) {
             try {
-                referer = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
+                playerWebView.stopLoading();
+                playerWebView.destroy();
             } catch (Exception ignored) {}
         }
-        Map<String, String> headers = new HashMap<>(); 
-        headers.put("Referer", referer); 
-        playerWebView.loadUrl(url, headers); 
-    }
-
-    private void injectHybridCSS(WebView view) {
-        if (isDirectHls || view == null) return;
-        String cssScript = "(function() { " +
-                "  function applyCss(win) { " +
-                "    try { " +
-                "      var doc = win.document; " +
-                "      var style = doc.getElementById('anilove-hybrid-engine-css') || doc.createElement('style'); " +
-                "      style.id = 'anilove-hybrid-engine-css'; " +
-                "      style.innerHTML = 'body, html { background: black !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } " +
-                "      * { visibility: hidden !important; } " +
-                "      video, .jw-video, .vjs-tech, .art-video, .art-video-player, video * { " +
-                "        visibility: visible !important; opacity: 1 !important; display: block !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; z-index: 1000 !important; pointer-events: auto !important; " +
-                "      } " +
-                "      .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { " +
-                "        visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; " +
-                "      }'; " +
-                "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "    } catch(e) {} " +
-                "    for (var i = 0; i < win.frames.length; i++) { " +
-                "      try { applyCss(win.frames[i]); } catch(e) {} " +
-                "    } " +
-                "  } " +
-                "  applyCss(window); " +
-                "})();";
-        view.evaluateJavascript(cssScript, null);
-    }
-    
-    private void injectAdEraser() { 
-        if (isDirectHls || playerWebView == null) return;
-        playerWebView.evaluateJavascript("(function() { " +
-                "  function sweep(win) { " +
-                "    try { " +
-                "      var doc = win.document; " +
-                "      var all = doc.querySelectorAll('body *'); " +
-                "      var whitelist = 'video, .jw-video, .vjs-tech, .art-video, .art-video-player, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"]'; " +
-                "      all.forEach(function(el) { " +
-                "        try { " +
-                "          if (el.tagName === 'VIDEO' || el.querySelector('video') || (el.matches && el.matches(whitelist))) { " +
-                "            el.style.setProperty('visibility', 'visible', 'important'); " +
-                "            el.style.setProperty('opacity', '1', 'important'); " +
-                "          } else { " +
-                "            el.style.setProperty('pointer-events', 'none', 'important'); " +
-                "            if (el.tagName === 'IFRAME' || el.tagName === 'A' || el.id.indexOf('pop') !== -1 || el.className.indexOf('ad') !== -1) { " +
-                "              el.style.setProperty('visibility', 'hidden', 'important'); " +
-                "              el.style.setProperty('display', 'none', 'important'); " +
-                "            } " +
-                "          } " +
-                "        } catch(err) {} " +
-                "      }); " +
-                "      var v = doc.querySelector('video'); " +
-                "      if (v) { " +
-                "        v.style.setProperty('position', 'fixed', 'important'); " +
-                "        v.style.setProperty('top', '0px', 'important'); " +
-                "        v.style.setProperty('left', '0px', 'important'); " +
-                "        v.style.setProperty('width', '100%', 'important'); " +
-                "        v.style.setProperty('height', '100%', 'important'); " +
-                "        v.style.setProperty('z-index', '1000', 'important'); " +
-                "        v.style.setProperty('pointer-events', 'auto', 'important'); " +
-                "        if (v.paused && !v.getAttribute('data-manual-pause')) { v.play().catch(function(){}); } " +
-                "      } " +
-                "    } catch(e) {} " +
-                "    for (var i = 0; i < win.frames.length; i++) { try { sweep(win.frames[i]); } catch(e) {} } " +
-                "  } " +
-                "  sweep(window); " +
-                "})();", null); 
     }
 }
