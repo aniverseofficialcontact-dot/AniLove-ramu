@@ -102,23 +102,6 @@ export const DEFAULT_STREAM_PROVIDER_ID: StreamServerId = 'anime-world-v1';
 export const isStreamProviderId = (providerId: string): providerId is StreamServerId =>
   STREAM_PROVIDERS.some(provider => provider.id === providerId);
 
-export function parseMultiAudioData(urlStr: string): Array<{ language: string; link: string }> {
-  try {
-    const u = new URL(urlStr);
-    const dataParam = u.searchParams.get('data');
-    if (dataParam) {
-      const decodedJson = atob(dataParam);
-      const parsed = JSON.parse(decodedJson);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch {
-    // Ignore invalid base64 or non-URL
-  }
-  return [];
-}
-
 export function createDirectStreamSource(
   anime: Anime,
   episodeNumber: number,
@@ -131,16 +114,16 @@ export function createDirectStreamSource(
   const isDub = language === 'DUB';
 
   const availableServers: AvailableServerOption[] = [
-    { name: 'VidLink Ultra HD', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
-    { name: 'AutoEmbed Multi-Source', type: isDub ? 'DUB' : 'SUB', linkId: `https://autoembed.co/anime/anilist/${anilistId}/${episodeNumber}?dub=${isDub ? 1 : 0}` },
-    { name: 'VidSrc Fast Mirror', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidsrc.cc/v2/embed/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
+    { name: 'Server 1', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
+    { name: 'Server 2', type: isDub ? 'DUB' : 'SUB', linkId: `https://autoembed.co/anime/anilist/${anilistId}/${episodeNumber}?dub=${isDub ? 1 : 0}` },
+    { name: 'Server 3', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidsrc.cc/v2/embed/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
   ];
 
   let selectedUrl = availableServers[0].linkId;
   let selectedServerName = availableServers[0].name;
 
   if (serverName) {
-    const matched = availableServers.find(s => s.name.toLowerCase().includes(serverName.toLowerCase()));
+    const matched = availableServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
     if (matched) {
       selectedUrl = matched.linkId;
       selectedServerName = matched.name;
@@ -166,7 +149,8 @@ export function createDirectStreamSource(
 }
 
 /**
- * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter
+ * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter.
+ * Fetches exclusively Server 1, Server 2, and Server 3.
  */
 export async function resolveEpisodeSource({
   anime,
@@ -221,55 +205,32 @@ export async function resolveEpisodeSource({
       const data = await res.json();
       if (data.success && data.stream) {
         const streamInfo = data.stream;
-        const mainUrl = streamInfo.streamLink || streamInfo.file || (streamInfo.servers?.[0]?.url);
-        const servers: Array<{ name: string; url: string }> = streamInfo.servers || [];
+        const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-        // Parse multi-audio Base64 payload if present in any server URL
-        let langSpecificUrl = '';
-        let multiAudioParsed: Array<{ language: string; link: string }> = [];
+        // STRICT FILTER: Keep ONLY Server 1, Server 2, and Server 3
+        let targetServers = rawServers.filter(s =>
+          s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
+        );
 
-        for (const srv of servers) {
-          if (srv.url && srv.url.includes('multi.php?data=')) {
-            multiAudioParsed = parseMultiAudioData(srv.url);
-            if (multiAudioParsed.length > 0) {
-              const targetLangMap: Record<string, string[]> = {
-                HIN: ['hindi'],
-                TAM: ['tamil'],
-                TEL: ['telugu'],
-                MAL: ['malayalam'],
-                KAN: ['kannada'],
-                DUB: ['english', 'eng'],
-                SUB: ['japanese', 'jap', 'sub'],
-                BEN: ['bengali'],
-              };
-              const aliases = targetLangMap[language] || [];
-              const matchedLang = multiAudioParsed.find(item =>
-                aliases.some(alias => item.language?.toLowerCase().includes(alias))
-              );
-              if (matchedLang && matchedLang.link) {
-                langSpecificUrl = matchedLang.link;
-                break;
-              }
-            }
-          }
+        if (targetServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
+          targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
         }
 
-        const availableServers: AvailableServerOption[] = servers.map((srv: any, idx: number) => ({
-          name: srv.name || `Server ${idx + 1}`,
+        const availableServers: AvailableServerOption[] = targetServers.map(srv => ({
+          name: srv.name,
           type: language,
-          linkId: srv.url || mainUrl,
+          linkId: srv.url,
         }));
 
-        let selectedUrl = langSpecificUrl || mainUrl;
-        let selectedServerName = availableServers[0]?.name || 'Server 1';
-
+        let selectedServer = targetServers[0];
         if (serverName) {
-          const matched = availableServers.find(s => s.name.toLowerCase().includes(serverName.toLowerCase()));
+          const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
           if (matched) {
-            selectedUrl = matched.linkId;
-            selectedServerName = matched.name;
+            selectedServer = matched;
           }
         }
+
+        const selectedUrl = selectedServer?.url || streamInfo.streamLink || streamInfo.file;
 
         if (selectedUrl) {
           return {
@@ -284,7 +245,7 @@ export async function resolveEpisodeSource({
               skipData: { intro: [0, 0], outro: [0, 0] },
               availableServers,
               availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
-              selectedServerName,
+              selectedServerName: selectedServer?.name || 'Server 1',
               isDubAvailable: true,
               isFallback: false,
               requestedLanguage: language,

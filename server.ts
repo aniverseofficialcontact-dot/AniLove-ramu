@@ -1988,7 +1988,9 @@ async function startServer() {
           const awData = await awRes.json();
           if (awData.success && awData.stream) {
             liveStreamLink = awData.stream.streamLink || awData.stream.file || '';
-            liveServers = awData.stream.servers || [];
+            liveServers = (awData.stream.servers || []).filter((s: any) =>
+              s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
+            );
           }
         }
       } catch {
