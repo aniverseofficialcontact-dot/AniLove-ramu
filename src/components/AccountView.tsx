@@ -1015,10 +1015,10 @@ export const AccountView: React.FC<AccountViewProps> = ({
                     onClick={() => {
                       onSaveSettings({
                         ...settings,
-                        preferredServers: ['anify-cloud', 'miruro-stream', 'renime-dub'],
-                        defaultStreamServer: 'anify-cloud',
+                        preferredServers: [],
+                        defaultStreamServer: 'none',
                       });
-                      onShowToast('success', 'Reset to Default (1. Anify Cloud, 2. Miruro HD, 3. Renime Multi).', 'Defaults Restored');
+                      onShowToast('success', 'Reset to Default (No streaming servers active).', 'Defaults Restored');
                     }}
                     className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[10px] font-bold text-slate-300 transition cursor-pointer"
                   >
@@ -1035,25 +1035,26 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-[9px]">Priority 1</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[0] || 'anify-cloud'}
+                      value={settings.preferredServers?.[0] || 'none'}
                       onChange={e => {
                         const newFirst = e.target.value as StreamServerId;
-                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
-                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
-                          preferredServers: [newFirst, p2, p3],
+                          preferredServers: [newFirst],
                           defaultStreamServer: newFirst,
                         });
-                        onShowToast('success', `Priority 1 server set to ${newFirst}.`, 'Server Updated');
                       }}
                       className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-amber-400 cursor-pointer"
                     >
-                      {STREAM_PROVIDERS.map(prov => (
-                        <option key={`acc-p1-${prov.id}`} value={prov.id}>
-                          {prov.label}
-                        </option>
-                      ))}
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`acc-p1-${prov.id}`} value={prov.id}>
+                            {prov.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                     </select>
                   </div>
 
@@ -1064,24 +1065,18 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-[9px]">Priority 2</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[1] || 'miruro-stream'}
-                      onChange={e => {
-                        const newSecond = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
-                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
-                        onSaveSettings({
-                          ...settings,
-                          preferredServers: [p1, newSecond, p3],
-                        });
-                        onShowToast('success', `Priority 2 server set to ${newSecond}.`, 'Server Updated');
-                      }}
+                      value={settings.preferredServers?.[1] || 'none'}
                       className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-indigo-400 cursor-pointer"
                     >
-                      {STREAM_PROVIDERS.map(prov => (
-                        <option key={`acc-p2-${prov.id}`} value={prov.id}>
-                          {prov.label}
-                        </option>
-                      ))}
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`acc-p2-${prov.id}`} value={prov.id}>
+                            {prov.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                     </select>
                   </div>
 
@@ -1092,24 +1087,18 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[9px]">Priority 3</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[2] || 'renime-dub'}
-                      onChange={e => {
-                        const newThird = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
-                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
-                        onSaveSettings({
-                          ...settings,
-                          preferredServers: [p1, p2, newThird],
-                        });
-                        onShowToast('success', `Priority 3 server set to ${newThird}.`, 'Server Updated');
-                      }}
+                      value={settings.preferredServers?.[2] || 'none'}
                       className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
                     >
-                      {STREAM_PROVIDERS.map(prov => (
-                        <option key={`acc-p3-${prov.id}`} value={prov.id}>
-                          {prov.label}
-                        </option>
-                      ))}
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`acc-p3-${prov.id}`} value={prov.id}>
+                            {prov.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                     </select>
                   </div>
                 </div>

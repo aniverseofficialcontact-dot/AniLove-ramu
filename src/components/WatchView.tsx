@@ -415,7 +415,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server and language options">
             {/* Multi-Language Dub, Sub & Regional Toggles (Filtered to languages supported by selected server) */}
             {(() => {
-              const currentProvider = STREAM_PROVIDERS.find(p => p.id === selectedServer) || STREAM_PROVIDERS[0];
+              const currentProvider = STREAM_PROVIDERS.find(p => p.id === selectedServer) || { supportedLanguages: ['SUB', 'DUB', 'HIN'] };
               const visibleLanguages = SUPPORTED_LANGUAGES.filter(lang => currentProvider.supportedLanguages.includes(lang.code));
 
               return visibleLanguages.map(lang => {
@@ -1056,7 +1056,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           }))}
           currentEpisodeNumber={episodeNumber}
           initialAudio={selectedAudio}
-          initialServer={STREAM_PROVIDERS.find(p => p.id === selectedServer)?.label || 'Anify Cloud'}
+          initialServer={STREAM_PROVIDERS.find(p => p.id === selectedServer)?.label || 'None'}
           onClose={() => setShowDownloadModal(false)}
           onOpenDownloadsView={onOpenDownloadsView}
         />

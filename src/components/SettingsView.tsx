@@ -1016,10 +1016,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => {
                       onSaveSettings({
                         ...settings,
-                        preferredServers: ['anify-cloud', 'miruro-stream', 'renime-dub'],
-                        defaultStreamServer: 'anify-cloud',
+                        preferredServers: [],
+                        defaultStreamServer: 'none',
                       });
-                      onShowToast('success', 'Reset servers to Default (1. Anify Cloud, 2. Miruro HD, 3. Renime Multi).', 'Defaults Restored');
+                      onShowToast('success', 'Reset servers to Default (No streaming servers active).', 'Defaults Restored');
                     }}
                     className="px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-[11px] font-bold text-indigo-300 transition cursor-pointer"
                   >
@@ -1041,25 +1041,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[0] || 'anify-cloud'}
+                      value={settings.preferredServers?.[0] || 'none'}
                       onChange={e => {
                         const newFirst = e.target.value as StreamServerId;
-                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
-                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
-                          preferredServers: [newFirst, p2, p3],
+                          preferredServers: [newFirst],
                           defaultStreamServer: newFirst,
                         });
-                        onShowToast('success', `Priority 1 set to ${newFirst}.`, 'Server Updated');
                       }}
                       className="w-full px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
-                      {STREAM_PROVIDERS.map(prov => (
-                        <option key={`p1-${prov.id}`} value={prov.id}>
-                          {prov.label} {prov.tag ? `[${prov.tag}]` : ''}
-                        </option>
-                      ))}
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`p1-${prov.id}`} value={prov.id}>
+                            {prov.label} {prov.tag ? `[${prov.tag}]` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                     </select>
                   </div>
 
@@ -1075,24 +1076,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[1] || 'miruro-stream'}
-                      onChange={e => {
-                        const newSecond = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
-                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
-                        onSaveSettings({
-                          ...settings,
-                          preferredServers: [p1, newSecond, p3],
-                        });
-                        onShowToast('success', `Priority 2 set to ${newSecond}.`, 'Server Updated');
-                      }}
+                      value={settings.preferredServers?.[1] || 'none'}
                       className="w-full px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
                     >
-                      {STREAM_PROVIDERS.map(prov => (
-                        <option key={`p2-${prov.id}`} value={prov.id}>
-                          {prov.label} {prov.tag ? `[${prov.tag}]` : ''}
-                        </option>
-                      ))}
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`p2-${prov.id}`} value={prov.id}>
+                            {prov.label} {prov.tag ? `[${prov.tag}]` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                     </select>
                   </div>
 
@@ -1108,16 +1103,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[2] || 'renime-dub'}
-                      onChange={e => {
-                        const newThird = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
-                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
-                        onSaveSettings({
-                          ...settings,
-                          preferredServers: [p1, p2, newThird],
-                        });
-                        onShowToast('success', `Priority 3 set to ${newThird}.`, 'Server Updated');
+                      value={settings.preferredServers?.[2] || 'none'}
+                      className="w-full px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      {STREAM_PROVIDERS.length > 0 ? (
+                        STREAM_PROVIDERS.map(prov => (
+                          <option key={`p3-${prov.id}`} value={prov.id}>
+                            {prov.label} {prov.tag ? `[${prov.tag}]` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="none">No Servers Enabled</option>
+                      )}
                       }}
                       className="w-full px-2.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-cyan-500 cursor-pointer"
                     >

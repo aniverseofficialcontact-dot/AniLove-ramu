@@ -327,15 +327,7 @@ export interface AppNotification {
   episode?: number;
 }
 
-export type StreamServerId =
-  | 'anify-cloud'
-  | 'anify-fast'
-  | 'miruro-stream'
-  | 'miruro-pro'
-  | 'miruro-pahe'
-  | 'renime-dub'
-  | 'official-link'
-  | 'universal';
+export type StreamServerId = 'none';
 export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN';
 
 export interface UserProfile {

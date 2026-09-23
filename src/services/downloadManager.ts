@@ -127,7 +127,7 @@ export async function queueBatchEpisodeDownloads(
   anime: Anime,
   episodes: Episode[],
   audio: StreamLanguage = 'DUB',
-  serverName: string = 'Anify Cloud',
+  serverName: string = 'None',
   quality: string = '1080p'
 ): Promise<{ queuedCount: number; errors: string[] }> {
   let queuedCount = 0;
