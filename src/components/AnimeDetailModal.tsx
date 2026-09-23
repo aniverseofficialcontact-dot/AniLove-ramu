@@ -22,6 +22,8 @@ import {
   getCanonicalEpisodeArtwork,
   ExtendedEpisodeInfo,
 } from '../services/episodeMetadataService';
+import { launchNativePlayer } from '../services/nativePlayer';
+import { Capacitor } from '@capacitor/core';
 
 export interface ResolvedThemeTrack {
   id?: number;
@@ -1387,7 +1389,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (onPlayStream) {
+                                if (Capacitor.isNativePlatform()) {
+                                  launchNativePlayer({
+                                    anime: currentAnime,
+                                    episodeNumber: ep.number,
+                                    startTime: 0,
+                                    audio: 'DUB',
+                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
+                                  }).catch(() => {});
+                                } else if (onPlayStream) {
                                   onClose();
                                   onPlayStream(currentAnime, ep.number, 0);
                                 } else {
@@ -1576,10 +1586,23 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                setPlayingEpisode(ep.number);
-                                setTimeout(() => {
-                                  playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
+                                if (Capacitor.isNativePlatform()) {
+                                  launchNativePlayer({
+                                    anime: currentAnime,
+                                    episodeNumber: ep.number,
+                                    startTime: 0,
+                                    audio: 'DUB',
+                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
+                                  }).catch(() => {});
+                                } else if (onPlayStream) {
+                                  onClose();
+                                  onPlayStream(currentAnime, ep.number, 0);
+                                } else {
+                                  setPlayingEpisode(ep.number);
+                                  setTimeout(() => {
+                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }, 100);
+                                }
                               }}
                               className="group relative flex flex-col bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-200 cursor-pointer shadow-md"
                             >
@@ -1675,10 +1698,23 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                setPlayingEpisode(ep.number);
-                                setTimeout(() => {
-                                  playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
+                                if (Capacitor.isNativePlatform()) {
+                                  launchNativePlayer({
+                                    anime: currentAnime,
+                                    episodeNumber: ep.number,
+                                    startTime: 0,
+                                    audio: 'DUB',
+                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
+                                  }).catch(() => {});
+                                } else if (onPlayStream) {
+                                  onClose();
+                                  onPlayStream(currentAnime, ep.number, 0);
+                                } else {
+                                  setPlayingEpisode(ep.number);
+                                  setTimeout(() => {
+                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }, 100);
+                                }
                               }}
                               className="group flex items-center justify-between gap-4 p-3 rounded-2xl bg-[#101424] hover:bg-[#151a30] border border-slate-800/80 hover:border-slate-700 transition cursor-pointer select-none"
                             >

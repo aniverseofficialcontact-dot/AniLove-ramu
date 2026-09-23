@@ -58,6 +58,8 @@ import { CardInventoryView } from './components/CardInventoryView';
 import { PinUnlockModal } from './components/PinUnlockModal';
 import { QuoteOfTheDay } from './components/QuoteOfTheDay';
 import { AniListSyncBar } from './components/AniListSyncBar';
+import { launchNativePlayer } from './services/nativePlayer';
+import { Capacitor } from '@capacitor/core';
 import GlobalThemePlayer, { ThemeSongPayload } from './components/GlobalThemePlayer';
 import AmbientParticles from './components/AmbientParticles';
 import { soundEffects } from './services/soundEffects';
@@ -598,13 +600,25 @@ export function App() {
     soundEffects.playCardFlip();
   };
 
-  // Open Direct Stream / Watch with Live Resume on dedicated Watch page
+  // Open Direct Stream / Watch with Live Resume
   const handlePlayStream = (anime: Anime, episodeNumber?: number, startTime?: number) => {
+    const epNum = episodeNumber || 1;
+    if (Capacitor.isNativePlatform()) {
+      launchNativePlayer({
+        anime,
+        episodeNumber: epNum,
+        startTime: startTime || 0,
+        audio: 'DUB',
+        totalEpisodes: anime.episodes,
+      }).catch(() => {});
+      return;
+    }
+
     setIsDetailModalOpen(false);
     setIs3DCardModalOpen(false);
     setActiveWatchEpisode({
       anime,
-      episodeNumber: episodeNumber || 1,
+      episodeNumber: epNum,
       startTime: startTime || 0,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
