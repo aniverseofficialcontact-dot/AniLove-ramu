@@ -10,10 +10,7 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -25,7 +22,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
@@ -44,9 +40,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
@@ -253,7 +247,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (intent.hasExtra("yOffset")) {
             currentY = intent.getIntExtra("yOffset", 0);
         }
-        Log.i("AniLove", "applyWindowSettings | isFullscreen: " + isFullscreenMode + " | isOffline: " + isOfflineMode);
         
         final Window window = getWindow();
         final View decorView = window.getDecorView();
@@ -284,7 +277,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         if (isFullscreenMode) {
-            // FULLSCREEN LANDSCAPE (both streaming and offline playback)
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
@@ -316,12 +308,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                     topBar.setPadding(topBar.getPaddingLeft(), 0, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
-        } else if (isOfflineMode) {
-            // PORTRAIT OFFLINE DOWNLOAD PLAYBACK: Full Activity with top video + bottom episode details container
+        } else {
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
             window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
             findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
 
@@ -351,53 +341,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lp.height = videoHeight + finalStatusBarHeight;
                     videoRoot.setLayoutParams(lp);
                 }
-                if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
-                if (statusBarFiller != null) {
-                    statusBarFiller.setVisibility(View.VISIBLE);
-                    ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
-                    lp.height = finalStatusBarHeight;
-                    statusBarFiller.setLayoutParams(lp);
-                }
-                if (topBar != null) {
-                    topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
-                }
-            });
-        } else {
-            // PORTRAIT STREAMING: Floating Top Overlay over web view
-            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
-            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-
-            int physicalWidth = getPhysicalScreenWidth();
-            int videoHeight = (int) (physicalWidth * 0.5625);
-            
-            int statusBarHeight = 0;
-            int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
-            
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = videoHeight + statusBarHeight;
-            params.gravity = Gravity.TOP | Gravity.START;
-            params.x = 0;
-            params.y = currentY;
-
-            final int finalStatusBarHeight = statusBarHeight;
-            decorView.post(() -> {
-                View videoRoot = findViewById(R.id.video_root_container);
-                View portraitBottom = findViewById(R.id.portrait_bottom_container);
-                View statusBarFiller = findViewById(R.id.status_bar_filler);
-                View topBar = findViewById(R.id.top_bar);
-                
-                if (videoRoot != null) {
-                    ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = videoHeight + finalStatusBarHeight;
-                    videoRoot.setLayoutParams(lp);
-                }
-                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
+                if (portraitBottom != null) portraitBottom.setVisibility(isOfflineMode ? View.VISIBLE : View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -416,8 +360,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void toggleFullscreenInPlace() {
         new Handler(Looper.getMainLooper()).post(() -> {
             isFullscreenMode = !isFullscreenMode;
-            Log.i("AniLove", "toggleFullscreenInPlace | now: " + isFullscreenMode);
-            
             Intent intent = getIntent();
             intent.putExtra("startFullscreen", isFullscreenMode);
             applyWindowSettings(intent);
@@ -433,11 +375,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
         isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
-        if (isOfflineMode) {
-            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-        } else {
-            getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
         
         setContentView(R.layout.activity_native_player);
         updateMetadataFromIntent(getIntent());
@@ -564,7 +502,14 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             return gestureDetector.onTouchEvent(event);
         };
-        findViewById(R.id.touch_wall).setOnTouchListener(touchListener);
+
+        View touchWall = findViewById(R.id.touch_wall);
+        if (touchWall != null) {
+            touchWall.setVisibility(View.GONE);
+            touchWall.setClickable(false);
+            touchWall.setFocusable(false);
+        }
+
         controlsOverlay.setOnTouchListener(touchListener);
 
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -587,14 +532,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                         exoPlayer.seekTo(Math.min(targetMs, duration));
                     }
                 } else {
-                    sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
+                    sendVideoCommand("action: 'seekTo', value: " + s.getProgress()); 
                 }
                 resetHideTimer(); 
                 scrubberContainer.setVisibility(View.GONE);
             }
         });
 
-        isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
         if (isOfflineMode) {
             playerWebView.setVisibility(View.GONE);
             exoPlayerView.setVisibility(View.VISIBLE);
@@ -603,10 +547,36 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayerView.setVisibility(View.GONE);
             playerWebView.setVisibility(View.VISIBLE);
             setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
-            playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidScrubber");
         }
         startUpdateLoop();
         resetHideTimer();
+    }
+
+    private void updateVolume(float percent) {
+        if (audioManager == null) return;
+        int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int deltaVol = (int) (percent * maxVol);
+        int targetVol = Math.max(0, Math.min(maxVol, initialVolume + deltaVol));
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0);
+
+        if (indicatorVolume != null) {
+            int displayPct = (int) (((float) targetVol / maxVol) * 100);
+            indicatorVolume.setText("Vol: " + displayPct + "%");
+            indicatorVolume.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void updateBrightness(float percent) {
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        float targetBrightness = Math.max(0.01f, Math.min(1.0f, initialBrightness + percent));
+        lp.screenBrightness = targetBrightness;
+        getWindow().setAttributes(lp);
+
+        if (indicatorBrightness != null) {
+            int displayPct = (int) (targetBrightness * 100);
+            indicatorBrightness.setText("Bri: " + displayPct + "%");
+            indicatorBrightness.setVisibility(View.VISIBLE);
+        }
     }
 
     private void setupExoPlayer(String videoPath, String subPath) {
@@ -721,12 +691,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         scrubberContainer.setTranslationY(40);
     }
 
-    public class ScrubberInterface {
-        @JavascriptInterface
-        public void processFrame(String base64) {
-        }
-    }
-
     private void showSeekIndicator(boolean forward) {
         final View indicator = forward ? indicatorForward : indicatorRewind;
         indicator.setVisibility(View.VISIBLE);
@@ -749,21 +713,44 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         if (isPlaying) {
-            sendVideoCommand("v.pause(); v.setAttribute('data-manual-pause', 'true');");
+            sendVideoCommand("action: 'pause'");
             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
             stopHideTimer();
         } else {
-            sendVideoCommand("v.play(); v.removeAttribute('data-manual-pause');");
+            sendVideoCommand("action: 'play'");
             btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
             resetHideTimer();
         }
         isPlaying = !isPlaying;
     }
 
-    private void toggleControlsVisibility() { isControlsVisible = !isControlsVisible; controlsOverlay.setVisibility(isControlsVisible ? View.VISIBLE : View.GONE); if (isControlsVisible) resetHideTimer(); }
-    private void hideControlsQuietly() { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); stopHideTimer(); }
-    private void resetHideTimer() { stopHideTimer(); if (isPlaying && isControlsVisible && !isDragging) { hideHandler.postDelayed(() -> { if (isControlsVisible && isPlaying) { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); } }, 5000); } }
-    private void stopHideTimer() { hideHandler.removeCallbacksAndMessages(null); }
+    private void toggleControlsVisibility() {
+        isControlsVisible = !isControlsVisible;
+        controlsOverlay.setVisibility(isControlsVisible ? View.VISIBLE : View.GONE);
+        if (isControlsVisible) resetHideTimer();
+    }
+    
+    private void hideControlsQuietly() {
+        isControlsVisible = false;
+        controlsOverlay.setVisibility(View.GONE);
+        stopHideTimer();
+    }
+
+    private void resetHideTimer() {
+        stopHideTimer();
+        if (isPlaying && isControlsVisible && !isDragging) {
+            hideHandler.postDelayed(() -> {
+                if (isControlsVisible && isPlaying) {
+                    isControlsVisible = false;
+                    controlsOverlay.setVisibility(View.GONE);
+                }
+            }, 5000);
+        }
+    }
+
+    private void stopHideTimer() {
+        hideHandler.removeCallbacksAndMessages(null);
+    }
 
     private void enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -810,7 +797,6 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (isInPictureInPictureMode) {
             hideControlsQuietly();
-            findViewById(R.id.touch_wall).setVisibility(View.GONE);
             
             if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
             if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
@@ -823,7 +809,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 videoRoot.setLayoutParams(lp);
             }
         } else {
-            findViewById(R.id.touch_wall).setVisibility(View.VISIBLE);
             try {
                 unregisterReceiver(pipReceiver);
             } catch (Exception e) {}
@@ -841,7 +826,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
         SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
         switchBoost.setChecked(isVolumeBoosted); 
-        switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
+        switchBoost.setOnCheckedChangeListener((b, checked) -> {
+            isVolumeBoosted = checked;
+            applyVolumeBoost(checked);
+        });
         TextView[] speedBtns = { view.findViewById(R.id.speed_btn_05), view.findViewById(R.id.speed_btn_1), view.findViewById(R.id.speed_btn_125), view.findViewById(R.id.speed_btn_15), view.findViewById(R.id.speed_btn_2) };
         float[] speeds = {0.5f, 1.0f, 1.25f, 1.5f, 2.0f};
         for (int i = 0; i < speedBtns.length; i++) { 
@@ -855,6 +843,14 @@ public class NativePlayerActivity extends AppCompatActivity {
             }); 
         }
         dialog.show();
+    }
+
+    private void applyVolumeBoost(boolean boost) {
+        sendVideoCommand("action: 'volumeBoost', value: " + (boost ? "true" : "false"));
+    }
+
+    private void toggleWebSubtitles(boolean show) {
+        sendVideoCommand("action: 'toggleSubtitles', value: " + (show ? "true" : "false"));
     }
 
     private void showCaptionMenu() {
@@ -922,6 +918,30 @@ public class NativePlayerActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void setupCaptionGroup(LinearLayout container, String[] options, String selectedVal, CaptionSelectListener listener) {
+        if (container == null) return;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (child instanceof TextView) {
+                TextView tv = (TextView) child;
+                String txt = tv.getText().toString();
+                highlightButton(tv, txt.equalsIgnoreCase(selectedVal));
+                tv.setOnClickListener(v -> {
+                    for (int j = 0; j < container.getChildCount(); j++) {
+                        View c = container.getChildAt(j);
+                        if (c instanceof TextView) highlightButton((TextView) c, false);
+                    }
+                    highlightButton(tv, true);
+                    listener.onSelect(txt);
+                });
+            }
+        }
+    }
+
+    private interface CaptionSelectListener {
+        void onSelect(String value);
+    }
+
     private void updatePreviewSet() {
         if (captionPreview == null) return;
         updateIndividualPreview(captionPreview);
@@ -947,156 +967,59 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         if (edgeStyle.equalsIgnoreCase("Outline")) {
-            preview.setShadowLayer(2f, 0, 0, Color.BLACK); 
+            preview.setShadowLayer(2f, 0, 0, Color.BLACK);
         } else if (edgeStyle.equalsIgnoreCase("Shadow")) {
-            preview.setShadowLayer(4f, 4f, 4f, Color.BLACK); 
+            preview.setShadowLayer(4f, 2, 2, Color.BLACK);
         } else {
-            preview.getPaint().clearShadowLayer();
-            preview.setShadowLayer(0, 0, 0, 0);
-        }
-        
-        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) preview.getLayoutParams();
-        if (captionPosition.equalsIgnoreCase("Top")) { 
-            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL; 
-            lp.topMargin = (int) (bottomMargin * 3.5); 
-            lp.bottomMargin = 0; 
-        } else { 
-            lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL; 
-            lp.bottomMargin = (int) (bottomMargin * 3.5); 
-            lp.topMargin = 0; 
-        }
-        preview.setLayoutParams(lp);
-        
-        preview.setEnabled(false);
-        preview.setEnabled(true);
-        preview.requestLayout();
-        preview.invalidate();
-    }
-
-    private void setupCaptionGroup(LinearLayout container, String[] options, String currentVal, OnOptionSelected listener) {
-        container.removeAllViews();
-        for (String opt : options) {
-            TextView btn = new TextView(this); 
-            btn.setText(opt); 
-            btn.setPadding(32, 16, 32, 16); 
-            btn.setTextSize(13); 
-            btn.setGravity(Gravity.CENTER); 
-            btn.setMinWidth(130);
-            highlightButton(btn, opt.equalsIgnoreCase(currentVal));
-            btn.setOnClickListener(v -> { 
-                listener.onSelected(opt); 
-                for (int i = 0; i < container.getChildCount(); i++) { 
-                    highlightButton((TextView) container.getChildAt(i), ((TextView) container.getChildAt(i)).getText().toString().equalsIgnoreCase(opt)); 
-                } 
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT); 
-            lp.setMargins(0, 0, 16, 0); 
-            container.addView(btn, lp);
+            preview.setShadowLayer(0, 0, 0, Color.TRANSPARENT);
         }
     }
 
-    interface OnOptionSelected { void onSelected(String val); }
-    private String getHexForColorName(String name) { if (name.equalsIgnoreCase("Yellow")) return "#FFFF00"; if (name.equalsIgnoreCase("Cyan")) return "#00FFFF"; if (name.equalsIgnoreCase("Green")) return "#00FF00"; if (name.equalsIgnoreCase("Magenta")) return "#FF00FF"; return "#FFFFFF"; }
-    private void highlightButton(TextView btn, boolean selected) { GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(18f); if (selected) { shape.setColor(Color.WHITE); btn.setTextColor(Color.BLACK); } else { shape.setColor(Color.parseColor("#222222")); btn.setTextColor(Color.WHITE); } btn.setBackground(shape); }
-    private void applyVolumeBoost(boolean boosted) { playerWebView.evaluateJavascript("(function() { if (!window.audioCtx) { try { window.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); var v = document.querySelector('video'); if (v) { window.source = window.audioCtx.createMediaElementSource(v); window.gainNode = window.audioCtx.createGain(); window.source.connect(window.gainNode); window.gainNode.connect(window.audioCtx.destination); } } catch(e) {} } if (window.gainNode) window.gainNode.gain.value = " + (boosted ? "2.5" : "1.0") + "; })();", null); }
-    
-    private void toggleWebSubtitles(boolean enabled) { 
-        isSubtitlesEnabled = enabled;
-        String visibility = enabled ? "visible" : "hidden";
-        String opacity = enabled ? "1" : "0";
-
-        // Powerful selector that catches almost all player subtitles
-        String selectors = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
-                     ".subtitles, .captions, .art-subtitle, .artplayer-subtitles, .art-subtitles, .plyr__captions, " +
-                     ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
-                     "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
-
-        String css = selectors + " { visibility: " + visibility + " !important; opacity: " + opacity + " !important; display: block !important; } " +
-                     selectors + " * { visibility: " + visibility + " !important; opacity: " + opacity + " !important; }";
-
-        String js = "(function() { " +
-                "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "'; " +
-                "  var remoteSubLang = '" + (subtitleLang != null ? subtitleLang : "English") + "'; " +
-                "  function toggle(win) { try { " +
-                "    var doc = win.document; " +
-                "    var style = doc.getElementById('anilove-caption-toggle-style') || doc.createElement('style'); " +
-                "    style.id = 'anilove-caption-toggle-style'; " +
-                "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) doc.head.appendChild(style); " +
-                "    var videos = doc.querySelectorAll('video'); " +
-                "    videos.forEach(function(v) { " +
-                "      if (remoteSubUrl && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
-                "        var t = doc.createElement('track'); " +
-                "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
-                "        v.appendChild(t); " +
-                "      } " +
-                "      if (v.textTracks) { " +
-                "        var hasCustom = doc.querySelector('" + selectors + "'); " +
-                "        var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
-                "        for (var i = 0; i < v.textTracks.length; i++) { " +
-                "          var tr = v.textTracks[i]; " +
-                "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
-                "          else if (tr.label === remoteSubLang) { tr.mode = 'showing'; } " +
-                "          else { tr.mode = customVisible ? 'hidden' : 'showing'; } " +
-                "        } " +
-                "      } " +
-                "    }); " +
-                "  } catch(e) {} " +
-                "  for (var i = 0; i < win.frames.length; i++) { try { toggle(win.frames[i]); } catch(e) {} } } " +
-                "  toggle(window); " +
-                "})();";
-
-        playerWebView.evaluateJavascript(js, null);
-
-        if (enabled) {
-            applyCaptionStyle();
+    private String getHexForColorName(String name) {
+        switch (name.toLowerCase()) {
+            case "yellow": return "#FFFF00";
+            case "cyan": return "#00FFFF";
+            case "green": return "#00FF00";
+            case "magenta": return "#FF00FF";
+            default: return "#FFFFFF";
         }
     }
 
     private void applyCaptionStyle() {
-        if (!isSubtitlesEnabled) return;
+        if (playerWebView == null) return;
 
         float opacityVal = 0f;
-        if (!bgOpacity.equals("Off") && !bgOpacity.equals("0")) {
-            try { opacityVal = Integer.parseInt(bgOpacity.replace("%", "")) / 100f; } catch (Exception e) {}
+        if (!bgOpacity.equals("Off")) {
+            opacityVal = Integer.parseInt(bgOpacity.replace("%", "")) / 100f;
         }
-        String bgRgb = bgColor.equalsIgnoreCase("Gray") ? "128,128,128" :
-                (bgColor.equalsIgnoreCase("Navy") ? "0,0,128" :
-                (bgColor.equalsIgnoreCase("White") ? "255,255,255" : "0,0,0"));
-        String bgRgba = opacityVal > 0 ? "rgba(" + bgRgb + "," + opacityVal + ")" : "transparent";
 
-        String shadowCss = edgeStyle.equalsIgnoreCase("Outline") ?
-                "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000" :
-                (edgeStyle.equalsIgnoreCase("Shadow") ? "2.5px 2.5px 3px rgba(0,0,0,0.8)" : "none");
+        int bgColorInt = bgColor.equalsIgnoreCase("Gray") ? Color.GRAY
+                : (bgColor.equalsIgnoreCase("Navy") ? Color.BLUE
+                : (bgColor.equalsIgnoreCase("White") ? Color.WHITE : Color.BLACK));
+
+        String bgRgba = String.format(Locale.US, "rgba(%d,%d,%d,%.2f)",
+                Color.red(bgColorInt), Color.green(bgColorInt), Color.blue(bgColorInt), opacityVal);
+
         boolean isTop = captionPosition.equalsIgnoreCase("Top");
-
-        String posCss = isTop ?
-                "top: " + bottomMargin + "% !important; bottom: auto !important;" :
-                "bottom: " + bottomMargin + "% !important; top: auto !important;";
-
-        String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
-                ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
-                ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions, " +
-                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
-                "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
-
-        String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
-                ".artplayer-subtitles p, .artplayer-subtitles span, " +
-                ".art-subtitles p, .art-subtitles span, " +
-                ".jw-text-track-cue, .jw-caption-content, .jw-captions span, " +
-                ".vjs-text-track-cue, .vjs-text-track-cue *, " +
-                ".ytp-caption-segment, .plyr__caption, " +
-                ".shaka-text-container span, .fluid_subtitles span, " +
-                ".caption-window span, .subtitles span, .captions span";
+        String posCss = isTop ? "top: " + bottomMargin + "% !important; bottom: auto !important;"
+                : "bottom: " + bottomMargin + "% !important; top: auto !important;";
 
         String padding = opacityVal > 0 ? "2px 8px !important;" : "0 !important;";
         String borderRadius = opacityVal > 0 ? "4px !important;" : "0 !important;";
 
+        String shadowCss = "0 0 2px #000";
+        if (edgeStyle.equalsIgnoreCase("Outline")) shadowCss = "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000";
+        else if (edgeStyle.equalsIgnoreCase("Shadow")) shadowCss = "2px 2px 4px #000";
+        else if (edgeStyle.equalsIgnoreCase("None")) shadowCss = "none";
+
+        String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
+        String textSelectors = ".jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"]";
+
         String css = "::cue { " +
-                "  color: " + captionColorHex + " !important; " +
                 "  background-color: " + bgRgba + " !important; " +
-                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
+                "  color: " + captionColorHex + " !important; " +
                 "  font-size: " + (captionFontSize * 0.01) + "em !important; " +
+                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
                 "  text-shadow: " + shadowCss + " !important; " +
                 "} " +
                 containerSelectors + " { " +
@@ -1127,41 +1050,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  display: inline-block !important; " +
                 "} ";
 
-        String js = "(function() { " +
-                "  function apply(win) { try { " +
-                "    var doc = win.document; " +
-                "    var style = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
-                "    style.id = 'anilove-caption-style'; " +
-                "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) doc.head.appendChild(style); " +
-                "    var artSubs = doc.querySelectorAll('.art-subtitle'); " +
-                "    artSubs.forEach(function(sub) { " +
-                "      sub.style.setProperty('position', 'absolute', 'important'); " +
-                "      " + (isTop ? "sub.style.setProperty('top', '" + bottomMargin + "%', 'important'); sub.style.setProperty('bottom', 'auto', 'important');" : "sub.style.setProperty('bottom', '" + bottomMargin + "%', 'important'); sub.style.setProperty('top', 'auto', 'important');") + " " +
-                "      if(sub.children.length === 0 && sub.innerText && sub.innerText.trim().length > 0) { " +
-                "        sub.style.setProperty('background', '" + bgRgba + "', 'important'); " +
-                "        sub.style.setProperty('background-color', '" + bgRgba + "', 'important'); " +
-                "        sub.style.setProperty('display', 'inline-block', 'important'); " +
-                "        sub.style.setProperty('padding', '" + (opacityVal > 0 ? "2px 8px" : "0") + "', 'important'); " +
-                "        sub.style.setProperty('border-radius', '" + (opacityVal > 0 ? "4px" : "0") + "', 'important'); " +
-                "      } " +
-                "    }); " +
-                "    var v = doc.querySelector('video'); " +
-                "    if (v && v.textTracks) { " +
-                "      var hasCustom = doc.querySelector('" + containerSelectors + "'); " +
-                "      var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
-                "      if (customVisible) { " +
-                "        for(var i=0; i<v.textTracks.length; i++) { " +
-                "          if (v.textTracks[i].mode === 'showing') v.textTracks[i].mode = 'hidden'; " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for(var i=0; i<win.frames.length; i++) { try { apply(win.frames[i]); } catch(e) {} } } " +
-                "  apply(window); " +
-                "})();";
+        sendVideoCommand("action: 'applyCss', value: '" + css.replace("'", "\\'") + "'");
+    }
 
-        playerWebView.evaluateJavascript(js, null);
+    private void highlightButton(TextView tv, boolean selected) {
+        if (tv == null) return;
+        tv.setSelected(selected);
+        if (selected) {
+            tv.setTextColor(Color.WHITE);
+            tv.setBackgroundResource(R.drawable.speed_btn_bg);
+        } else {
+            tv.setTextColor(Color.parseColor("#888888"));
+            tv.setBackground(null);
+        }
     }
 
     private void setPlaybackSpeed(float speed, boolean permanent) { 
@@ -1176,7 +1077,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
             return;
         }
-        sendVideoCommand("v.playbackRate = " + speed + ";"); 
+        sendVideoCommand("action: 'speed', value: " + speed); 
     }
     
     private void navigateEpisode(boolean next) {
@@ -1186,42 +1087,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        String direction = next ? "Next" : "Prev";
-        String js = "(function() { " +
-                "  function findAndClick() { " +
-                "    var selectors = [" +
-                "      'a[title*=\"" + direction + "\"]', 'button[title*=\"" + direction + "\"]', " +
-                "      'a[aria-label*=\"" + direction + "\"]', 'button[aria-label*=\"" + direction + "\"]', " +
-                "      '." + direction.toLowerCase() + "-episode', '." + direction.toLowerCase() + "', " +
-                "      '.btn-" + direction.toLowerCase() + "', '.next', '.prev' " +
-                "    ]; " +
-                "    for (var i = 0; i < selectors.length; i++) { " +
-                "      var el = document.querySelector(selectors[i]); " +
-                "      if (el) { el.click(); return true; } " +
-                "    } " +
-                "    var all = document.querySelectorAll('a, button'); " +
-                "    for (var i = 0; i < all.length; i++) { " +
-                "      var txt = all[i].innerText || all[i].textContent; " +
-                "      if (txt && txt.toLowerCase().includes('" + direction.toLowerCase() + "')) { " +
-                "        all[i].click(); return true; " +
-                "      } " +
-                "    } " +
-                "    return false; " +
-                "  } " +
-                "  var found = findAndClick(); " +
-                "  if(!found) { " +
-                "    for(var i=0; i<window.frames.length; i++) { " +
-                "      try { " +
-                "        var f = window.frames[i].document.querySelectorAll('a, button'); " +
-                "        for(var j=0; j<f.length; j++) { " +
-                "           var t = f[j].innerText || f[j].textContent; " +
-                "           if(t && t.toLowerCase().includes('" + direction.toLowerCase() + "')) { f[j].click(); break; } " +
-                "        } " +
-                "      } catch(e) {} " +
-                "    } " +
-                "  } " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
+        if (MainActivity.instance != null && MainActivity.instance.getBridge() != null) {
+            MainActivity.instance.runOnUiThread(() -> {
+                WebView mainWebView = MainActivity.instance.getBridge().getWebView();
+                if (mainWebView != null) {
+                    String eventName = next ? "next" : "prev";
+                    String js = "window.dispatchEvent(new CustomEvent('nativeEpisodeNavigation', { detail: { direction: '" + eventName + "' } }));";
+                    mainWebView.evaluateJavascript(js, null);
+                }
+            });
+        }
     }
 
     private void seekVideo(int delta) {
@@ -1238,7 +1113,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayer.seekTo(newPos);
             return;
         }
-        sendVideoCommand("v.currentTime += " + delta + ";");
+        sendVideoCommand("action: 'seekDelta', value: " + delta);
     }
 
     private void startUpdateLoop() { 
@@ -1270,17 +1145,26 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        playerWebView.evaluateJavascript("(function() { " +
-                "function penetrate(win, callback) { " +
-                "  try { callback(win); } catch(e) {} " +
-                "  for (var i = 0; i < win.frames.length; i++) { " +
-                "    try { penetrate(win.frames[i], callback); } catch(e) {} " +
+        String checkScript = "(function() { " +
+                "  function probe(win) { " +
+                "    try { " +
+                "      var v = win.document.querySelector('video'); " +
+                "      if (v && !isNaN(v.duration) && v.duration > 0) { " +
+                "        return [v.currentTime, v.duration, v.paused]; " +
+                "      } " +
+                "    } catch(e) {} " +
+                "    for (var i = 0; i < win.frames.length; i++) { " +
+                "      try { " +
+                "        var r = probe(win.frames[i]); " +
+                "        if (r) return r; " +
+                "      } catch(e) {} " +
+                "    } " +
+                "    return null; " +
                 "  } " +
-                "} " +
-                "var v = null; " +
-                "penetrate(window, function(w) { try { if(!v) v = w.document.querySelector('video'); }catch(e){} }); " +
-                "return v ? [v.currentTime, v.duration, v.paused] : null; " +
-                "})();", value -> { 
+                "  return probe(window); " +
+                "})();";
+
+        playerWebView.evaluateJavascript(checkScript, value -> { 
             if (value != null && !value.equals("null") && !value.isEmpty()) { 
                 try { 
                     String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); 
@@ -1305,7 +1189,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                             if (isPlaying) resetHideTimer(); else stopHideTimer(); 
                         }
 
-                        // Broadcast progress to main app for "Continue Watching" sync
                         if (isPlaying && current > 0) {
                             broadcastProgress(current, duration);
                         }
@@ -1343,9 +1226,85 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void sendVideoCommand(String jsAction) { 
+    private void sendVideoCommand(String jsCommand) { 
         if (playerWebView != null) {
-            playerWebView.evaluateJavascript("(function() { function findVideo(win) { try { var v = win.document.querySelector('video'); if (v) return v; } catch(e) {} for (var i = 0; i < win.frames.length; i++) { try { var fv = findVideo(win.frames[i]); if (fv) return fv; } catch(e) {} } return null; } var v = findVideo(window); if (v) { " + jsAction + " } })();", null); 
+            String script = "(function() { " +
+                    "  function setupFrameListener(win) { " +
+                    "    try { " +
+                    "      if (!win._aniCmdHooked) { " +
+                    "        win._aniCmdHooked = true; " +
+                    "        win.addEventListener('message', function(e) { " +
+                    "          if (!e.data || e.data.type !== 'ANILOVE_CMD') return; " +
+                    "          var v = win.document.querySelector('video'); " +
+                    "          if (!v) return; " +
+                    "          var act = e.data.action; " +
+                    "          var val = e.data.value; " +
+                    "          if (act === 'play') { v.play(); } " +
+                    "          else if (act === 'pause') { v.pause(); } " +
+                    "          else if (act === 'toggle') { if (v.paused) v.play(); else v.pause(); } " +
+                    "          else if (act === 'seekDelta') { v.currentTime += val; } " +
+                    "          else if (act === 'seekTo') { v.currentTime = val; } " +
+                    "          else if (act === 'speed') { v.playbackRate = val; } " +
+                    "          else if (act === 'applyCss') { " +
+                    "            var doc = win.document; " +
+                    "            var st = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
+                    "            st.id = 'anilove-caption-style'; " +
+                    "            st.innerHTML = val; " +
+                    "            if (!st.parentNode && doc.head) doc.head.appendChild(st); " +
+                    "          } " +
+                    "          else if (act === 'toggleSubtitles') { " +
+                    "            if (v.textTracks) { " +
+                    "              for (var i = 0; i < v.textTracks.length; i++) { " +
+                    "                v.textTracks[i].mode = (val === 'true' || val === true) ? 'showing' : 'disabled'; " +
+                    "              } " +
+                    "            } " +
+                    "          } " +
+                    "          else if (act === 'volumeBoost') { " +
+                    "            try { " +
+                    "              if (!win._aniAudioCtx) { " +
+                    "                var AC = win.AudioContext || win.webkitAudioContext; " +
+                    "                if (AC) { " +
+                    "                  var ctx = new AC(); " +
+                    "                  var src = ctx.createMediaElementSource(v); " +
+                    "                  var gain = ctx.createGain(); " +
+                    "                  gain.gain.value = (val === 'true' || val === true) ? 2.5 : 1.0; " +
+                    "                  src.connect(gain); " +
+                    "                  gain.connect(ctx.destination); " +
+                    "                  win._aniAudioCtx = ctx; " +
+                    "                  win._aniGain = gain; " +
+                    "                } " +
+                    "              } else if (win._aniGain) { " +
+                    "                win._aniGain.gain.value = (val === 'true' || val === true) ? 2.5 : 1.0; " +
+                    "              } " +
+                    "            } catch(err) {} " +
+                    "          } " +
+                    "        }); " +
+                    "      } " +
+                    "    } catch(e) {} " +
+                    "    for (var i = 0; i < win.frames.length; i++) { " +
+                    "      try { setupFrameListener(win.frames[i]); } catch(e) {} " +
+                    "    } " +
+                    "  } " +
+                    "  setupFrameListener(window); " +
+                    "  function broadcast(win, msg) { " +
+                    "    try { win.postMessage(msg, '*'); } catch(e) {} " +
+                    "    for (var i = 0; i < win.frames.length; i++) { " +
+                    "      try { broadcast(win.frames[i], msg); } catch(e) {} " +
+                    "    } " +
+                    "  } " +
+                    "  var cmdObj = { type: 'ANILOVE_CMD', " + jsCommand + " }; " +
+                    "  broadcast(window, cmdObj); " +
+                    "  var v = document.querySelector('video'); " +
+                    "  if (v) { " +
+                    "    var act = cmdObj.action; var val = cmdObj.value; " +
+                    "    if (act === 'play') v.play(); " +
+                    "    else if (act === 'pause') v.pause(); " +
+                    "    else if (act === 'seekDelta') v.currentTime += val; " +
+                    "    else if (act === 'seekTo') v.currentTime = val; " +
+                    "    else if (act === 'speed') v.playbackRate = val; " +
+                    "  } " +
+                    "})();";
+            playerWebView.evaluateJavascript(script, null); 
         }
     }
 
@@ -1363,6 +1322,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         settings.setLoadWithOverviewMode(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
         
         playerWebView.setWebChromeClient(new WebChromeClient() {
@@ -1399,17 +1359,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             @Override public void onPageStarted(WebView view, String url, Bitmap favicon) { 
                 super.onPageStarted(view, url, favicon); 
                 if (!isDirectHls) {
-                    view.loadUrl("javascript:(function() { " +
-                            "  var style = document.createElement('style'); " +
-                            "  style.innerHTML = 'body, html { background: black !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } " +
-                            "  video, .jw-video, .vjs-tech, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay { " +
-                            "    visibility: visible !important; opacity: 1 !important; display: block !important; " +
-                            "  } " +
-                            "  video, .jw-video, .vjs-tech { " +
-                            "    position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; z-index: 1000 !important; " +
-                            "  }'; " +
-                            "  document.head.appendChild(style); " +
-                            "})();"); 
+                    injectHybridCSS(view);
                     injectAdEraser(); 
                 }
             } 
@@ -1417,128 +1367,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 super.onPageFinished(view, url); 
                 loadingProgress.setVisibility(View.GONE); 
                 if (!isDirectHls) {
+                    injectHybridCSS(view);
                     injectAdEraser(); 
-                    
-                    if (startTime > 0) {
-                        String resumeScript = "(function() {" +
-                                "  var startT = " + startTime + ";" +
-                                "  var seeked = false;" +
-                                "  function trySeek(win) {" +
-                                "    try {" +
-                                "      var videos = win.document.querySelectorAll('video');" +
-                                "      for (var i = 0; i < videos.length; i++) {" +
-                                "        var v = videos[i];" +
-                                "        if (v && v.duration > 0 && !seeked) {" +
-                                "          v.currentTime = startT;" +
-                                "          seeked = true;" +
-                                "          return true;" +
-                                "        } else if (v && !seeked) {" +
-                                "          v.addEventListener('loadedmetadata', function() {" +
-                                "            if (!seeked) { this.currentTime = startT; seeked = true; }" +
-                                "          }, {once: true});" +
-                                "        }" +
-                                "      }" +
-                                "    } catch(e) {}" +
-                                "    for (var j = 0; j < win.frames.length; j++) {" +
-                                "      try { if (trySeek(win.frames[j])) return true; } catch(e) {}" +
-                                "    }" +
-                                "    return false;" +
-                                "  }" +
-                                "  trySeek(window);" +
-                                "  var interval = setInterval(function() {" +
-                                "    if (trySeek(window) || seeked) clearInterval(interval);" +
-                                "  }, 500);" +
-                                "  setTimeout(function() { clearInterval(interval); }, 10000);" +
-                                "})();";
-                        view.evaluateJavascript(resumeScript, null);
-                    }
                 }
-                applyCaptionStyle(); 
-                toggleWebSubtitles(true); 
-
-                String audio = getIntent().getStringExtra("audio");
-                final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
-                String audioScript = "(function() {" +
-                        "  var target = '" + targetAudio + "';" +
-                        "  function matchTrack(t) {" +
-                        "    if (!t) return false;" +
-                        "    var all = ((t.language || '') + ' ' + (t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.id || '') + ' ' + (t.title || '')).toLowerCase();" +
-                        "    if (target === 'dub' || target === 'eng' || target === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
-                        "    if (target === 'sub' || target === 'jpn' || target === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
-                        "    if (target === 'hin' || target === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyJwTrack(p) {" +
-                        "    if (!p || typeof p.getAudioTracks !== 'function') return false;" +
-                        "    var tracks = p.getAudioTracks();" +
-                        "    if (tracks && tracks.length > 0) {" +
-                        "      for (var i = 0; i < tracks.length; i++) {" +
-                        "        if (matchTrack(tracks[i])) {" +
-                        "          if (p.getCurrentAudioTrack() !== i) p.setCurrentAudioTrack(i);" +
-                        "          return true;" +
-                        "        }" +
-                        "      }" +
-                        "    }" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyHtml5Track(doc) {" +
-                        "    try {" +
-                        "      var videos = doc.querySelectorAll('video');" +
-                        "      for (var i = 0; i < videos.length; i++) {" +
-                        "        var v = videos[i];" +
-                        "        if (v.audioTracks && v.audioTracks.length > 0) {" +
-                        "          for (var j = 0; j < v.audioTracks.length; j++) {" +
-                        "            var tr = v.audioTracks[j];" +
-                        "            if (matchTrack(tr)) { tr.enabled = true; return true; }" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "    } catch(e) {}" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyHlsTrack(win) {" +
-                        "    try {" +
-                        "      if (win.hls && win.hls.audioTracks && win.hls.audioTracks.length > 0) {" +
-                        "        for (var h = 0; h < win.hls.audioTracks.length; h++) {" +
-                        "          if (matchTrack(win.hls.audioTracks[h])) {" +
-                        "            if (win.hls.audioTrack !== h) win.hls.audioTrack = h;" +
-                        "            return true;" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "    } catch(e) {}" +
-                        "    return false;" +
-                        "  }" +
-                        "  function penetrateAudio(win) {" +
-                        "    try {" +
-                        "      if (typeof win.jwplayer === 'function') {" +
-                        "        var p = win.jwplayer();" +
-                        "        if (p) {" +
-                        "          if (applyJwTrack(p)) return true;" +
-                        "          if (!win._jwAudioHooked) {" +
-                        "            win._jwAudioHooked = true;" +
-                        "            p.on('ready', function() { applyJwTrack(p); });" +
-                        "            p.on('audioTracks', function() { applyJwTrack(p); });" +
-                        "            p.on('play', function() { applyJwTrack(p); });" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "      if (applyHlsTrack(win)) return true;" +
-                        "      if (win.document && applyHtml5Track(win.document)) return true;" +
-                        "    } catch(e) {}" +
-                        "    for (var j = 0; j < win.frames.length; j++) {" +
-                        "      try { if (penetrateAudio(win.frames[j])) return true; } catch(e) {}" +
-                        "    }" +
-                        "    return false;" +
-                        "  }" +
-                        "  penetrateAudio(window);" +
-                        "  var attempts = 0;" +
-                        "  var interval = setInterval(function() {" +
-                        "    attempts++;" +
-                        "    if (penetrateAudio(window) || attempts > 35) clearInterval(interval);" +
-                        "  }, 150);" +
-                        "})();";
-                view.evaluateJavascript(audioScript, null);
             } 
         }); 
 
@@ -1620,7 +1451,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         isDirectHls = false;
-        String referer = "https://vidlink.pro/";
+        String referer = "https://www.google.com/";
         if (url.contains("justanime.to")) {
             referer = "https://justanime.to/";
         } else {
@@ -1632,194 +1463,71 @@ public class NativePlayerActivity extends AppCompatActivity {
         headers.put("Referer", referer); 
         playerWebView.loadUrl(url, headers); 
     }
+
+    private void injectHybridCSS(WebView view) {
+        if (isDirectHls || view == null) return;
+        String cssScript = "(function() { " +
+                "  function applyCss(win) { " +
+                "    try { " +
+                "      var doc = win.document; " +
+                "      var style = doc.getElementById('anilove-hybrid-engine-css') || doc.createElement('style'); " +
+                "      style.id = 'anilove-hybrid-engine-css'; " +
+                "      style.innerHTML = 'body, html { background: black !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } " +
+                "      * { visibility: hidden !important; } " +
+                "      video, .jw-video, .vjs-tech, .art-video, .art-video-player, video * { " +
+                "        visibility: visible !important; opacity: 1 !important; display: block !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; z-index: 1000 !important; pointer-events: auto !important; " +
+                "      } " +
+                "      .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { " +
+                "        visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; " +
+                "      }'; " +
+                "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
+                "    } catch(e) {} " +
+                "    for (var i = 0; i < win.frames.length; i++) { " +
+                "      try { applyCss(win.frames[i]); } catch(e) {} " +
+                "    } " +
+                "  } " +
+                "  applyCss(window); " +
+                "})();";
+        view.evaluateJavascript(cssScript, null);
+    }
     
     private void injectAdEraser() { 
         if (isDirectHls || playerWebView == null) return;
         playerWebView.evaluateJavascript("(function() { " +
-                "  function absoluteCleanse(win) { " +
+                "  function sweep(win) { " +
                 "    try { " +
                 "      var doc = win.document; " +
-                "      var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"]'; " +
-                "      " +
-                "      // 1. Force all potential captions to be visible instantly in this frame" +
-                "      var subs = doc.querySelectorAll(subSelectors); " +
-                "      subs.forEach(function(s) { " +
-                "        s.style.setProperty('visibility', 'visible', 'important'); " +
-                "        s.style.setProperty('opacity', '1', 'important'); " +
-                "        s.style.setProperty('display', 'block', 'important'); " +
-                "        s.style.setProperty('z-index', '2147483647', 'important'); " +
-                "        s.style.setProperty('pointer-events', 'auto', 'important'); " +
-                "      }); " +
-                "      " +
-                "      // 2. Find video or frame containing video" +
-                "      var v = doc.querySelector('video'); " +
-                "      if (!v) { " +
-                "        for (var i = 0; i < win.frames.length; i++) { " +
-                "          try { if (win.frames[i].document.querySelector('video')) { v = win.frames[i].frameElement; break; } } catch(e) {} " +
-                "        } " +
-                "      } " +
-                "      " +
-                "      // 3. Only hide things if we have a primary video/frame to protect" +
-                "      if (v) { " +
-                "        doc.body.style.setProperty('background', 'black', 'important'); " +
-                "        var all = doc.querySelectorAll('body *'); " +
-                "        all.forEach(function(el) { " +
-                "          if (el === v || el.contains(v)) { " +
+                "      var all = doc.querySelectorAll('body *'); " +
+                "      var whitelist = 'video, .jw-video, .vjs-tech, .art-video, .art-video-player, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"]'; " +
+                "      all.forEach(function(el) { " +
+                "        try { " +
+                "          if (el.tagName === 'VIDEO' || el.querySelector('video') || (el.matches && el.matches(whitelist))) { " +
                 "            el.style.setProperty('visibility', 'visible', 'important'); " +
                 "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            return; " +
-                "          } " +
-                "          " +
-                "          // Check if it's a whitelisted caption (either direct match or contains one)" +
-                "          var isSafe = false; " +
-                "          subs.forEach(function(s) { if (s === el || el.contains(s)) isSafe = true; }); " +
-                "          " +
-                "          if (isSafe) { " +
-                "            el.style.setProperty('visibility', 'visible', 'important'); " +
-                "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            el.style.setProperty('pointer-events', 'auto', 'important'); " +
                 "          } else { " +
-                "            el.style.setProperty('visibility', 'hidden', 'important'); " +
                 "            el.style.setProperty('pointer-events', 'none', 'important'); " +
+                "            if (el.tagName === 'IFRAME' || el.tagName === 'A' || el.id.indexOf('pop') !== -1 || el.className.indexOf('ad') !== -1) { " +
+                "              el.style.setProperty('visibility', 'hidden', 'important'); " +
+                "              el.style.setProperty('display', 'none', 'important'); " +
+                "            } " +
                 "          } " +
-                "        }); " +
-                "        " +
-                "        if (v.tagName !== 'IFRAME') { " +
-                "          v.style.setProperty('visibility', 'visible', 'important'); " +
-                "          v.style.setProperty('opacity', '1', 'important'); " +
-                "          v.style.setProperty('position', 'fixed', 'important'); " +
-                "          v.style.setProperty('top', '0', 'important'); " +
-                "          v.style.setProperty('left', '0', 'important'); " +
-                "          v.style.setProperty('width', '100%', 'important'); " +
-                "          v.style.setProperty('height', '100%', 'important'); " +
-                "          v.style.setProperty('object-fit', 'contain', 'important'); " +
-                "          v.style.setProperty('z-index', '1000', 'important'); " +
-                "        } " +
+                "        } catch(err) {} " +
+                "      }); " +
+                "      var v = doc.querySelector('video'); " +
+                "      if (v) { " +
+                "        v.style.setProperty('position', 'fixed', 'important'); " +
+                "        v.style.setProperty('top', '0px', 'important'); " +
+                "        v.style.setProperty('left', '0px', 'important'); " +
+                "        v.style.setProperty('width', '100%', 'important'); " +
+                "        v.style.setProperty('height', '100%', 'important'); " +
+                "        v.style.setProperty('z-index', '1000', 'important'); " +
+                "        v.style.setProperty('pointer-events', 'auto', 'important'); " +
+                "        if (v.paused && !v.getAttribute('data-manual-pause')) { v.play().catch(function(){}); } " +
                 "      } " +
                 "    } catch(e) {} " +
-                "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
+                "    for (var i = 0; i < win.frames.length; i++) { try { sweep(win.frames[i]); } catch(e) {} } " +
                 "  } " +
-                "  absoluteCleanse(window); " +
+                "  sweep(window); " +
                 "})();", null); 
-    }
-
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-            if (controller != null) {
-                if (isFullscreenMode) {
-                    controller.hide(WindowInsetsCompat.Type.statusBars());
-                    controller.hide(WindowInsetsCompat.Type.navigationBars());
-                } else {
-                    controller.show(WindowInsetsCompat.Type.statusBars());
-                    controller.setAppearanceLightStatusBars(false);
-                    getWindow().setStatusBarColor(Color.BLACK);
-                    controller.show(WindowInsetsCompat.Type.navigationBars());
-                }
-                controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (isFullscreenMode) {
-            toggleFullscreenInPlace();
-            return;
-        }
-        NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        MainActivity.pendingBackToDetails = true;
-        if (navigationListener != null) {
-            navigationListener.onBack();
-        }
-        super.onBackPressed();
-        overridePendingTransition(0, 0);
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (exoPlayer != null && !isInPictureInPictureMode()) {
-            exoPlayer.pause();
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (exoPlayer != null && !isInPictureInPictureMode()) {
-            exoPlayer.stop();
-        }
-    }
-
-    private void updateVolume(float percent) {
-        if (audioManager == null || indicatorVolume == null || initialVolume == -1) return;
-        int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        
-        // Calculate new hardware volume step
-        // We use 1.2f sensitivity for a good drag feel
-        int newVol = initialVolume + (int) (percent * maxVol * 1.2f);
-        if (newVol < 0) newVol = 0;
-        if (newVol > maxVol) newVol = maxVol;
-        
-        // Set hardware volume without showing system UI (flag 0)
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0);
-        
-        int displayPercent = (int) (((float)newVol / maxVol) * 100);
-        indicatorVolume.setText("Vol: " + displayPercent + "%");
-        indicatorVolume.setVisibility(View.VISIBLE);
-        if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
-    }
-
-    private void updateBrightness(float percent) {
-        if (indicatorBrightness == null || initialBrightness == -1.0f) return;
-        Window window = getWindow();
-        WindowManager.LayoutParams lp = window.getAttributes();
-        
-        float newBrightness = initialBrightness + percent;
-        if (newBrightness < 0.01f) newBrightness = 0.01f;
-        if (newBrightness > 1.0f) newBrightness = 1.0f;
-        
-        lp.screenBrightness = newBrightness;
-        window.setAttributes(lp);
-        
-        int displayPercent = (int) (newBrightness * 100);
-        indicatorBrightness.setText("Bri: " + displayPercent + "%");
-        indicatorBrightness.setVisibility(View.VISIBLE);
-        if (indicatorVolume != null) indicatorVolume.setVisibility(View.GONE);
-    }
-
-    @Override 
-    protected void onDestroy() { 
-        if (currentInstance == this) currentInstance = null;
-        
-        NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        updateHandler.removeCallbacksAndMessages(null); 
-        hideHandler.removeCallbacksAndMessages(null); 
-        
-        try {
-            unregisterReceiver(pipReceiver);
-        } catch (Exception ignored) {}
-
-        if (exoPlayer != null) {
-            try {
-                exoPlayer.stop();
-                exoPlayer.clearMediaItems();
-                exoPlayer.release();
-            } catch (Exception ignored) {}
-            exoPlayer = null;
-        }
-        if (playerWebView != null) { 
-            try {
-                playerWebView.stopLoading(); 
-                playerWebView.destroy(); 
-            } catch (Exception ignored) {}
-            playerWebView = null;
-        } 
-        super.onDestroy(); 
-        overridePendingTransition(0, 0);
     }
 }
