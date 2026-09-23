@@ -102,26 +102,21 @@ export const DEFAULT_STREAM_PROVIDER_ID: StreamServerId = 'anime-world-v1';
 export const isStreamProviderId = (providerId: string): providerId is StreamServerId =>
   STREAM_PROVIDERS.some(provider => provider.id === providerId);
 
-export function generateAnimeWorldSlug(anime: Anime, episodeNumber: number): { episodeId?: string; movieId?: string } {
-  const isMovie = anime.format === 'MOVIE';
-  const englishTitle = anime.title?.english || '';
-  const romajiTitle = anime.title?.romaji || '';
-  const userTitle = anime.title?.userPreferred || '';
-  const displayTitle = englishTitle || romajiTitle || userTitle || 'Anime';
-  const cleanTitle = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const anilistId = anime.id || 1;
-  const seasonNum = (anime as any).seasonNumber || (anime as any).season || 1;
-  const year = anime.startDate?.year || (anime as any).year || 2024;
-
-  if (isMovie) {
-    return {
-      movieId: `${cleanTitle}-${year}-${anilistId}`,
-    };
+export function parseMultiAudioData(urlStr: string): Array<{ language: string; link: string }> {
+  try {
+    const u = new URL(urlStr);
+    const dataParam = u.searchParams.get('data');
+    if (dataParam) {
+      const decodedJson = atob(dataParam);
+      const parsed = JSON.parse(decodedJson);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Ignore invalid base64 or non-URL
   }
-
-  return {
-    episodeId: `${cleanTitle}-season-${seasonNum}-${anilistId}-${seasonNum}x${episodeNumber}`,
-  };
+  return [];
 }
 
 export function createDirectStreamSource(
@@ -161,7 +156,7 @@ export function createDirectStreamSource(
     external: false,
     skipData: { intro: [0, 0], outro: [0, 0] },
     availableServers,
-    availableLanguages: ['SUB', 'DUB', 'HIN'],
+    availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
     selectedServerName,
     isDubAvailable: true,
     isFallback: true,
@@ -185,39 +180,78 @@ export async function resolveEpisodeSource({
   const provider = ANIME_WORLD_V1;
   const anilistId = anime.id || 1;
   const isOngoing = anime.status === 'RELEASING';
-  const slugs = generateAnimeWorldSlug(anime, episodeNumber);
+  const isMovie = anime.format === 'MOVIE';
 
-  const queryParams = new URLSearchParams();
+  const englishTitle = anime.title?.english || '';
+  const romajiTitle = anime.title?.romaji || '';
+  const userTitle = anime.title?.userPreferred || '';
+  const displayTitle = englishTitle || animeTitleClean(englishTitle || romajiTitle || userTitle);
 
-  if (slugs.movieId) {
-    queryParams.set('movieId', slugs.movieId);
-  } else if (slugs.episodeId) {
-    queryParams.set('id', slugs.episodeId);
-  } else {
-    queryParams.set('id', `anime-${anilistId}-1x${episodeNumber}`);
+  function animeTitleClean(t: string) {
+    return (t || 'Anime').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
-  if (isOngoing) {
-    queryParams.set('ongoing', 'true');
-  }
-
-  if (refresh) {
-    queryParams.set('refresh', 'true');
-  }
-
-  const endpoint = `/api/anime-world-india/v1/stream?${queryParams.toString()}`;
+  const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
 
   try {
+    let resolvedTargetId = '';
+
+    // Step 1: Perform search query to obtain exact Series/Movie ID from API
+    try {
+      const searchRes = await fetch(`${BASE_API}/search.php?query=${encodeURIComponent(displayTitle)}`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData && searchData.success && Array.isArray(searchData.results) && searchData.results.length > 0) {
+          const matchedItem = isMovie
+            ? searchData.results.find((r: any) => r.type?.toLowerCase() === 'movie') || searchData.results[0]
+            : searchData.results.find((r: any) => r.type?.toLowerCase() === 'series') || searchData.results[0];
+
+          if (matchedItem) {
+            const seriesOrMovieId = matchedItem.seriesID || matchedItem.movieID || matchedItem.id;
+            if (seriesOrMovieId) {
+              if (isMovie || matchedItem.type?.toLowerCase() === 'movie') {
+                resolvedTargetId = seriesOrMovieId;
+              } else {
+                const seasonNum = (anime as any).seasonNumber || (anime as any).season || 1;
+                resolvedTargetId = `${seriesOrMovieId}-${seasonNum}x${episodeNumber}`;
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore search error, fall back to slug
+    }
+
+    if (!resolvedTargetId) {
+      const cleanSlug = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const seasonNum = (anime as any).seasonNumber || (anime as any).season || 1;
+      resolvedTargetId = isMovie ? `${cleanSlug}-${anilistId}` : `${cleanSlug}-season-${seasonNum}-${anilistId}-${seasonNum}x${episodeNumber}`;
+    }
+
+    // Step 2: Fetch stream links from stream.php
+    const queryParams = new URLSearchParams();
+    if (isMovie) {
+      queryParams.set('movieId', resolvedTargetId);
+    } else {
+      queryParams.set('id', resolvedTargetId);
+    }
+    if (isOngoing) queryParams.set('ongoing', 'true');
+    if (refresh) queryParams.set('refresh', 'true');
+
+    const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8500);
+    const timeoutId = setTimeout(() => controller.abort(), 9500);
 
     let res: Response;
     try {
-      res = await apiFetch(endpoint, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
+      res = await fetch(streamUrlReq, {
+        headers: { 'Accept': 'application/json' },
         signal: controller.signal,
       });
     } finally {
@@ -229,14 +263,45 @@ export async function resolveEpisodeSource({
       if (data.success && data.stream) {
         const streamInfo = data.stream;
         const mainUrl = streamInfo.streamLink || streamInfo.file || (streamInfo.servers?.[0]?.url);
+        const servers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-        const availableServers: AvailableServerOption[] = (streamInfo.servers || []).map((srv: any, idx: number) => ({
+        // Check if any server URL contains multi.php?data= Base64 language payload
+        let langSpecificUrl = '';
+        let multiAudioParsed: Array<{ language: string; link: string }> = [];
+
+        for (const srv of servers) {
+          if (srv.url && srv.url.includes('multi.php?data=')) {
+            multiAudioParsed = parseMultiAudioData(srv.url);
+            if (multiAudioParsed.length > 0) {
+              const targetLangMap: Record<string, string[]> = {
+                HIN: ['hindi'],
+                TAM: ['tamil'],
+                TEL: ['telugu'],
+                MAL: ['malayalam'],
+                KAN: ['kannada'],
+                DUB: ['english', 'eng'],
+                SUB: ['japanese', 'jap', 'sub'],
+                BEN: ['bengali'],
+              };
+              const aliases = targetLangMap[language] || [];
+              const matchedLang = multiAudioParsed.find(item =>
+                aliases.some(alias => item.language?.toLowerCase().includes(alias))
+              );
+              if (matchedLang && matchedLang.link) {
+                langSpecificUrl = matchedLang.link;
+                break;
+              }
+            }
+          }
+        }
+
+        const availableServers: AvailableServerOption[] = servers.map((srv: any, idx: number) => ({
           name: srv.name || `Server ${idx + 1}`,
           type: language,
           linkId: srv.url || mainUrl,
         }));
 
-        let selectedUrl = mainUrl;
+        let selectedUrl = langSpecificUrl || mainUrl;
         let selectedServerName = availableServers[0]?.name || 'Server 1';
 
         if (serverName) {
@@ -271,7 +336,7 @@ export async function resolveEpisodeSource({
       }
     }
 
-    // Fall back to direct embed source if primary API endpoint is unreachable
+    // Fall back to direct embed source if primary API endpoint returns no links
     const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
     return {
       status: 'available',
