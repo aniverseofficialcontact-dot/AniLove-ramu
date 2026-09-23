@@ -1438,82 +1438,30 @@ async function startServer() {
   });
 
   // ====================================================
-  // ANIME WORLD INDIA V1 PHP STREAMING API PROXY WITH AUTOMATIC SEARCH RESOLUTION
+  // ANIME WORLD INDIA V1 PHP STREAMING API PROXY (SUPPORTING ANILISTID & SLUG RESOLUTION)
   // ====================================================
   const ANIME_WORLD_API_BASE = process.env.ANIME_WORLD_API_BASE || 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
 
   const handleAnimeWorldStreamRequest = async (req: express.Request, res: express.Response) => {
     try {
+      const anilistId = req.query.anilistId ? String(req.query.anilistId) : '';
+      const ep = req.query.ep ? String(req.query.ep) : '';
       let rawId = String(req.query.id || req.query.episodeId || '').trim();
       let movieId = String(req.query.movieId || '').trim();
-      const ongoing = String(req.query.ongoing || '').toLowerCase() === 'true';
-      const refresh = String(req.query.refresh || '').toLowerCase() === 'true';
+      const ongoing = String(req.query.ongoing || '').toLowerCase() === 'true' || req.query.ongoing === '1';
+      const refresh = String(req.query.refresh || req.query.force || '').toLowerCase() === 'true' || req.query.refresh === '1' || req.query.force === '1';
 
-      // Parse title, season, and episode number from slug
-      let epNum = 1;
-      let seasonNum = 1;
-      let cleanTitle = 'naruto';
-
-      if (movieId) {
-        cleanTitle = movieId.replace(/-\d{4}-\d+$/, '').replace(/-/g, ' ');
-      } else if (rawId) {
-        const epMatch = rawId.match(/(?:-(\d+)x(\d+)|-ep(?:isode)?-(\d+))$/i);
-        if (epMatch) {
-          if (epMatch[1] && epMatch[2]) {
-            seasonNum = parseInt(epMatch[1], 10) || 1;
-            epNum = parseInt(epMatch[2], 10) || 1;
-          } else if (epMatch[3]) {
-            epNum = parseInt(epMatch[3], 10) || 1;
-          }
-        }
-        cleanTitle = rawId
-          .replace(/(?:-season-\d+)?(?:-\d+)?(?:-\d+x\d+|-ep(?:isode)?-\d+)$/i, '')
-          .replace(/-/g, ' ')
-          .trim();
-      }
-
-      // Step 1: Check if rawId already has the numeric piratexplay series ID pattern (e.g. "naruto-season-1-46260-1x1")
-      let resolvedTargetSlug = rawId;
-      const hasNumericSeriesId = /-[a-z0-9]+-season-\d+-\d+-\d+x\d+$/i.test(rawId) || /-[a-z0-9]+-\d{4}-\d+$/i.test(movieId);
-
-      // Step 2: If slug lacks numeric series ID, query search.php to discover exact Series/Movie ID
-      if (!hasNumericSeriesId && cleanTitle) {
-        try {
-          const searchUrl = `${ANIME_WORLD_API_BASE}/search.php?query=${encodeURIComponent(cleanTitle)}`;
-          const searchRes = await fetch(searchUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(5000),
-          });
-
-          if (searchRes.ok) {
-            const searchData = await searchRes.json();
-            if (searchData && searchData.success && Array.isArray(searchData.results) && searchData.results.length > 0) {
-              const matchedItem = movieId
-                ? searchData.results.find((r: any) => r.type?.toLowerCase() === 'movie') || searchData.results[0]
-                : searchData.results.find((r: any) => r.type?.toLowerCase() === 'series') || searchData.results[0];
-
-              if (matchedItem && (matchedItem.seriesID || matchedItem.movieID || matchedItem.id)) {
-                const targetSeriesId = matchedItem.seriesID || matchedItem.movieID || matchedItem.id;
-                if (movieId || matchedItem.type?.toLowerCase() === 'movie') {
-                  movieId = targetSeriesId;
-                } else {
-                  resolvedTargetSlug = `${targetSeriesId}-${seasonNum}x${epNum}`;
-                }
-              }
-            }
-          }
-        } catch {
-          // Fallback to raw slug
-        }
-      }
-
-      // Step 3: Fetch stream links from stream.php
       const queryParams = new URLSearchParams();
-      if (movieId) {
+
+      if (anilistId) {
+        queryParams.set('anilistId', anilistId);
+        if (ep) queryParams.set('ep', ep);
+      } else if (movieId) {
         queryParams.set('movieId', movieId);
-      } else {
-        queryParams.set('id', resolvedTargetSlug || `naruto-season-1-46260-1x${epNum}`);
+      } else if (rawId) {
+        queryParams.set('id', rawId);
       }
+
       if (ongoing) queryParams.set('ongoing', 'true');
       if (refresh) queryParams.set('refresh', 'true');
 

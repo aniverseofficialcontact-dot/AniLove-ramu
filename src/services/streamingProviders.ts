@@ -166,7 +166,7 @@ export function createDirectStreamSource(
 }
 
 /**
- * Universal episode stream resolver using custom AnimeWorld India v1 PHP Stream API
+ * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter
  */
 export async function resolveEpisodeSource({
   anime,
@@ -178,73 +178,32 @@ export async function resolveEpisodeSource({
   refresh = false,
 }: ResolveEpisodeSourceInput): Promise<ResolveEpisodeSourceResult> {
   const provider = ANIME_WORLD_V1;
-  const anilistId = anime.id || 1;
+  const anilistId = anime.id;
   const isOngoing = anime.status === 'RELEASING';
-  const isMovie = anime.format === 'MOVIE';
 
-  const englishTitle = anime.title?.english || '';
-  const romajiTitle = anime.title?.romaji || '';
-  const userTitle = anime.title?.userPreferred || '';
-  const displayTitle = englishTitle || animeTitleClean(englishTitle || romajiTitle || userTitle);
+  const queryParams = new URLSearchParams();
 
-  function animeTitleClean(t: string) {
-    return (t || 'Anime').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (anilistId) {
+    queryParams.set('anilistId', String(anilistId));
+    queryParams.set('ep', String(episodeNumber));
+  } else {
+    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    const cleanSlug = englishTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    queryParams.set('id', `${cleanSlug}-season-1-1x${episodeNumber}`);
+  }
+
+  if (isOngoing) {
+    queryParams.set('ongoing', 'true');
+  }
+
+  if (refresh) {
+    queryParams.set('refresh', 'true');
   }
 
   const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
+  const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
 
   try {
-    let resolvedTargetId = '';
-
-    // Step 1: Perform search query to obtain exact Series/Movie ID from API
-    try {
-      const searchRes = await fetch(`${BASE_API}/search.php?query=${encodeURIComponent(displayTitle)}`, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(6000),
-      });
-
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        if (searchData && searchData.success && Array.isArray(searchData.results) && searchData.results.length > 0) {
-          const matchedItem = isMovie
-            ? searchData.results.find((r: any) => r.type?.toLowerCase() === 'movie') || searchData.results[0]
-            : searchData.results.find((r: any) => r.type?.toLowerCase() === 'series') || searchData.results[0];
-
-          if (matchedItem) {
-            const seriesOrMovieId = matchedItem.seriesID || matchedItem.movieID || matchedItem.id;
-            if (seriesOrMovieId) {
-              if (isMovie || matchedItem.type?.toLowerCase() === 'movie') {
-                resolvedTargetId = seriesOrMovieId;
-              } else {
-                const seasonNum = (anime as any).seasonNumber || (anime as any).season || 1;
-                resolvedTargetId = `${seriesOrMovieId}-${seasonNum}x${episodeNumber}`;
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // Ignore search error, fall back to slug
-    }
-
-    if (!resolvedTargetId) {
-      const cleanSlug = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const seasonNum = (anime as any).seasonNumber || (anime as any).season || 1;
-      resolvedTargetId = isMovie ? `${cleanSlug}-${anilistId}` : `${cleanSlug}-season-${seasonNum}-${anilistId}-${seasonNum}x${episodeNumber}`;
-    }
-
-    // Step 2: Fetch stream links from stream.php
-    const queryParams = new URLSearchParams();
-    if (isMovie) {
-      queryParams.set('movieId', resolvedTargetId);
-    } else {
-      queryParams.set('id', resolvedTargetId);
-    }
-    if (isOngoing) queryParams.set('ongoing', 'true');
-    if (refresh) queryParams.set('refresh', 'true');
-
-    const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 9500);
 
@@ -265,7 +224,7 @@ export async function resolveEpisodeSource({
         const mainUrl = streamInfo.streamLink || streamInfo.file || (streamInfo.servers?.[0]?.url);
         const servers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-        // Check if any server URL contains multi.php?data= Base64 language payload
+        // Parse multi-audio Base64 payload if present in any server URL
         let langSpecificUrl = '';
         let multiAudioParsed: Array<{ language: string; link: string }> = [];
 
@@ -336,7 +295,7 @@ export async function resolveEpisodeSource({
       }
     }
 
-    // Fall back to direct embed source if primary API endpoint returns no links
+    // Direct fallback embed
     const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
     return {
       status: 'available',
