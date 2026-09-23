@@ -603,17 +603,6 @@ export function App() {
   // Open Direct Stream / Watch with Live Resume
   const handlePlayStream = (anime: Anime, episodeNumber?: number, startTime?: number) => {
     const epNum = episodeNumber || 1;
-    if (Capacitor.isNativePlatform()) {
-      launchNativePlayer({
-        anime,
-        episodeNumber: epNum,
-        startTime: startTime || 0,
-        audio: 'DUB',
-        totalEpisodes: anime.episodes,
-      }).catch(() => {});
-      return;
-    }
-
     setIsDetailModalOpen(false);
     setIs3DCardModalOpen(false);
     setActiveWatchEpisode({

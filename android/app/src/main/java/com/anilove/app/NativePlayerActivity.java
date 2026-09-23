@@ -1372,13 +1372,18 @@ public class NativePlayerActivity extends AppCompatActivity {
             public void onStreamExtracted(String streamUrl, String subUrl) {
                 if (streamUrl != null && !streamUrl.isEmpty()) {
                     runOnUiThread(() -> {
+                        try {
+                            playerWebView.evaluateJavascript("try { document.querySelectorAll('video, audio').forEach(function(el){ el.muted = true; el.volume = 0; el.pause(); el.src = ''; }); } catch(e){}", null);
+                            playerWebView.stopLoading();
+                            playerWebView.loadUrl("about:blank");
+                        } catch (Exception ignored) {}
+
                         Map<String, String> headers = new HashMap<>();
                         try {
                             headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
                             headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
                         } catch (Exception ignored) {}
                         setupExoPlayerOnline(streamUrl, (subUrl != null && !subUrl.isEmpty()) ? subUrl : subtitleUrl, currentSelectedAudio, headers);
-                        try { playerWebView.stopLoading(); } catch (Exception ignored) {}
                     });
                 }
             }
@@ -1411,13 +1416,18 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     
                     runOnUiThread(() -> {
+                        try {
+                            playerWebView.evaluateJavascript("try { document.querySelectorAll('video, audio').forEach(function(el){ el.muted = true; el.volume = 0; el.pause(); el.src = ''; }); } catch(e){}", null);
+                            playerWebView.stopLoading();
+                            playerWebView.loadUrl("about:blank");
+                        } catch (Exception ignored) {}
+
                         Map<String, String> headers = new HashMap<>();
                         try {
                             headers.put("Referer", new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/");
                             headers.put("Origin", new URL(url).getProtocol() + "://" + new URL(url).getHost());
                         } catch (Exception ignored) {}
                         setupExoPlayerOnline(reqUrl, subtitleUrl, currentSelectedAudio, headers);
-                        try { playerWebView.stopLoading(); } catch (Exception ignored) {}
                     });
                 }
 
@@ -1428,15 +1438,28 @@ public class NativePlayerActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String finishedUrl) {
                 super.onPageFinished(view, finishedUrl);
                 String snifferJs = "(function() { " +
+                        "  function muteAllMedia() { " +
+                        "    try { " +
+                        "      var media = document.querySelectorAll('video, audio'); " +
+                        "      for (var i = 0; i < media.length; i++) { " +
+                        "        media[i].muted = true; " +
+                        "        media[i].volume = 0; " +
+                        "      } " +
+                        "    } catch(e) {} " +
+                        "  } " +
+                        "  muteAllMedia(); " +
+                        "  setInterval(muteAllMedia, 400); " +
                         "  function findMedia() { " +
                         "    try { " +
                         "      var v = document.querySelector('video'); " +
+                        "      if (v) { v.muted = true; v.volume = 0; } " +
                         "      if (v && v.src && v.src.indexOf('http') === 0 && v.src.indexOf('blob:') === -1) { " +
                         "        window.NativeBridge.onStreamExtracted(v.src, ''); " +
                         "        return true; " +
                         "      } " +
                         "      if (window.jwplayer && typeof window.jwplayer === 'function') { " +
                         "        var jw = window.jwplayer(); " +
+                        "        try { jw.setMute(true); jw.setVolume(0); } catch(e){} " +
                         "        var item = jw.getPlaylistItem ? jw.getPlaylistItem() : null; " +
                         "        if (item && item.file) { " +
                         "          window.NativeBridge.onStreamExtracted(item.file, ''); " +
@@ -1444,6 +1467,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "        } " +
                         "      } " +
                         "      if (window.art && window.art.url) { " +
+                        "        try { window.art.muted = true; } catch(e){} " +
                         "        window.NativeBridge.onStreamExtracted(window.art.url, ''); " +
                         "        return true; " +
                         "      } " +
@@ -1455,7 +1479,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "      var btn = document.getElementById('vid_play') || document.querySelector('.play-button') || document.querySelector('button'); " +
                         "      if (btn) btn.click(); " +
                         "      var v = document.querySelector('video'); " +
-                        "      if (v && v.paused) v.play().catch(function(){}); " +
+                        "      if (v) { v.muted = true; v.volume = 0; if (v.paused) v.play().catch(function(){}); } " +
                         "    } catch(e) {} " +
                         "    setTimeout(findMedia, 1000); " +
                         "    setTimeout(findMedia, 2500); " +
@@ -1480,6 +1504,11 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (exoPlayer != null && !isInPictureInPictureMode()) {
             exoPlayer.pause();
         }
+        if (playerWebView != null) {
+            try {
+                playerWebView.evaluateJavascript("try { document.querySelectorAll('video, audio').forEach(function(el){ el.muted = true; el.volume = 0; el.pause(); }); } catch(e){}", null);
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
@@ -1498,7 +1527,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         if (playerWebView != null) {
             try {
+                playerWebView.evaluateJavascript("try { document.querySelectorAll('video, audio').forEach(function(el){ el.muted = true; el.volume = 0; el.pause(); el.src = ''; }); } catch(e){}", null);
                 playerWebView.stopLoading();
+                playerWebView.loadUrl("about:blank");
                 playerWebView.destroy();
             } catch (Exception ignored) {}
         }
