@@ -30,6 +30,7 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -89,6 +90,7 @@ public class EpisodeDownloadService extends Service {
         public String speed;
         public String error;
         public boolean isHls;
+        public boolean isOngoing;
         public volatile boolean isPaused = false;
         public volatile boolean isCancelled = false;
         public Future<?> taskFuture;
@@ -393,54 +395,35 @@ public class EpisodeDownloadService extends Service {
     }
 
     /**
-     * Calls the backend's /api/stream/resolve endpoint to get
-     * a direct stream URL or embed page for downloading.
+     * Calls the AnimeWorld India v1 PHP Stream API's /stream.php endpoint
+     * to get direct stream links/embeds for downloading.
      */
     private String[] tryServerSideExtractFull(DownloadItem item) {
         try {
-            String apiUrl = "http://127.0.0.1:3000/api/stream/resolve";
+            String safeSlug = item.animeTitle != null
+                ? item.animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
+                : "anime";
+            String episodeSlug = safeSlug + "-season-1-" + item.anilistId + "-1x" + item.episodeNumber;
 
-            String lang = item.audio != null && !item.audio.isEmpty() ? item.audio.toUpperCase() : "DUB";
-            String safeTitle = item.animeTitle != null
-                ? item.animeTitle.replace("\\", "\\\\").replace("\"", "\\\"")
-                : "Anime";
-            String safeServer = item.serverName != null
-                ? item.serverName.replace("\\", "\\\\").replace("\"", "\\\"")
-                : "";
+            StringBuilder urlBuilder = new StringBuilder("https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?id=");
+            urlBuilder.append(URLEncoder.encode(episodeSlug, "UTF-8"));
 
-            String safeProviderId = "anify-cloud";
+            if (item.isOngoing) {
+                urlBuilder.append("&ongoing=true");
+            }
 
-            JSONObject jsonReq = new JSONObject();
-            jsonReq.put("anilistId", item.anilistId);
-            jsonReq.put("animeTitle", safeTitle);
-            jsonReq.put("englishTitle", safeTitle);
-            jsonReq.put("episodeNumber", item.episodeNumber);
-            jsonReq.put("language", lang);
-            jsonReq.put("serverName", safeServer);
-            jsonReq.put("providerId", safeProviderId);
-            jsonReq.put("format", "TV");
+            Log.i(TAG, "[ServerExtract] Querying AnimeWorld v1 API for: " + item.animeTitle + " EP" + item.episodeNumber + " (slug: " + episodeSlug + ")");
 
-            Log.i(TAG, "[ServerExtract] Calling /api/stream/resolve for: "
-                + item.animeTitle + " EP" + item.episodeNumber + " [" + lang + "] on " + item.serverName + " (" + safeProviderId + ")");
-
-            URL url = new URL(apiUrl);
+            URL url = new URL(urlBuilder.toString());
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
+            conn.setRequestMethod("GET");
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(35000);
-            conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("User-Agent", "AniLove-Android/1.0");
-
-            byte[] bodyBytes = jsonReq.toString().getBytes("UTF-8");
-            conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
-            OutputStream os = conn.getOutputStream();
-            os.write(bodyBytes);
-            os.close();
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
             int responseCode = conn.getResponseCode();
-            Log.i(TAG, "[ServerExtract] Response code: " + responseCode);
+            Log.i(TAG, "[ServerExtract] AnimeWorld response code: " + responseCode);
 
             if (responseCode == 200) {
                 BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -451,15 +434,12 @@ public class EpisodeDownloadService extends Service {
 
                 JSONObject resObj = new JSONObject(sb.toString());
                 if (resObj.optBoolean("success", false)) {
-                    String directStreamUrl = resObj.optString("directStreamUrl", "");
-                    String streamUrl = resObj.optString("streamUrl", "");
-                    String subtitleUrl = resObj.optString("subtitleUrl", "");
-
-                    if (directStreamUrl != null && !directStreamUrl.isEmpty()) {
-                        return new String[]{directStreamUrl, subtitleUrl};
-                    }
-                    if (streamUrl != null && !streamUrl.isEmpty()) {
-                        return new String[]{streamUrl, subtitleUrl};
+                    JSONObject streamObj = resObj.optJSONObject("stream");
+                    if (streamObj != null) {
+                        String mainLink = streamObj.optString("streamLink", streamObj.optString("file", ""));
+                        if (mainLink != null && !mainLink.isEmpty()) {
+                            return new String[]{mainLink, ""};
+                        }
                     }
                 }
             }

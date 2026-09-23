@@ -327,7 +327,7 @@ export interface AppNotification {
   episode?: number;
 }
 
-export type StreamServerId = 'none';
+export type StreamServerId = 'anime-world-v1' | 'anime-world-backup' | 'universal' | 'none';
 export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN';
 
 export interface UserProfile {

@@ -1437,6 +1437,80 @@ async function startServer() {
     }
   });
 
+  // ====================================================
+  // ANIME WORLD INDIA V1 PHP STREAMING API PROXY
+  // ====================================================
+  const ANIME_WORLD_API_BASE = process.env.ANIME_WORLD_API_BASE || 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
+
+  const handleAnimeWorldStreamRequest = async (req: express.Request, res: express.Response) => {
+    try {
+      const episodeId = String(req.query.id || req.query.episodeId || '').trim();
+      const movieId = String(req.query.movieId || '').trim();
+      const ongoing = String(req.query.ongoing || '').toLowerCase() === 'true';
+      const refresh = String(req.query.refresh || '').toLowerCase() === 'true';
+
+      const queryParams = new URLSearchParams();
+      if (movieId) {
+        queryParams.set('movieId', movieId);
+      } else if (episodeId) {
+        queryParams.set('id', episodeId);
+      }
+      if (ongoing) queryParams.set('ongoing', 'true');
+      if (refresh) queryParams.set('refresh', 'true');
+
+      const targetUrl = `${ANIME_WORLD_API_BASE}/stream.php?${queryParams.toString()}`;
+
+      try {
+        const upstreamRes = await fetch(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(8000),
+        });
+
+        if (upstreamRes.ok) {
+          const data = await upstreamRes.json();
+          if (data && data.success) {
+            res.json(data);
+            return;
+          }
+        }
+      } catch (upstreamErr) {
+        // Upstream failover to universal fallback stream below
+      }
+
+      // Universal Embed Fallback if Upstream PHP API fails or is unreachable
+      const fallback = generateUniversalFallbackStream({
+        episodeNumber: 1,
+        language: 'DUB',
+      });
+
+      res.json({
+        success: true,
+        type: movieId ? 'movie' : 'episode',
+        cached: false,
+        ttl: ongoing ? 43200 : 2592000,
+        source: 'universal-embed',
+        stream: {
+          streamLink: fallback.streamUrl,
+          file: fallback.streamUrl,
+          servers: (fallback.availableServers || []).map((s: any) => ({
+            name: s.name,
+            url: s.linkId,
+          })),
+        },
+      });
+    } catch (error: any) {
+      console.error('AnimeWorld Stream API error:', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to fetch stream embeds' });
+    }
+  };
+
+  app.get('/api/anime-world-india/v1/stream', handleAnimeWorldStreamRequest);
+  app.get('/stream.php', handleAnimeWorldStreamRequest);
+  app.get('/api/anime-world-india/v1/stream.php', handleAnimeWorldStreamRequest);
+
   // ==========================================
   // 1. ANIFY API RESOLVER (Eltik Meta-Engine)
   // ==========================================
@@ -1885,13 +1959,36 @@ async function startServer() {
         animeTitle = 'Anime',
         episodeNumber = 1,
         anilistId,
-        providerId = 'anikoto-hd1',
+        providerId = 'anime-world-v1',
         language = 'SUB',
       } = req.body;
 
       const safeTitle = (animeTitle || 'Anime').replace(/[^a-zA-Z0-9_-]/g, '_');
       const cleanSlug = (animeTitle || 'anime').toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const isDub = String(language).toUpperCase() === 'DUB';
+
+      // Try resolving live stream links via AnimeWorld v1 API for high-speed direct downloads
+      let liveStreamLink = '';
+      let liveServers: Array<{ name: string; url: string }> = [];
+
+      try {
+        const episodeSlug = `${cleanSlug}-season-1-${anilistId || 1}-1x${episodeNumber}`;
+        const awRes = await fetch(`${ANIME_WORLD_API_BASE}/stream.php?id=${encodeURIComponent(episodeSlug)}`, {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (awRes.ok) {
+          const awData = await awRes.json();
+          if (awData.success && awData.stream) {
+            liveStreamLink = awData.stream.streamLink || awData.stream.file || '';
+            liveServers = awData.stream.servers || [];
+          }
+        }
+      } catch {
+        // Upstream fallback
+      }
+
+      const primaryDownloadUrl = liveStreamLink || `https://vidlink.pro/anime/${anilistId || 1}/${episodeNumber}?dub=${isDub}&download=true`;
 
       const downloadOptions = [
         {
@@ -1901,10 +1998,11 @@ async function startServer() {
           format: 'MP4 / AVC',
           sizeEstimated: '~320 MB',
           audioTrack: isDub ? 'English Dub' : 'Japanese (Sub)',
-          downloadUrl: `https://vidlink.pro/anime/${anilistId || 1}/${episodeNumber}?dub=${isDub}&download=true`,
-          proxyUrl: `/api/download/proxy-file?url=${encodeURIComponent(`https://vidlink.pro/anime/${anilistId || 1}/${episodeNumber}`)}&filename=${safeTitle}_EP${episodeNumber}_1080p.mp4`,
-          source: 'VidLink Master',
+          downloadUrl: primaryDownloadUrl,
+          proxyUrl: `/api/download/proxy-file?url=${encodeURIComponent(primaryDownloadUrl)}&filename=${safeTitle}_EP${episodeNumber}_1080p.mp4`,
+          source: 'AnimeWorld v1 Master',
           hasDirectStream: true,
+          mirrors: liveServers.map(s => ({ name: s.name, url: s.url })),
         },
         {
           id: `dl-${safeTitle}-${episodeNumber}-720p`,
