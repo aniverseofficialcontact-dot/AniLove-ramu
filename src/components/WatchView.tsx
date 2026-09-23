@@ -115,6 +115,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   // Derive initial server preference (Priority 1)
   const initialServer = settings?.preferredServers?.[0] || DEFAULT_STREAM_PROVIDER_ID;
   const [selectedServer, setSelectedServer] = useState<StreamServerId>(initialServer);
+  const [selectedSubServer, setSelectedSubServer] = useState<string>('Server 1');
 
   // Derive initial audio preference (English DUB or Japanese SUB by default)
   const initialAudio: StreamLanguage = useMemo(() => {
@@ -387,7 +388,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
             episodesList={episodeList}
             initialTime={initialTime}
             currentServer={selectedServer}
+            selectedSubServer={selectedSubServer}
             onServerChange={setSelectedServer}
+            onSubServerChange={setSelectedSubServer}
             currentAudioLanguage={selectedAudio}
             onAudioLanguageChange={setSelectedAudio}
             onEpisodeChange={ep => {
@@ -449,11 +452,11 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
             {/* Server 1, Server 2, Server 3 Buttons */}
             {['Server 1', 'Server 2', 'Server 3'].map((srvName, idx) => {
-              const isSelected = (selectedServer || 'Server 1').toLowerCase() === srvName.toLowerCase();
+              const isSelected = (selectedSubServer || 'Server 1').toLowerCase() === srvName.toLowerCase();
               return (
                 <button
                   key={`wv-srv-${idx}`}
-                  onClick={() => setSelectedServer(srvName as any)}
+                  onClick={() => setSelectedSubServer(srvName)}
                   className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-white text-black font-black shadow-lg shadow-white/10'
