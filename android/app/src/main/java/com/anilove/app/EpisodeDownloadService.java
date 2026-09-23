@@ -26,6 +26,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -286,10 +287,9 @@ public class EpisodeDownloadService extends Service {
                 }
                 boolean isDirect = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".mp4")
                         || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u")
-                        || resolvedUrl.contains(".txt") || resolvedUrl.contains("nexabloom.top")
-                        || resolvedUrl.contains("zephyrix.org/cdn/hls");
+                        || resolvedUrl.contains(".txt");
                 if (isDirect) {
-                    item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u") || resolvedUrl.contains(".txt") || resolvedUrl.contains("nexabloom") || resolvedUrl.contains("zephyrix");
+                    item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u") || resolvedUrl.contains(".txt");
                     Log.i(TAG, "Direct stream from backend — skipping VideoSniffer");
                 } else {
                     // Embed URL — run VideoSniffer on device
@@ -393,12 +393,12 @@ public class EpisodeDownloadService extends Service {
     }
 
     /**
-     * Calls the Render-hosted backend's /api/stream/resolve endpoint to get
+     * Calls the backend's /api/stream/resolve endpoint to get
      * a direct stream URL or embed page for downloading.
      */
     private String[] tryServerSideExtractFull(DownloadItem item) {
         try {
-            String apiUrl = "https://anilove-backend.onrender.com/api/stream/resolve";
+            String apiUrl = "http://127.0.0.1:3000/api/stream/resolve";
 
             String lang = item.audio != null && !item.audio.isEmpty() ? item.audio.toUpperCase() : "DUB";
             String safeTitle = item.animeTitle != null
@@ -408,13 +408,7 @@ public class EpisodeDownloadService extends Service {
                 ? item.serverName.replace("\\", "\\\\").replace("\"", "\\\"")
                 : "";
 
-            String safeProviderId = "anikoto-hd1";
-            if (safeServer.toLowerCase().contains("animeworld") || safeServer.toLowerCase().contains("indian") || safeServer.toLowerCase().contains("zephyrix")
-                    || "HIN".equals(lang)) {
-                safeProviderId = "animeworld-india";
-            } else if (safeServer.toLowerCase().contains("tatakai")) {
-                safeProviderId = "tatakai-multi";
-            }
+            String safeProviderId = "anify-cloud";
 
             JSONObject jsonReq = new JSONObject();
             jsonReq.put("anilistId", item.anilistId);
@@ -426,7 +420,7 @@ public class EpisodeDownloadService extends Service {
             jsonReq.put("providerId", safeProviderId);
             jsonReq.put("format", "TV");
 
-            Log.i(TAG, "[ServerExtract] Calling Render /api/stream/resolve for: "
+            Log.i(TAG, "[ServerExtract] Calling /api/stream/resolve for: "
                 + item.animeTitle + " EP" + item.episodeNumber + " [" + lang + "] on " + item.serverName + " (" + safeProviderId + ")");
 
             URL url = new URL(apiUrl);
@@ -441,12 +435,12 @@ public class EpisodeDownloadService extends Service {
 
             byte[] bodyBytes = jsonReq.toString().getBytes("UTF-8");
             conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
-            java.io.OutputStream os = conn.getOutputStream();
+            OutputStream os = conn.getOutputStream();
             os.write(bodyBytes);
             os.close();
 
             int responseCode = conn.getResponseCode();
-            Log.i(TAG, "[ServerExtract] Render response code: " + responseCode);
+            Log.i(TAG, "[ServerExtract] Response code: " + responseCode);
 
             if (responseCode == 200) {
                 BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -468,41 +462,6 @@ public class EpisodeDownloadService extends Service {
                         return new String[]{streamUrl, subtitleUrl};
                     }
                 }
-            }
-
-            // Fallback for English DUB: query Anikoto master directly if animeworld failed
-            if ("DUB".equals(lang) && !"anikoto-hd1".equals(safeProviderId)) {
-                try {
-                    jsonReq.put("providerId", "anikoto-hd1");
-                    HttpURLConnection connFb = (HttpURLConnection) new URL(apiUrl).openConnection();
-                    connFb.setRequestMethod("POST");
-                    connFb.setDoOutput(true);
-                    connFb.setConnectTimeout(15000);
-                    connFb.setReadTimeout(35000);
-                    connFb.setRequestProperty("Content-Type", "application/json");
-                    connFb.setRequestProperty("Accept", "application/json");
-                    connFb.setRequestProperty("User-Agent", "AniLove-Android/1.0");
-                    byte[] fbBytes = jsonReq.toString().getBytes("UTF-8");
-                    connFb.setRequestProperty("Content-Length", String.valueOf(fbBytes.length));
-                    java.io.OutputStream fbOs = connFb.getOutputStream();
-                    fbOs.write(fbBytes);
-                    fbOs.close();
-                    if (connFb.getResponseCode() == 200) {
-                        BufferedReader br = new BufferedReader(new InputStreamReader(connFb.getInputStream(), "UTF-8"));
-                        StringBuilder sb = new StringBuilder();
-                        String line;
-                        while ((line = br.readLine()) != null) sb.append(line);
-                        br.close();
-                        JSONObject resObj = new JSONObject(sb.toString());
-                        if (resObj.optBoolean("success", false)) {
-                            String streamUrl = resObj.optString("streamUrl", "");
-                            String subtitleUrl = resObj.optString("subtitleUrl", "");
-                            if (streamUrl != null && !streamUrl.isEmpty()) {
-                                return new String[]{streamUrl, subtitleUrl};
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {}
             }
         } catch (Exception e) {
             Log.w(TAG, "[ServerExtract] Exception: " + e.getMessage());
@@ -585,15 +544,6 @@ public class EpisodeDownloadService extends Service {
     private String getRefererForUrl(String streamUrl, String pageUrl) {
         if (streamUrl != null) {
             String lower = streamUrl.toLowerCase();
-            if (lower.contains("zephyrix") || lower.contains("zn-grid")) {
-                return "https://play.zephyrix.org/";
-            }
-            if (lower.contains("watchanimeworld") || lower.contains("animesalt") || lower.contains("short.icu")) {
-                return "https://watchanimeworld.one/";
-            }
-            if (lower.contains("nexabloom.top") || lower.contains("megaplay.buzz")) {
-                return "https://megaplay.buzz/";
-            }
             if (lower.contains("justanime.to")) {
                 return "https://justanime.to/";
             }
@@ -612,7 +562,7 @@ public class EpisodeDownloadService extends Service {
             URL u = new URL(ref);
             return u.getProtocol() + "://" + u.getHost() + "/";
         } catch (Exception e) {
-            return "https://anikototv.to/";
+            return "https://vidlink.pro/";
         }
     }
 

@@ -19,7 +19,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   episodes,
   currentEpisodeNumber,
   initialAudio = 'DUB',
-  initialServer = 'Anikoto HD-1',
+  initialServer = 'Anify Cloud',
   onClose,
   onOpenDownloadsView,
 }) => {

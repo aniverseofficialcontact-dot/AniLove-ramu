@@ -1015,10 +1015,10 @@ export const AccountView: React.FC<AccountViewProps> = ({
                     onClick={() => {
                       onSaveSettings({
                         ...settings,
-                        preferredServers: ['animeworld-india', 'tatakai-multi', 'anify-cloud'],
-                        defaultStreamServer: 'animeworld-india',
+                        preferredServers: ['anify-cloud', 'miruro-stream', 'renime-dub'],
+                        defaultStreamServer: 'anify-cloud',
                       });
-                      onShowToast('success', 'Reset to Default (1. AnimeWorld India, 2. Tatakai Multi-Dub, 3. Anify Media Cloud).', 'Defaults Restored');
+                      onShowToast('success', 'Reset to Default (1. Anify Cloud, 2. Miruro HD, 3. Renime Multi).', 'Defaults Restored');
                     }}
                     className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[10px] font-bold text-slate-300 transition cursor-pointer"
                   >
@@ -1035,11 +1035,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-[9px]">Priority 1</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[0] || 'animeworld-india'}
+                      value={settings.preferredServers?.[0] || 'anify-cloud'}
                       onChange={e => {
                         const newFirst = e.target.value as StreamServerId;
-                        const p2 = settings.preferredServers?.[1] || 'tatakai-multi';
-                        const p3 = settings.preferredServers?.[2] || 'anify-cloud';
+                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
+                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [newFirst, p2, p3],
@@ -1064,11 +1064,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-[9px]">Priority 2</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[1] || 'tatakai-multi'}
+                      value={settings.preferredServers?.[1] || 'miruro-stream'}
                       onChange={e => {
                         const newSecond = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'animeworld-india';
-                        const p3 = settings.preferredServers?.[2] || 'anify-cloud';
+                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
+                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [p1, newSecond, p3],
@@ -1092,11 +1092,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[9px]">Priority 3</span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[2] || 'anify-cloud'}
+                      value={settings.preferredServers?.[2] || 'renime-dub'}
                       onChange={e => {
                         const newThird = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'animeworld-india';
-                        const p2 = settings.preferredServers?.[1] || 'tatakai-multi';
+                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
+                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [p1, p2, newThird],

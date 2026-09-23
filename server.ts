@@ -3,18 +3,6 @@ import cors from 'cors';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
-// ==========================================
-// ANIKOTO LIVE SCRAPER API CONSTANTS
-// ==========================================
-const ANIKOTO_BASE = 'https://anikototv.to';
-const ANIKOTO_HEADERS: Record<string, string> = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'X-Requested-With': 'XMLHttpRequest',
-  'Referer': 'https://anikototv.to/',
-};
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -1449,135 +1437,6 @@ async function startServer() {
     }
   });
 
-  // Search Anikoto
-  app.get('/api/anikoto/search', async (req, res) => {
-    try {
-      const q = String(req.query.q || '').trim();
-      if (!q) {
-        res.status(400).json({ error: 'Search query q is required' });
-        return;
-      }
-
-      const searchUrl = `${ANIKOTO_BASE}/filter?keyword=${encodeURIComponent(q)}`;
-      const response = await fetch(searchUrl, { headers: ANIKOTO_HEADERS });
-      const html = await response.text();
-
-      const items = parseAnikotoSearchResults(html);
-      res.json({ success: true, count: items.length, items });
-    } catch (error: any) {
-      console.error('Anikoto search error:', error);
-      res.status(500).json({ error: error.message || 'Failed to search Anikoto' });
-    }
-  });
-
-  // Get Anikoto Episodes for an anime ID
-  app.get('/api/anikoto/episodes', async (req, res) => {
-    try {
-      const animeId = String(req.query.animeId || req.query.id || '').trim();
-      const referer = String(req.query.referer || `${ANIKOTO_BASE}/`).trim();
-      if (!animeId) {
-        res.status(400).json({ error: 'animeId is required' });
-        return;
-      }
-
-      const epListUrl = `${ANIKOTO_BASE}/ajax/episode/list/${animeId}`;
-      const response = await fetch(epListUrl, {
-        headers: { ...ANIKOTO_HEADERS, Referer: referer },
-      });
-      const data = await response.json();
-
-      if (data.status !== 200 || !data.result) {
-        res.status(404).json({ error: 'No episodes found for this anime ID' });
-        return;
-      }
-
-      const episodes = parseAnikotoEpisodes(data.result);
-      res.json({ success: true, count: episodes.length, episodes });
-    } catch (error: any) {
-      console.error('Anikoto episodes error:', error);
-      res.status(500).json({ error: error.message || 'Failed to fetch episodes from Anikoto' });
-    }
-  });
-
-  // Get Anikoto Servers for an episode's data-ids
-  app.get('/api/anikoto/servers', async (req, res) => {
-    try {
-      const ids = String(req.query.ids || req.query.servers || '').trim();
-      const referer = String(req.query.referer || `${ANIKOTO_BASE}/`).trim();
-      if (!ids) {
-        res.status(400).json({ error: 'ids (episode data-ids) is required' });
-        return;
-      }
-
-      const serverListUrl = `${ANIKOTO_BASE}/ajax/server/list?servers=${encodeURIComponent(ids)}`;
-      const response = await fetch(serverListUrl, {
-        headers: { ...ANIKOTO_HEADERS, Referer: referer },
-      });
-      const data = await response.json();
-
-      if (data.status !== 200 || !data.result) {
-        res.status(404).json({ error: 'No servers found for episode' });
-        return;
-      }
-
-      const servers = parseAnikotoServers(data.result);
-      res.json({ success: true, servers });
-    } catch (error: any) {
-      console.error('Anikoto servers error:', error);
-      res.status(500).json({ error: error.message || 'Failed to fetch servers from Anikoto' });
-    }
-  });
-
-  // Get Anikoto Stream URL from data-link-id
-  app.get('/api/anikoto/stream', async (req, res) => {
-    try {
-      const linkId = String(req.query.linkId || req.query.get || '').trim();
-      const referer = String(req.query.referer || `${ANIKOTO_BASE}/`).trim();
-      if (!linkId) {
-        res.status(400).json({ error: 'linkId is required' });
-        return;
-      }
-
-      const streamUrl = `${ANIKOTO_BASE}/ajax/server?get=${encodeURIComponent(linkId)}`;
-      const response = await fetch(streamUrl, {
-        headers: { ...ANIKOTO_HEADERS, Referer: referer },
-      });
-      const data = await response.json();
-
-      if (data.status !== 200 || !data.result?.url) {
-        res.status(404).json({ error: 'Failed to extract stream URL from Anikoto' });
-        return;
-      }
-
-      res.json({
-        success: true,
-        streamUrl: data.result.url,
-        skipData: data.result.skip_data || { intro: [0, 0], outro: [0, 0] },
-      });
-    } catch (error: any) {
-      console.error('Anikoto stream error:', error);
-      res.status(500).json({ error: error.message || 'Failed to get stream from Anikoto' });
-    }
-  });
-
-  // Full High-Performance End-to-End Resolution Endpoint
-  app.post('/api/anikoto/resolve', async (req, res) => {
-    try {
-      const result = await resolveAnikotoInternal(req.body);
-      if (!result.success) {
-        res.status(result.status || 404).json(result);
-        return;
-      }
-      res.json(result);
-    } catch (error: any) {
-      console.error('Anikoto resolve error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Failed to resolve episode source from Anikoto',
-      });
-    }
-  });
-
   // ==========================================
   // 1. ANIFY API RESOLVER (Eltik Meta-Engine)
   // ==========================================
@@ -1588,16 +1447,13 @@ async function startServer() {
         animeTitle,
         romajiTitle,
         englishTitle,
-        synonyms = [],
         episodeNumber = 1,
         language = 'SUB',
         serverName,
-        format = 'TV',
       } = req.body;
 
       const epNum = Number(episodeNumber) || 1;
       const subType = String(language || 'SUB').toUpperCase() === 'DUB' ? 'dub' : 'sub';
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
 
       // 1. Try hitting Anify API if anilistId is available
       let anifySources: any = null;
@@ -1646,29 +1502,20 @@ async function startServer() {
         }
       }
 
-      // Fallback: Query Anikoto / High Speed backend mapping for Anify
-      const fallbackResult = await resolveAnikotoInternal({
+      // Universal Embed Fallback
+      const fallbackResult = generateUniversalFallbackStream({
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        synonyms,
         episodeNumber: epNum,
         language: subType.toUpperCase(),
         serverName,
-        format,
       });
 
-      if (fallbackResult.success) {
-        res.json({
-          ...fallbackResult,
-          provider: 'anify',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Could not resolve stream for "${displayTitle}" Episode ${epNum} via Anify API.`,
+      res.json({
+        ...fallbackResult,
+        provider: 'anify',
       });
     } catch (error: any) {
       console.error('Anify resolve error:', error);
@@ -1680,230 +1527,36 @@ async function startServer() {
   });
 
   // ====================================================
-  // 2. TATAKAI API RESOLVER (Multi-Dub & Indic Scrapers)
-  // ====================================================
-  app.post('/api/tatakai/resolve', async (req, res) => {
-    try {
-      const {
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        nativeTitle,
-        synonyms = [],
-        episodeNumber = 1,
-        language = 'SUB',
-        serverName,
-        format = 'TV',
-      } = req.body;
-
-      const epNum = Number(episodeNumber) || 1;
-      const langUpper = String(language || 'SUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
-
-      // Tatakai server options
-      const tatakaiServersList: Array<{ name: string; type: string; linkId: string }> = [
-        { name: 'Tatakai Ultra HD', type: 'DUB', linkId: 'tatakai-dub-1' },
-        { name: 'Tatakai Master HD', type: 'SUB', linkId: 'tatakai-sub-1' },
-        { name: 'Tatakai Fast Edge', type: 'SUB', linkId: 'tatakai-edge-1' },
-      ];
-
-      // Resolve via Anikoto/Tatakai multi-audio stream engine
-      let resolved = await resolveAnikotoInternal({
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        nativeTitle,
-        synonyms,
-        episodeNumber: epNum,
-        language: langUpper === 'DUB' ? 'DUB' : 'SUB',
-        serverName,
-        format,
-      });
-
-      if (!resolved.success) {
-        resolved = await resolveAnikotoInternal({
-          animeTitle,
-          romajiTitle,
-          englishTitle,
-          nativeTitle,
-          synonyms,
-          episodeNumber: epNum,
-          language: 'SUB',
-          serverName,
-          format,
-        });
-      }
-
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          availableServers: [...tatakaiServersList, ...(resolved.availableServers || [])],
-          provider: 'tatakai',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Tatakai stream not available for "${displayTitle}" Episode ${epNum} in ${langUpper}.`,
-      });
-    } catch (error: any) {
-      console.error('Tatakai resolve error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Failed to resolve Tatakai stream',
-      });
-    }
-  });
-
-  // ====================================================
-  // 3. ANIMEWORLD API RESOLVER (AnimeWorld India & Indic)
-  // ====================================================
-  app.post(['/api/animeworld-india/resolve', '/api/animeworld/resolve'], async (req, res) => {
-    try {
-      const {
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        nativeTitle,
-        synonyms = [],
-        episodeNumber = 1,
-        language = 'DUB',
-        serverName,
-        format = 'TV',
-      } = req.body;
-
-      const epNum = Number(episodeNumber) || 1;
-      const langUpper = String(language || 'DUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
-
-      const animeworldServers = [
-        { name: 'AnimeWorld English Dub', type: 'DUB', linkId: 'aw-dub-1' },
-        { name: 'AnimeWorld Japanese (Sub)', type: 'SUB', linkId: 'aw-sub-1' },
-        { name: 'AnimeWorld High Bitrate', type: 'SUB', linkId: 'aw-hd-1' },
-      ];
-
-      // Resolve through internal high speed stream pipeline
-      let resolved = await resolveAnikotoInternal({
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        nativeTitle,
-        synonyms,
-        episodeNumber: epNum,
-        language: langUpper === 'DUB' ? 'DUB' : 'SUB',
-        serverName,
-        format,
-      });
-
-      if (!resolved.success) {
-        resolved = await resolveAnikotoInternal({
-          animeTitle,
-          romajiTitle,
-          englishTitle,
-          nativeTitle,
-          synonyms,
-          episodeNumber: epNum,
-          language: 'SUB',
-          serverName,
-          format,
-        });
-      }
-
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          availableServers: [...animeworldServers, ...(resolved.availableServers || [])],
-          provider: 'animeworld-india',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `AnimeWorld stream not available for "${displayTitle}" Episode ${epNum} in ${langUpper}.`,
-      });
-    } catch (error: any) {
-      console.error('AnimeWorld resolve error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Failed to resolve AnimeWorld stream',
-      });
-    }
-  });
-
-  // ====================================================
-  // 4. RENIME API RESOLVER
+  // 2. RENIME API RESOLVER
   // ====================================================
   app.post('/api/renime/resolve', async (req, res) => {
     try {
       const {
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms = [],
         episodeNumber = 1,
         language = 'DUB',
         serverName,
-        format = 'TV',
       } = req.body;
 
       const epNum = Number(episodeNumber) || 1;
       const langUpper = String(language || 'DUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
 
-      const renimeServers = [
-        { name: 'Renime Global Master', type: 'DUB', linkId: 'renime-dub-1' },
-        { name: 'Renime Japanese Master (Sub)', type: 'SUB', linkId: 'renime-sub-1' },
-        { name: 'Renime High Speed CDN', type: 'SUB', linkId: 'renime-cdn-1' },
-      ];
-
-      // Resolve via multi-source scraper
-      let resolved = await resolveAnikotoInternal({
+      const fallbackResult = generateUniversalFallbackStream({
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms,
         episodeNumber: epNum,
-        language: langUpper === 'DUB' ? 'DUB' : 'SUB',
+        language: langUpper,
         serverName,
-        format,
       });
 
-      if (!resolved.success) {
-        resolved = await resolveAnikotoInternal({
-          animeTitle,
-          romajiTitle,
-          englishTitle,
-          nativeTitle,
-          synonyms,
-          episodeNumber: epNum,
-          language: 'SUB',
-          serverName,
-          format,
-        });
-      }
-
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          availableServers: [...renimeServers, ...(resolved.availableServers || [])],
-          provider: 'renime',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Renime stream not available for "${displayTitle}" Episode ${epNum} in ${langUpper}.`,
+      res.json({
+        ...fallbackResult,
+        provider: 'renime',
       });
     } catch (error: any) {
       console.error('Renime resolve error:', error);
@@ -1915,74 +1568,36 @@ async function startServer() {
   });
 
   // ====================================================
-  // 5. MIRURO API RESOLVER
+  // 3. MIRURO API RESOLVER
   // ====================================================
   app.post('/api/miruro/resolve', async (req, res) => {
     try {
       const {
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms = [],
         episodeNumber = 1,
         language = 'SUB',
         serverName,
-        format = 'TV',
       } = req.body;
 
       const epNum = Number(episodeNumber) || 1;
       const langUpper = String(language || 'SUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
 
-      const miruroServers = [
-        { name: 'Miruro Primary Decrypted HLS', type: 'SUB', linkId: 'miruro-hls-1' },
-        { name: 'Miruro English Dub Master', type: 'DUB', linkId: 'miruro-dub-1' },
-        { name: 'Miruro Fast CDN (1080p)', type: 'SUB', linkId: 'miruro-cdn-1' },
-        { name: 'Miruro Pahe Mirror', type: 'SUB', linkId: 'miruro-pahe-1' },
-      ];
-
-      // Resolve through the high-performance pipeline
-      let resolved = await resolveAnikotoInternal({
+      const fallbackResult = generateUniversalFallbackStream({
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms,
         episodeNumber: epNum,
-        language: langUpper === 'DUB' ? 'DUB' : 'SUB',
+        language: langUpper,
         serverName,
-        format,
       });
 
-      if (!resolved.success) {
-        resolved = await resolveAnikotoInternal({
-          animeTitle,
-          romajiTitle,
-          englishTitle,
-          nativeTitle,
-          synonyms,
-          episodeNumber: epNum,
-          language: 'SUB',
-          serverName,
-          format,
-        });
-      }
-
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          availableServers: [...miruroServers, ...(resolved.availableServers || [])],
-          provider: 'miruro',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Miruro stream not available for "${displayTitle}" Episode ${epNum}.`,
+      res.json({
+        ...fallbackResult,
+        provider: 'miruro',
       });
     } catch (error: any) {
       console.error('Miruro resolve error:', error);
@@ -1994,56 +1609,36 @@ async function startServer() {
   });
 
   // ====================================================
-  // 6. UNIVERSAL MASTER STREAM RESOLVER (Multi-Provider Fallback)
+  // 4. UNIVERSAL MASTER STREAM RESOLVER
   // ====================================================
   app.post('/api/stream/resolve', async (req, res) => {
     try {
       const {
         anilistId,
-        providerId,
-        category,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms = [],
         episodeNumber = 1,
         language = 'SUB',
         serverName,
-        format = 'TV',
       } = req.body;
 
       const epNum = Number(episodeNumber) || 1;
       const langUpper = String(language || 'SUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
 
-      // Try resolving through internal high-reliability pipeline
-      const reqLangForPipeline = langUpper === 'DUB' ? 'DUB' : 'SUB';
-      const resolved = await resolveAnikotoInternal({
+      const fallbackResult = generateUniversalFallbackStream({
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms,
         episodeNumber: epNum,
-        language: reqLangForPipeline,
+        language: langUpper,
         serverName,
-        format,
       });
 
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          provider: category || 'tatakai',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Streaming is not yet available for "${displayTitle}" Episode ${epNum}. This anime may still be unreleased or unavailable.`,
+      res.json({
+        ...fallbackResult,
+        provider: 'universal',
       });
     } catch (error: any) {
       console.error('Universal resolve error:', error);
@@ -2055,7 +1650,7 @@ async function startServer() {
   });
 
   // ====================================================
-  // 7. ANIVEXA API RESOLVER (Multi-Aggregator Engine)
+  // 5. ANIVEXA API RESOLVER
   // ====================================================
   app.post('/api/anivexa/resolve', async (req, res) => {
     try {
@@ -2064,66 +1659,27 @@ async function startServer() {
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms = [],
         episodeNumber = 1,
         language = 'SUB',
         serverName,
-        format = 'TV',
       } = req.body;
 
       const epNum = Number(episodeNumber) || 1;
       const langUpper = String(language || 'SUB').toUpperCase();
-      const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
 
-      const anivexaServers = [
-        { name: 'Anivexa Master Ultra HD', type: 'DUB', linkId: 'anivexa-master-1' },
-        { name: 'Anivexa Fast Edge CDN', type: 'SUB', linkId: 'anivexa-edge-1' },
-        { name: 'Anivexa Multi-Sub HLS', type: 'SUB', linkId: 'anivexa-hls-1' },
-        { name: 'Anivexa Pahe Compact', type: 'DUB', linkId: 'anivexa-pahe-1' },
-      ];
-
-      // Resolve through unified multi-engine scraper pipeline
-      let resolved = await resolveAnikotoInternal({
+      const fallbackResult = generateUniversalFallbackStream({
+        anilistId,
         animeTitle,
         romajiTitle,
         englishTitle,
-        nativeTitle,
-        synonyms,
         episodeNumber: epNum,
-        language: langUpper === 'DUB' ? 'DUB' : 'SUB',
+        language: langUpper,
         serverName,
-        format,
       });
 
-      if (!resolved.success) {
-        resolved = await resolveAnikotoInternal({
-          animeTitle,
-          romajiTitle,
-          englishTitle,
-          nativeTitle,
-          synonyms,
-          episodeNumber: epNum,
-          language: 'SUB',
-          serverName,
-          format,
-        });
-      }
-
-      if (resolved.success) {
-        res.json({
-          ...resolved,
-          requestedLanguage: langUpper,
-          availableLanguages: ['SUB', 'DUB'],
-          availableServers: [...anivexaServers, ...(resolved.availableServers || [])],
-          provider: 'anivexa',
-        });
-        return;
-      }
-
-      res.status(404).json({
-        success: false,
-        error: `Anivexa stream not available for "${displayTitle}" Episode ${epNum}.`,
+      res.json({
+        ...fallbackResult,
+        provider: 'anivexa',
       });
     } catch (error: any) {
       console.error('Anivexa resolve error:', error);
@@ -2347,7 +1903,7 @@ async function startServer() {
           audioTrack: isDub ? 'English Dub' : 'Japanese (Sub)',
           downloadUrl: `https://vidlink.pro/anime/${anilistId || 1}/${episodeNumber}?dub=${isDub}&download=true`,
           proxyUrl: `/api/download/proxy-file?url=${encodeURIComponent(`https://vidlink.pro/anime/${anilistId || 1}/${episodeNumber}`)}&filename=${safeTitle}_EP${episodeNumber}_1080p.mp4`,
-          source: 'Anikoto HD / VidLink Master',
+          source: 'VidLink Master',
           hasDirectStream: true,
         },
         {
@@ -2371,7 +1927,7 @@ async function startServer() {
           audioTrack: isDub ? 'English Dub' : 'Japanese (Sub)',
           downloadUrl: `https://vidsrc.cc/v2/embed/anime/${anilistId || 1}/${episodeNumber}?dub=${isDub}`,
           proxyUrl: `/api/download/proxy-file?url=${encodeURIComponent(`https://vidsrc.cc/v2/embed/anime/${anilistId || 1}/${episodeNumber}`)}&filename=${safeTitle}_EP${episodeNumber}_480p.mp4`,
-          source: 'Tatakai Pahe CDN',
+          source: 'VidSrc Fast Mirror',
           hasDirectStream: true,
         },
         {
@@ -2512,7 +2068,7 @@ async function startServer() {
   // ====================================================
   app.post('/api/stream/extract-direct', async (req, res) => {
     try {
-      const { embedUrl, referer = 'https://anikototv.to/' } = req.body;
+      const { embedUrl, referer = 'https://vidlink.pro/' } = req.body;
       if (!embedUrl) {
         res.status(400).json({ success: false, error: 'embedUrl is required' });
         return;
@@ -2823,146 +2379,7 @@ Here are highly acclaimed anime tailored for you:
 *💡 Tip: Type any anime title or ask me "What should I watch next if I loved X?" or "Explain the timeline of Y"!*`;
 }
 
-// ==========================================
-// ANIKOTO PARSER & MATCHER UTILITIES
-// ==========================================
 
-function parseAnikotoSearchResults(html: string) {
-  const itemRegex = /<div class="item\s*">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
-  const items: Array<{
-    id: string;
-    url: string;
-    poster: string;
-    title: string;
-    sub: number;
-    dub: number;
-    type: string;
-  }> = [];
-
-  let m: RegExpExecArray | null;
-  while ((m = itemRegex.exec(html)) !== null) {
-    const block = m[1];
-    const tipM = block.match(/data-tip="([^"]+)"/);
-    const linkM = block.match(/href="([^"]*\/watch\/[^"]+)"/);
-    const imgM = block.match(/<img[^>]*src="([^"]+)"[^>]*alt="([^"]*)"/);
-    const subM = block.match(/class="ep-status sub"[^>]*><span>\s*(\d+)/);
-    const dubM = block.match(/class="ep-status dub"[^>]*><span>\s*(\d+)/);
-    const typeM = block.match(/class="right">([^<]+)<\/div>/);
-
-    if (tipM && linkM) {
-      items.push({
-        id: tipM[1].trim(),
-        url: linkM[1].startsWith('http') ? linkM[1] : `https://anikototv.to${linkM[1]}`,
-        poster: imgM ? imgM[1] : '',
-        title: imgM ? imgM[2] : '',
-        sub: subM ? parseInt(subM[1], 10) : 0,
-        dub: dubM ? parseInt(dubM[1], 10) : 0,
-        type: typeM ? typeM[1].trim() : 'TV',
-      });
-    }
-  }
-
-  return items;
-}
-
-function parseAnikotoEpisodes(html: string) {
-  const epTagRegex = /<a\s+([^>]+)>/gi;
-  const episodes: Array<{
-    id: string;
-    num: number;
-    slug: string;
-    sub: boolean;
-    dub: boolean;
-    ids: string;
-  }> = [];
-
-  let m: RegExpExecArray | null;
-  while ((m = epTagRegex.exec(html)) !== null) {
-    const attrs = m[1];
-    const idM = attrs.match(/data-id="([^"]+)"/);
-    const numM = attrs.match(/data-num="([^"]+)"/);
-    const slugM = attrs.match(/data-slug="([^"]+)"/);
-    const subM = attrs.match(/data-sub="([^"]+)"/);
-    const dubM = attrs.match(/data-dub="([^"]+)"/);
-    const idsM = attrs.match(/data-ids="([^"]+)"/);
-
-    if (idM && numM && idsM) {
-      episodes.push({
-        id: idM[1].trim(),
-        num: parseInt(numM[1], 10),
-        slug: slugM ? slugM[1].trim() : numM[1].trim(),
-        sub: subM ? subM[1] === '1' : true,
-        dub: dubM ? dubM[1] === '1' : false,
-        ids: idsM[1].trim(),
-      });
-    }
-  }
-
-  return episodes;
-}
-
-function parseAnikotoServers(html: string) {
-  const serverSections = [...html.matchAll(/<div class="type"\s+data-type="([^"]+)">([\s\S]*?)<\/ul>/gi)];
-  const serversByLang: Record<
-    string,
-    Array<{
-      name: string;
-      epId: string;
-      svId: string;
-      linkId: string;
-    }>
-  > = {
-    SUB: [],
-    DUB: [],
-  };
-
-  for (const sSec of serverSections) {
-    const rawSecLang = sSec[1].toUpperCase().trim();
-    const secHtml = sSec[2];
-    const liRegex = /<li\s+([^>]+)>([^<]+)<\/li>/gi;
-    let liMatch: RegExpExecArray | null;
-
-    // Normalize group key (Only SUB and DUB)
-    let secLang = 'SUB';
-    if (['DUB', 'ENGLISH', 'ENG', 'MULTI', 'DUAL', 'MULTI-AUDIO'].includes(rawSecLang)) {
-      secLang = 'DUB';
-    } else {
-      secLang = 'SUB';
-    }
-
-    if (!serversByLang[secLang]) {
-      serversByLang[secLang] = [];
-    }
-
-    while ((liMatch = liRegex.exec(secHtml)) !== null) {
-      const liAttrs = liMatch[1];
-      const name = liMatch[2].trim();
-      const epIdM = liAttrs.match(/data-ep-id="([^"]+)"/);
-      const svIdM = liAttrs.match(/data-sv-id="([^"]+)"/);
-      const linkIdM = liAttrs.match(/data-link-id="([^"]+)"/);
-
-      if (linkIdM) {
-        const item = {
-          name,
-          epId: epIdM ? epIdM[1].trim() : '',
-          svId: svIdM ? svIdM[1].trim() : '',
-          linkId: linkIdM[1].trim(),
-        };
-
-        serversByLang[secLang].push(item);
-      }
-    }
-  }
-
-  // Clean empty keys
-  Object.keys(serversByLang).forEach(k => {
-    if (serversByLang[k].length === 0 && !['SUB', 'DUB'].includes(k)) {
-      delete serversByLang[k];
-    }
-  });
-
-  return serversByLang;
-}
 
 function generateSearchQueries(rawTitles: string[]): string[] {
   const queries = new Set<string>();
@@ -3316,7 +2733,7 @@ async function decryptMegaCloudSources(encrypted: string): Promise<any[] | null>
 
 async function extractDirectStreamFromEmbed(
   embedUrl: string,
-  anikotoReferer: string = 'https://anikototv.to/'
+  defaultReferer: string = 'https://vidlink.pro/'
 ): Promise<{ streamUrl: string; subtitleUrl?: string } | null> {
   if (!embedUrl || !embedUrl.startsWith('http')) return null;
   try {
@@ -3483,312 +2900,5 @@ async function extractDirectStreamFromEmbed(
   }
 }
 
-// Internal reusable streaming resolution pipeline
-async function resolveAnikotoInternal(input: {
-  anilistId?: number | string;
-  animeTitle?: string;
-  romajiTitle?: string;
-  englishTitle?: string;
-  nativeTitle?: string;
-  synonyms?: string[];
-  episodeNumber?: number;
-  language?: string;
-  serverName?: string;
-  format?: string;
-}): Promise<any> {
-  const {
-    anilistId = 1,
-    animeTitle = '',
-    romajiTitle = '',
-    englishTitle = '',
-    nativeTitle = '',
-    synonyms = [],
-    episodeNumber = 1,
-    language = 'SUB',
-    serverName,
-    format = 'TV',
-  } = input;
-
-  const epNum = Number(episodeNumber) || 1;
-  const lang = String(language || 'SUB').toUpperCase();
-
-  // Collect raw candidates - prioritize English title first for scraper accuracy
-  const rawTitles = [
-    englishTitle,
-    animeTitle,
-    romajiTitle,
-    nativeTitle,
-    ...(Array.isArray(synonyms) ? synonyms : []),
-  ].filter((t): t is string => Boolean(t && typeof t === 'string' && t.trim().length > 1));
-
-  // Generate smart variations (e.g. removing "Season 2", "2nd Season", "Part 2", punctuation)
-  const queries = generateSearchQueries(rawTitles);
-
-  if (queries.length === 0) {
-    return generateUniversalFallbackStream({
-      anilistId,
-      animeTitle,
-      romajiTitle,
-      englishTitle,
-      episodeNumber: epNum,
-      language: lang,
-      serverName,
-    });
-  }
-
-  let bestItem: any = null;
-  let bestGlobalScore = 40;
-  const displayTitle = englishTitle || animeTitle || romajiTitle || 'Anime';
-
-  for (const q of queries) {
-    const searchUrl = `${ANIKOTO_BASE}/filter?keyword=${encodeURIComponent(q)}`;
-    try {
-      const searchRes = await fetch(searchUrl, {
-        headers: ANIKOTO_HEADERS,
-        signal: AbortSignal.timeout(2500),
-      });
-      if (searchRes.ok) {
-        const searchHtml = await searchRes.text();
-        const items = parseAnikotoSearchResults(searchHtml);
-        if (items.length > 0) {
-          for (const item of items) {
-            const score = scoreAnimeCandidate(item, q, format, epNum, rawTitles);
-            if (score > bestGlobalScore) {
-              bestGlobalScore = score;
-              bestItem = item;
-            }
-          }
-          if (bestGlobalScore >= 250) {
-            break;
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore individual search query timeout/error
-    }
-  }
-
-  if (!bestItem) {
-    return generateUniversalFallbackStream({
-      anilistId,
-      animeTitle,
-      romajiTitle,
-      englishTitle,
-      episodeNumber: epNum,
-      language: lang,
-      serverName,
-    });
-  }
-
-  try {
-    // Fetch Episode List
-    const epListUrl = `${ANIKOTO_BASE}/ajax/episode/list/${bestItem.id}`;
-    const epRes = await fetch(epListUrl, {
-      headers: { ...ANIKOTO_HEADERS, Referer: bestItem.url || `${ANIKOTO_BASE}/` },
-      signal: AbortSignal.timeout(2500),
-    });
-    const epJson = await epRes.json();
-
-    if (epJson.status !== 200 || !epJson.result) {
-      return generateUniversalFallbackStream({
-        anilistId,
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        episodeNumber: epNum,
-        language: lang,
-        serverName,
-      });
-    }
-
-    const episodes = parseAnikotoEpisodes(epJson.result);
-    if (episodes.length === 0) {
-      return generateUniversalFallbackStream({
-        anilistId,
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        episodeNumber: epNum,
-        language: lang,
-        serverName,
-      });
-    }
-
-    // Find the specific requested episode, fallback to closest
-    const targetEp = episodes.find(e => e.num === epNum) || episodes[0];
-
-    // Fetch Servers List
-    const serverListUrl = `${ANIKOTO_BASE}/ajax/server/list?servers=${encodeURIComponent(targetEp.ids)}`;
-    const sRes = await fetch(serverListUrl, {
-      headers: { ...ANIKOTO_HEADERS, Referer: bestItem.url || `${ANIKOTO_BASE}/` },
-      signal: AbortSignal.timeout(2500),
-    });
-    const sJson = await sRes.json();
-
-    if (sJson.status !== 200 || !sJson.result) {
-      return generateUniversalFallbackStream({
-        anilistId,
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        episodeNumber: epNum,
-        language: lang,
-        serverName,
-      });
-    }
-
-    const serverGroups = parseAnikotoServers(sJson.result);
-    const isDubAvailable = Boolean(serverGroups['DUB'] && serverGroups['DUB'].length > 0);
-
-    // Determine actual target language group (Only SUB and DUB):
-    let targetGroupKey = 'SUB';
-    let isTargetLangAvailable = false;
-
-    if (['DUB', 'ENGLISH', 'ENG'].includes(lang) && isDubAvailable) {
-      targetGroupKey = 'DUB';
-      isTargetLangAvailable = true;
-    } else if (serverGroups['SUB'] && serverGroups['SUB'].length > 0) {
-      targetGroupKey = 'SUB';
-      isTargetLangAvailable = lang === 'SUB';
-    } else if (isDubAvailable) {
-      targetGroupKey = 'DUB';
-      isTargetLangAvailable = false;
-    } else {
-      targetGroupKey = Object.keys(serverGroups)[0] || 'SUB';
-      isTargetLangAvailable = false;
-    }
-
-    const isFallback = !isTargetLangAvailable && lang !== targetGroupKey;
-    const fallbackReason = isFallback
-      ? `${lang === 'DUB' ? 'English Dub' : 'Japanese Sub'} is not available for this episode. Playing ${targetGroupKey === 'DUB' ? 'English Dub' : 'Japanese Sub'} instead.`
-      : undefined;
-
-    const availableInLang = serverGroups[targetGroupKey] || serverGroups['SUB'] || Object.values(serverGroups)[0] || [];
-
-    if (availableInLang.length === 0) {
-      return generateUniversalFallbackStream({
-        anilistId,
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        episodeNumber: epNum,
-        language: lang,
-        serverName,
-      });
-    }
-
-    // Find server inside the matching audio group:
-    let chosenServer = availableInLang[0];
-    if (serverName) {
-      const matched = availableInLang.find(s =>
-        s.name.toLowerCase().includes(String(serverName).toLowerCase())
-      );
-      if (matched) {
-        chosenServer = matched;
-      } else {
-        const allFlat = Object.values(serverGroups).flat();
-        const matchedAny = allFlat.find(s => s.name.toLowerCase().includes(String(serverName).toLowerCase()));
-        if (matchedAny) chosenServer = matchedAny;
-      }
-    }
-
-    // Fetch Direct Stream Embed URL from Anikoto CDN
-    const streamReqUrl = `${ANIKOTO_BASE}/ajax/server?get=${encodeURIComponent(chosenServer.linkId)}`;
-    const streamRes = await fetch(streamReqUrl, {
-      headers: { ...ANIKOTO_HEADERS, Referer: bestItem.url || `${ANIKOTO_BASE}/` },
-      signal: AbortSignal.timeout(2500),
-    });
-    const streamJson = await streamRes.json();
-
-    if (streamJson.status !== 200 || !streamJson.result?.url) {
-      return generateUniversalFallbackStream({
-        anilistId,
-        animeTitle,
-        romajiTitle,
-        englishTitle,
-        episodeNumber: epNum,
-        language: lang,
-        serverName,
-      });
-    }
-
-    const embedUrl = streamJson.result.url as string;
-
-    // Attempt server-side extraction of actual .m3u8 from the embed URL.
-    // This avoids needing VideoSniffer on Android for downloads.
-    let directStreamUrl: string | undefined;
-    let directSubtitleUrl: string | undefined;
-    try {
-      const extracted = await extractDirectStreamFromEmbed(embedUrl, bestItem.url || `${ANIKOTO_BASE}/`);
-      if (extracted?.streamUrl) {
-        directStreamUrl = extracted.streamUrl;
-        directSubtitleUrl = extracted.subtitleUrl;
-        console.log(`[AnikotoResolver] Server-side extraction SUCCESS for ${chosenServer.name}: ${directStreamUrl.substring(0, 80)}`);
-      } else {
-        console.log(`[AnikotoResolver] Server-side extraction returned null for ${chosenServer.name}, returning embed URL`);
-      }
-    } catch (extractErr) {
-      console.warn('[AnikotoResolver] Server-side extraction error:', String(extractErr));
-    }
-
-    // Flat list of all available server options for easy frontend UI switching
-    const flatServersList: Array<{ name: string; type: string; linkId: string }> = [];
-    Object.keys(serverGroups).forEach(groupLang => {
-      serverGroups[groupLang].forEach(s => {
-        flatServersList.push({
-          name: s.name,
-          type: groupLang,
-          linkId: s.linkId,
-        });
-      });
-    });
-
-    return {
-      success: true,
-      // If we extracted a direct .m3u8, return it as streamUrl for downloads.
-      // The embedUrl is also returned so the WebView player can use it.
-      streamUrl: directStreamUrl || embedUrl,
-      embedUrl,
-      directStreamUrl: directStreamUrl || null,
-      subtitleUrl: directSubtitleUrl || null,
-      skipData: streamJson.result.skip_data || { intro: [0, 0], outro: [0, 0] },
-      animeMatch: {
-        id: bestItem.id,
-        title: bestItem.title,
-        url: bestItem.url,
-        poster: bestItem.poster,
-        sub: bestItem.sub,
-        dub: bestItem.dub,
-        type: bestItem.type,
-      },
-      episode: {
-        id: targetEp.id,
-        num: targetEp.num,
-        slug: targetEp.slug,
-        sub: targetEp.sub,
-        dub: targetEp.dub,
-      },
-      availableServers: flatServersList,
-      selectedServer: chosenServer.name,
-      language: targetGroupKey,
-      requestedLanguage: lang,
-      actualLanguage: targetGroupKey,
-      isFallback,
-      fallbackReason,
-      isDubAvailable,
-      totalEpisodes: episodes.length,
-    };
-  } catch (err) {
-    return generateUniversalFallbackStream({
-      anilistId,
-      animeTitle,
-      romajiTitle,
-      englishTitle,
-      episodeNumber: epNum,
-      language: lang,
-      serverName,
-    });
-  }
-}
 
 startServer();

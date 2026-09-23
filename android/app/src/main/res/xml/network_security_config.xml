@@ -14,8 +14,4 @@
     <domain includeSubdomains="true">anilove3.ai.studio</domain>
   </domain-config>
 
-  <!-- Production backend (HTTPS) - keep cleartext disallowed -->
-  <domain-config cleartextTrafficPermitted="false">
-    <domain includeSubdomains="true">anilove-backend.onrender.com</domain>
-  </domain-config>
 </network-security-config>

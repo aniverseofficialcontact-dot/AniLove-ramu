@@ -328,22 +328,14 @@ export interface AppNotification {
 }
 
 export type StreamServerId =
-  | 'anikoto'
-  | 'anikoto-hd1'
-  | 'anikoto-vidstream'
-  | 'anikoto-vidplay'
-  | 'anikoto-hd2'
-  | 'anikoto-ultra'
-  | 'animeworld-india'
   | 'anify-cloud'
   | 'anify-fast'
-  | 'tatakai-multi'
-  | 'tatakai-pahe'
-  | 'renime-dub'
   | 'miruro-stream'
   | 'miruro-pro'
   | 'miruro-pahe'
-  | 'official-link';
+  | 'renime-dub'
+  | 'official-link'
+  | 'universal';
 export type AudioLanguagePreference = 'SUB' | 'DUB' | 'HIN';
 
 export interface UserProfile {

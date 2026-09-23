@@ -455,14 +455,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
             <div className="h-5 w-px bg-neutral-800 shrink-0 mx-1" />
 
             {/* Streaming Server Engines */}
-            {STREAM_PROVIDERS.filter(p => {
-              // Filter servers based on selected language
-              if (selectedAudio === 'HIN') {
-                return p.id === 'animeworld-india' || p.id === 'tatakai-multi';
-              }
-              // For ENG/JAP, show all servers
-              return true;
-            }).map(p => {
+            {STREAM_PROVIDERS.map(p => {
               const isSelected = selectedServer === p.id;
               return (
                 <button
@@ -1063,7 +1056,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           }))}
           currentEpisodeNumber={episodeNumber}
           initialAudio={selectedAudio}
-          initialServer={STREAM_PROVIDERS.find(p => p.id === selectedServer)?.label || 'Anikoto HD-1'}
+          initialServer={STREAM_PROVIDERS.find(p => p.id === selectedServer)?.label || 'Anify Cloud'}
           onClose={() => setShowDownloadModal(false)}
           onOpenDownloadsView={onOpenDownloadsView}
         />

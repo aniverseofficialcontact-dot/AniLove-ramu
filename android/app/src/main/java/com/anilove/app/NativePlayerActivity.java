@@ -1606,10 +1606,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "  }" +
                     "</script></body></html>";
 
-            String baseUrl = "https://play.zephyrix.org/";
-            if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
-                baseUrl = "https://megaplay.buzz/";
-            } else if (url.contains("justanime.to")) {
+            String baseUrl = "https://vidlink.pro/";
+            if (url.contains("justanime.to")) {
                 baseUrl = "https://justanime.to/";
             } else {
                 try {
@@ -1622,12 +1620,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         isDirectHls = false;
-        String referer = "https://anikototv.to/";
-        if (url.contains("zephyrix") || url.contains("watchanimeworld") || url.contains("short.icu") || url.contains("animesalt")) {
-            referer = "https://watchanimeworld.one/";
-        } else if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
-            referer = "https://megaplay.buzz/";
-        } else if (url.contains("justanime.to")) {
+        String referer = "https://vidlink.pro/";
+        if (url.contains("justanime.to")) {
             referer = "https://justanime.to/";
         } else {
             try {

@@ -255,12 +255,8 @@ public class VideoSniffer {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
                 Map<String, String> headers = new HashMap<>();
-                String referer = "https://anikototv.to/";
-                if (pageUrl.contains("zephyrix") || pageUrl.contains("watchanimeworld") || pageUrl.contains("short.icu") || pageUrl.contains("animesalt")) {
-                    referer = "https://watchanimeworld.one/";
-                } else if (pageUrl.contains("nexabloom.top") || pageUrl.contains("megaplay.buzz")) {
-                    referer = "https://megaplay.buzz/";
-                } else if (pageUrl.contains("justanime.to")) {
+                String referer = "https://vidlink.pro/";
+                if (pageUrl.contains("justanime.to")) {
                     referer = "https://justanime.to/";
                 } else if (pageUrl.contains("vidlink.pro")) {
                     referer = "https://vidlink.pro/";

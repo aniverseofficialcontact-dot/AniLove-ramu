@@ -1016,10 +1016,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => {
                       onSaveSettings({
                         ...settings,
-                        preferredServers: ['tatakai-multi', 'anify-cloud', 'anikoto-hd1'],
-                        defaultStreamServer: 'tatakai-multi',
+                        preferredServers: ['anify-cloud', 'miruro-stream', 'renime-dub'],
+                        defaultStreamServer: 'anify-cloud',
                       });
-                      onShowToast('success', 'Reset servers to Default (1. Tatakai Multi-Dub, 2. Anify Media Cloud, 3. Anikoto HD-1).', 'Defaults Restored');
+                      onShowToast('success', 'Reset servers to Default (1. Anify Cloud, 2. Miruro HD, 3. Renime Multi).', 'Defaults Restored');
                     }}
                     className="px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-[11px] font-bold text-indigo-300 transition cursor-pointer"
                   >
@@ -1041,11 +1041,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[0] || 'tatakai-multi'}
+                      value={settings.preferredServers?.[0] || 'anify-cloud'}
                       onChange={e => {
                         const newFirst = e.target.value as StreamServerId;
-                        const p2 = settings.preferredServers?.[1] || 'anify-cloud';
-                        const p3 = settings.preferredServers?.[2] || 'anikoto-hd1';
+                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
+                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [newFirst, p2, p3],
@@ -1075,11 +1075,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[1] || 'anify-cloud'}
+                      value={settings.preferredServers?.[1] || 'miruro-stream'}
                       onChange={e => {
                         const newSecond = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'tatakai-multi';
-                        const p3 = settings.preferredServers?.[2] || 'anikoto-hd1';
+                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
+                        const p3 = settings.preferredServers?.[2] || 'renime-dub';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [p1, newSecond, p3],
@@ -1108,11 +1108,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </span>
                     </div>
                     <select
-                      value={settings.preferredServers?.[2] || 'anikoto-hd1'}
+                      value={settings.preferredServers?.[2] || 'renime-dub'}
                       onChange={e => {
                         const newThird = e.target.value as StreamServerId;
-                        const p1 = settings.preferredServers?.[0] || 'tatakai-multi';
-                        const p2 = settings.preferredServers?.[1] || 'anify-cloud';
+                        const p1 = settings.preferredServers?.[0] || 'anify-cloud';
+                        const p2 = settings.preferredServers?.[1] || 'miruro-stream';
                         onSaveSettings({
                           ...settings,
                           preferredServers: [p1, p2, newThird],
@@ -1139,7 +1139,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <span>Auto-Skip Opening Themes (Intro)</span>
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    Automatically skips opening theme songs using Anikoto timestamp markers.
+                    Automatically skips opening theme songs using timestamp markers when available.
                   </div>
                 </div>
                 <input
