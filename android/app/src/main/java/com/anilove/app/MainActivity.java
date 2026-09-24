@@ -156,6 +156,9 @@ public class MainActivity extends BridgeActivity {
         try {
             WebView webView = getBridge() != null ? getBridge().getWebView() : null;
             if (webView != null) {
+                webView.setFocusable(true);
+                webView.setFocusableInTouchMode(true);
+                webView.requestFocus();
                 WebSettings settings = webView.getSettings();
                 settings.setSupportMultipleWindows(false);
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);

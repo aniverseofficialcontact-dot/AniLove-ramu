@@ -485,51 +485,25 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         </section>
 
-        {/* Player Controls & Episode Navigation Bar */}
-        <div className="mx-3 sm:mx-0 flex items-center justify-between flex-wrap gap-3 p-3 sm:p-4 rounded-2xl bg-[#0a0a0d] border border-neutral-800 shadow-2xl">
-          {/* Episode Quick Switch Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              disabled={!hasPrevEpisode}
-              onClick={handlePrevEpisode}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 text-xs font-bold border border-neutral-700 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Prev Ep</span>
-            </button>
+        {/* Episode Quick Switch Navigation (Borderless) */}
+        <div className="mx-3 sm:mx-0 flex items-center gap-2.5 pt-1 pb-1">
+          <button
+            disabled={!hasPrevEpisode}
+            onClick={handlePrevEpisode}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#0d101a] hover:bg-[#141926] text-neutral-200 text-xs font-bold border border-white/10 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer shadow-md"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Prev Ep</span>
+          </button>
 
-            <button
-              disabled={!hasNextEpisode}
-              onClick={handleNextEpisode}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-950/40 border border-blue-500/50 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer"
-            >
-              <span>Next Ep</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Watched Status & Episode Counter */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => {
-                const isCurrentlyWatched = episodeNumber <= currentProgress;
-                const newProgress = isCurrentlyWatched ? episodeNumber - 1 : episodeNumber;
-                onUpdateProgress(anime, newProgress);
-              }}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                episodeNumber <= currentProgress
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
-                  : 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800 hover:text-white'
-              }`}
-            >
-              <Eye className="w-4 h-4" />
-              <span>{episodeNumber <= currentProgress ? 'Watched' : 'Mark as Watched'}</span>
-            </button>
-
-            <div className="px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-bold text-neutral-300">
-              Ep <span className="text-blue-400">{episodeNumber}</span> of {episodesTotal}
-            </div>
-          </div>
+          <button
+            disabled={!hasNextEpisode}
+            onClick={handleNextEpisode}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-950/40 border border-indigo-500/50 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer"
+          >
+            <span>Next Ep</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Episode Catalog Browser (Seamless Borderless Design) */}
@@ -550,10 +524,22 @@ export const WatchView: React.FC<WatchViewProps> = ({
           {/* Episode Search Filter & Action Bar */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="relative flex-1">
+              <div
+                className="relative flex-1 cursor-text"
+                onClick={() => {
+                  const el = document.getElementById('watch-episode-search-input');
+                  if (el) el.focus();
+                }}
+                onTouchStart={() => {
+                  const el = document.getElementById('watch-episode-search-input');
+                  if (el) el.focus();
+                }}
+              >
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
+                  id="watch-episode-search-input"
                   type="text"
+                  inputMode="text"
                   placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
@@ -564,7 +550,10 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 {episodeSearchQuery && (
                   <button
                     type="button"
-                    onClick={() => setEpisodeSearchQuery('')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEpisodeSearchQuery('');
+                    }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer z-10"
                   >
                     <X className="w-3.5 h-3.5" />
