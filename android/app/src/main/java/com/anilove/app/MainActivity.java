@@ -18,6 +18,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.splashscreen.SplashScreen;
@@ -119,10 +120,20 @@ public class MainActivity extends BridgeActivity {
 
     private void hideSystemBars() {
         try {
+            View decorView = getWindow().getDecorView();
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(decorView);
+            if (insets != null && insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                return;
+            }
+
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            getWindow().getDecorView().post(() -> {
+            decorView.post(() -> {
                 try {
-                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                    WindowInsetsCompat currentInsets = ViewCompat.getRootWindowInsets(decorView);
+                    if (currentInsets != null && currentInsets.isVisible(WindowInsetsCompat.Type.ime())) {
+                        return;
+                    }
+                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
                     if (controller != null) {
                         controller.hide(WindowInsetsCompat.Type.statusBars());
                         controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -136,7 +147,10 @@ public class MainActivity extends BridgeActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            hideSystemBars();
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(getWindow().getDecorView());
+            if (insets == null || !insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                hideSystemBars();
+            }
         }
     }
 

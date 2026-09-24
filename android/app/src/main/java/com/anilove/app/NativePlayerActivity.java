@@ -1842,6 +1842,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        primaryVideo.play().catch(function(){}); " +
                 "      } " +
                 "    } " +
+                "    if (win.playerInstance && typeof win.playerInstance.play === 'function' && !globalPause) { " +
+                "      try { win.playerInstance.play(); } catch(e){} " +
+                "    } " +
                 "    if (!globalPause) { " +
                 "      var bigPlays = win.document.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
                 "      bigPlays.forEach(function(bp) { " +
@@ -1936,17 +1939,26 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void sendVideoCommand(String jsAction) {
         if (playerWebView == null) return;
-        // Determine JW command from Java side to avoid broken JS string embedding
+        // Determine JW and Artplayer commands from Java side
         final String jwAction;
+        final String artAction;
         if (jsAction.contains(".pause()") && !jsAction.contains(".play()")) {
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().pause(); } catch(e) {} }";
+            artAction = "if (win.playerInstance && typeof win.playerInstance.pause === 'function') { try { win.playerInstance.pause(); } catch(e) {} }";
         } else if (jsAction.contains(".play()")) {
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().play(); } catch(e) {} }";
+            artAction = "if (win.playerInstance && typeof win.playerInstance.play === 'function') { try { win.playerInstance.play(); } catch(e) {} }";
+        } else if (jsAction.contains("currentTime")) {
+            String seekStr = jsAction.replaceAll(".*currentTime\\s*=\\s*([0-9.]+).*", "$1");
+            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().seek(" + seekStr + "); } catch(e) {} }";
+            artAction = "if (win.playerInstance && typeof win.playerInstance.seek !== 'undefined') { try { win.playerInstance.seek = " + seekStr + "; } catch(e) {} }";
         } else if (jsAction.contains("playbackRate")) {
             String speedStr = jsAction.replaceAll(".*playbackRate\\s*=\\s*([0-9.]+).*", "$1");
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().setPlaybackRate(" + speedStr + "); } catch(e) {} }";
+            artAction = "";
         } else {
             jwAction = "";
+            artAction = "";
         }
         playerWebView.evaluateJavascript("(function() { " +
                 "function findAndExec(win) { " +
@@ -1954,6 +1966,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var v = win.document.querySelector('video'); " +
                 "    if (v) { " + jsAction + " } " +
                 "    " + jwAction + " " +
+                "    " + artAction + " " +
                 "  } catch(e) {} " +
                 "  for (var i = 0; i < win.frames.length; i++) { " +
                 "    try { findAndExec(win.frames[i]); } catch(e) {} " +

@@ -524,31 +524,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           {/* Episode Search Filter & Action Bar */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div
-                className="relative flex-1 cursor-text"
-                onClick={() => {
-                  const input = document.getElementById('watch-episode-search-input') as HTMLInputElement | null;
-                  if (input) {
-                    input.focus();
-                    try {
-                      if ((window as any).AndroidKeyboard?.show) {
-                        (window as any).AndroidKeyboard.show();
-                      }
-                    } catch (_) {}
-                  }
-                }}
-                onTouchEnd={() => {
-                  const input = document.getElementById('watch-episode-search-input') as HTMLInputElement | null;
-                  if (input) {
-                    input.focus();
-                    try {
-                      if ((window as any).AndroidKeyboard?.show) {
-                        (window as any).AndroidKeyboard.show();
-                      }
-                    } catch (_) {}
-                  }
-                }}
-              >
+              <div className="relative flex-1">
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
                   id="watch-episode-search-input"
@@ -558,28 +534,8 @@ export const WatchView: React.FC<WatchViewProps> = ({
                   placeholder={`Search ${episodeList.length} episodes by # or name...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
-                  onKeyDown={e => {
-                    e.stopPropagation();
-                  }}
-                  onKeyUp={e => {
-                    e.stopPropagation();
-                  }}
-                  onClick={e => {
-                    e.currentTarget.focus();
-                    try {
-                      if ((window as any).AndroidKeyboard?.show) {
-                        (window as any).AndroidKeyboard.show();
-                      }
-                    } catch (_) {}
-                  }}
-                  onTouchEnd={e => {
-                    e.currentTarget.focus();
-                    try {
-                      if ((window as any).AndroidKeyboard?.show) {
-                        (window as any).AndroidKeyboard.show();
-                      }
-                    } catch (_) {}
-                  }}
+                  onKeyDown={e => e.stopPropagation()}
+                  onKeyUp={e => e.stopPropagation()}
                   onFocus={e => {
                     try {
                       if ((window as any).AndroidKeyboard?.show) {
@@ -587,7 +543,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
                       }
                     } catch (_) {}
                   }}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto z-0"
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                 />
                 {episodeSearchQuery && (
