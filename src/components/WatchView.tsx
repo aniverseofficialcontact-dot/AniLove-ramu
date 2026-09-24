@@ -314,23 +314,25 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const filteredEpisodes = useMemo(() => {
     let list = episodeList;
 
-    const q = episodeSearchQuery.toLowerCase().trim();
-    if (q) {
-      const numMatch = q.match(/\d+/);
-      const targetNum = numMatch ? parseInt(numMatch[0], 10) : null;
+    const rawQ = episodeSearchQuery.trim();
+    if (rawQ) {
+      const parsedNum = parseInt(rawQ.replace(/\D/g, ''), 10);
+      const textQ = rawQ.toLowerCase();
 
       list = list.filter(ep => {
-        const titleMatch = ep.title ? ep.title.toLowerCase().includes(q) : false;
-        const synopsisMatch = ep.synopsis ? ep.synopsis.toLowerCase().includes(q) : false;
-        const numberExactMatch = targetNum !== null && ep.number === targetNum;
-        const numberTextMatch =
-          `episode ${ep.number}`.includes(q) ||
-          `ep ${ep.number}`.includes(q) ||
-          `ep.${ep.number}`.includes(q) ||
-          `#${ep.number}`.includes(q) ||
-          `${ep.number}` === q;
-
-        return titleMatch || synopsisMatch || numberExactMatch || numberTextMatch;
+        if (!isNaN(parsedNum) && ep.number === parsedNum) {
+          return true;
+        }
+        if (ep.title && ep.title.toLowerCase().includes(textQ)) {
+          return true;
+        }
+        if (ep.synopsis && ep.synopsis.toLowerCase().includes(textQ)) {
+          return true;
+        }
+        if (`${ep.number}`.includes(rawQ)) {
+          return true;
+        }
+        return false;
       });
     } else if (selectedEpisodeRange !== 'all' && episodeRanges.length > 0) {
       const parts = selectedEpisodeRange.split(/[–\-]/).map(Number);
@@ -528,11 +530,15 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
                   id="watch-episode-search-input"
-                  type="text"
+                  type="tel"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   placeholder={`Search ${episodeList.length} episodes by # or name...`}
                   value={episodeSearchQuery}
+                  onInput={e => {
+                    const val = (e.target as HTMLInputElement).value;
+                    setEpisodeSearchQuery(val);
+                  }}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
                   onKeyDown={e => e.stopPropagation()}
                   onKeyUp={e => e.stopPropagation()}
