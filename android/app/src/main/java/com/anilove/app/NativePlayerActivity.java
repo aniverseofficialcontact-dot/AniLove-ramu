@@ -304,12 +304,18 @@ public class NativePlayerActivity extends AppCompatActivity {
                     controller.hide(WindowInsetsCompat.Type.statusBars());
                     controller.hide(WindowInsetsCompat.Type.navigationBars());
                     window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                } else {
+                } else if (isOfflineMode) {
                     controller.show(WindowInsetsCompat.Type.statusBars());
                     controller.setAppearanceLightStatusBars(false);
                     window.setStatusBarColor(Color.BLACK);
                     controller.show(WindowInsetsCompat.Type.navigationBars());
                     window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                } else {
+                    // Portrait streaming: hide status bar AND nav bar so they
+                    // don't overlap video controls; swipe from edge to reveal temporarily
+                    controller.hide(WindowInsetsCompat.Type.statusBars());
+                    controller.hide(WindowInsetsCompat.Type.navigationBars());
+                    window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
                 }
                 controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
@@ -2204,9 +2210,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        // Wrap embed players (abyssplayer, short.icu, piratexplay, vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
-        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
-            url.contains("vidsrc") || url.contains("vidlink") || url.contains("autoembed")) {
+        // Wrap embed players (vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
+        // NOTE: abyssplayer/piratexplay/short.icu are NOT wrapped — they load directly so
+        // our JS (injectAdEraser) can reach JWPlayer inside them.
+        if (url.contains("vidsrc") || url.contains("vidlink") || url.contains("autoembed")) {
             isDirectHls = false;
             String iframeHtml = "<!DOCTYPE html>" +
                     "<html><head>" +
@@ -2220,9 +2227,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
                     "</body></html>";
 
-            String baseUrl = "https://piratexplay.cc/";
+            String baseUrl = "https://vidsrc.cc/";
             if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
-            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
             else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
 
             playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
@@ -2299,6 +2305,27 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          if (jp) { " +
                 "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
                 "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
+                // Remove "Continue Watching" overlay elements from DOM
+                "            var jwOver = doc.querySelectorAll('.jw-nextup-container, .jw-nextup, .jw-overlay, .jw-dialog'); " +
+                "            jwOver.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
+                // Click any Continue/Resume/Yes button in dialogs
+                "            var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color'); " +
+                "            allBtns.forEach(function(btn) { " +
+                "              var t = (btn.textContent || btn.innerText || '').toLowerCase().trim(); " +
+                "              if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok') { try { btn.click(); } catch(e){} } " +
+                "            }); " +
+                // Register one-time pause→auto-resume listener
+                "            if (!win._jwAniLoveListenerAdded) { " +
+                "              win._jwAniLoveListenerAdded = true; " +
+                "              try { jp.on('ready', function() { jp.setMute(false); jp.setVolume(100); }); } catch(e){} " +
+                "              try { jp.on('pause', function() { " +
+                "                if (!win._aniloveManualPause) { " +
+                "                  setTimeout(function() { " +
+                "                    if (!win._aniloveManualPause && jp.getState && (jp.getState() === 'paused' || jp.getState() === 'idle')) { jp.play(); } " +
+                "                  }, 350); " +
+                "                } " +
+                "              }); } catch(e){} " +
+                "            } " +
                 "            if (!globalPause && jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) { " +
                 "              jp.play(); " +
                 "            } " +
@@ -2335,10 +2362,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (hasFocus) {
             WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
             if (controller != null) {
-                if (isFullscreenMode) {
+                if (isFullscreenMode || !isOfflineMode) {
+                    // Fullscreen streaming AND portrait streaming: hide both bars
                     controller.hide(WindowInsetsCompat.Type.statusBars());
                     controller.hide(WindowInsetsCompat.Type.navigationBars());
                 } else {
+                    // Offline mode only: show status bar + nav bar (full-activity layout)
                     controller.show(WindowInsetsCompat.Type.statusBars());
                     controller.setAppearanceLightStatusBars(false);
                     getWindow().setStatusBarColor(Color.BLACK);

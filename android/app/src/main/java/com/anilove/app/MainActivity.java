@@ -9,10 +9,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.splashscreen.SplashScreen;
@@ -49,6 +51,26 @@ public class MainActivity extends BridgeActivity {
         // UI tweaks after activity is created
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         hideSystemBars();
+
+        // AndroidX OnBackPressedDispatcher for predictive back gestures and 3-button navigation back
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript(
+                        "(function() { return typeof window.handleHardwareBackPress === 'function' ? Boolean(window.handleHardwareBackPress()) : false; })()",
+                        value -> {
+                            boolean handled = "true".equals(value);
+                            if (!handled) {
+                                runOnUiThread(() -> moveTaskToBack(true));
+                            }
+                        }
+                    );
+                } else {
+                    moveTaskToBack(true);
+                }
+            }
+        });
 
         // 100% Sure Fix: Clear all WebView cache on every launch to prevent old versions from showing
         if (getBridge() != null && getBridge().getWebView() != null) {
@@ -97,9 +119,20 @@ public class MainActivity extends BridgeActivity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().post(() -> {
                 try {
-                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                    View decorView = getWindow().getDecorView();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                        decorView.setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        );
+                    }
+                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
                     if (controller != null) {
-                        controller.hide(WindowInsetsCompat.Type.statusBars());
+                        controller.hide(WindowInsetsCompat.Type.systemBars());
                         controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                     }
                 } catch (Exception ignored) {}

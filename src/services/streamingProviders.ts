@@ -230,7 +230,10 @@ export async function resolveEpisodeSource({
 
 function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): string {
   if (!rawUrl) return rawUrl;
-  if (rawUrl.includes('multi.php?data=') || rawUrl.includes('piratexplay.cc')) {
+  if (rawUrl.includes('short.icu/')) {
+    return rawUrl.replace('short.icu/', 'abyssplayer.com/');
+  }
+  if (rawUrl.includes('multi.php?data=') || rawUrl.includes('data=')) {
     try {
       const match = rawUrl.match(/[?&]data=([^&]+)/);
       if (match && match[1]) {
@@ -268,16 +271,26 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
   return rawUrl;
 }
 
-    // STRICT FILTER: Keep ONLY Server 1, Server 2, and Server 3
-    let targetServers = rawServers.filter(s =>
+    // Flexible server mapping: Extract up to 3 working servers from API response
+    let targetServers: Array<{ name: string; url: string }> = [];
+
+    const explicitNamed = rawServers.filter(s =>
       s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
     );
 
-    if (targetServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
+    if (explicitNamed.length > 0) {
+      targetServers = explicitNamed;
+    } else if (rawServers.length > 0) {
+      // If servers have custom names (e.g. "Hindi - HD-1", "HD-2", etc.), map first 3
+      targetServers = rawServers.slice(0, 3).map((s, idx) => ({
+        name: `Server ${idx + 1}`,
+        url: s.url,
+      }));
+    } else if (streamInfo.streamLink || streamInfo.file) {
       targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
     }
 
-    // Unpack direct player URLs (e.g. Server 3 abyssplayer extraction)
+    // Unpack direct player URLs (e.g. Server 3 abyssplayer / short.icu extraction)
     targetServers = targetServers.map(s => ({
       name: s.name,
       url: unpackServerUrl(s.url, language),
@@ -295,16 +308,6 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
       const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
       if (matched) {
         selectedServer = matched;
-      } else {
-        // Requested server not in API response → use direct embed URL for that server
-        const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
-        return {
-          status: 'available',
-          source: {
-            ...directSource,
-            availableServers,
-          },
-        };
       }
     }
 

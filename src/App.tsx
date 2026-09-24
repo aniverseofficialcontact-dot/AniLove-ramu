@@ -127,6 +127,8 @@ export function App() {
 
   // Navigation State: 'home' | 'discover' | 'seasonal' | 'schedule' | 'library' | 'settings'
   const [currentTab, setCurrentTab] = useState<TabType>(initialNav.initialTab);
+  const [tabHistory, setTabHistory] = useState<TabType[]>([]);
+  const [animeDetailsHistory, setAnimeDetailsHistory] = useState<Anime[]>([]);
   const [isGachaModalOpen, setIsGachaModalOpen] = useState(false);
 
   // Active Standalone Watch Page State
@@ -580,8 +582,13 @@ export function App() {
     handleUpdateStatus(anime, status);
   };
 
-  // Open Details Modal
+  // Open Details Modal with stacked history support
   const handleOpenDetails = (anime: Anime) => {
+    if (isDetailModalOpen && selectedAnime && selectedAnime.id !== anime.id) {
+      setAnimeDetailsHistory(prev => [...prev, selectedAnime]);
+    } else if (!isDetailModalOpen) {
+      setAnimeDetailsHistory([]);
+    }
     setSelectedAnime(anime);
     setStreamInitialEpisode(undefined);
     setStreamInitialTime(undefined);
@@ -619,6 +626,36 @@ export function App() {
   const selectedAnimeRef = React.useRef(selectedAnime);
   selectedAnimeRef.current = selectedAnime;
 
+  const trailerDataRef = React.useRef(trailerData);
+  trailerDataRef.current = trailerData;
+
+  const is3DCardModalOpenRef = React.useRef(is3DCardModalOpen);
+  is3DCardModalOpenRef.current = is3DCardModalOpen;
+
+  const isDetailModalOpenRef = React.useRef(isDetailModalOpen);
+  isDetailModalOpenRef.current = isDetailModalOpen;
+
+  const animeDetailsHistoryRef = React.useRef(animeDetailsHistory);
+  animeDetailsHistoryRef.current = animeDetailsHistory;
+
+  const isGachaModalOpenRef = React.useRef(isGachaModalOpen);
+  isGachaModalOpenRef.current = isGachaModalOpen;
+
+  const isAiModalOpenRef = React.useRef(isAiModalOpen);
+  isAiModalOpenRef.current = isAiModalOpen;
+
+  const isShortcutsModalOpenRef = React.useRef(isShortcutsModalOpen);
+  isShortcutsModalOpenRef.current = isShortcutsModalOpen;
+
+  const isPinModalOpenRef = React.useRef(isPinModalOpen);
+  isPinModalOpenRef.current = isPinModalOpen;
+
+  const currentTabRef = React.useRef(currentTab);
+  currentTabRef.current = currentTab;
+
+  const tabHistoryRef = React.useRef(tabHistory);
+  tabHistoryRef.current = tabHistory;
+
   useEffect(() => {
     if (activeWatchEpisode?.anime) {
       currentWatchingAnimeRef.current = activeWatchEpisode.anime;
@@ -644,6 +681,95 @@ export function App() {
     };
   }, []);
 
+  // Comprehensive System Back-Button Navigation Handler
+  useEffect(() => {
+    const handleHardwareBack = (): boolean => {
+      // 1. Active Standalone Watch / Video Player -> Return to Anime Details Page
+      if (activeWatchEpisodeRef.current) {
+        const target = activeWatchEpisodeRef.current.anime || currentWatchingAnimeRef.current || selectedAnimeRef.current;
+        setActiveWatchEpisode(null);
+        if (target) {
+          handleOpenDetails(target);
+        }
+        return true;
+      }
+
+      // 2. Video Trailer Modal
+      if (trailerDataRef.current) {
+        setTrailerData(null);
+        return true;
+      }
+
+      // 3. 3D Anime Card Inspector Modal
+      if (is3DCardModalOpenRef.current) {
+        setIs3DCardModalOpen(false);
+        setSelectedAnimeFor3D(null);
+        return true;
+      }
+
+      // 4. Nested Anime Details Stack Navigation
+      if (animeDetailsHistoryRef.current.length > 0) {
+        const prevAnime = animeDetailsHistoryRef.current[animeDetailsHistoryRef.current.length - 1];
+        setAnimeDetailsHistory(prev => prev.slice(0, -1));
+        setSelectedAnime(prevAnime);
+        return true;
+      }
+
+      // 5. Root Anime Details Modal
+      if (isDetailModalOpenRef.current) {
+        setIsDetailModalOpen(false);
+        setSelectedAnime(null);
+        return true;
+      }
+
+      // 6. Gacha / Collectible Modal
+      if (isGachaModalOpenRef.current) {
+        setIsGachaModalOpen(false);
+        return true;
+      }
+
+      // 7. AI Sensei Assistant Modal
+      if (isAiModalOpenRef.current) {
+        setIsAiModalOpen(false);
+        return true;
+      }
+
+      // 8. Keyboard Shortcuts Guide Modal
+      if (isShortcutsModalOpenRef.current) {
+        setIsShortcutsModalOpen(false);
+        return true;
+      }
+
+      // 9. Profile PIN Unlock Modal
+      if (isPinModalOpenRef.current) {
+        setIsPinModalOpen(false);
+        return true;
+      }
+
+      // 10. Tab Navigation History Stack
+      if (tabHistoryRef.current.length > 0) {
+        const prevTab = tabHistoryRef.current[tabHistoryRef.current.length - 1];
+        setTabHistory(prev => prev.slice(0, -1));
+        setCurrentTab(prevTab);
+        return true;
+      }
+
+      // 11. Return to Home Tab if currently on any other tab
+      if (currentTabRef.current !== 'home') {
+        setCurrentTab('home');
+        return true;
+      }
+
+      // User is at the root Home tab with no open modals -> return false to trigger native minimize/exit
+      return false;
+    };
+
+    (window as any).handleHardwareBackPress = handleHardwareBack;
+    return () => {
+      delete (window as any).handleHardwareBackPress;
+    };
+  }, []);
+
   // Open Trailer Modal
   const handleOpenTrailer = (trailer: AnimeTrailer, title: string) => {
     setTrailerData({ trailer, title });
@@ -662,6 +788,9 @@ export function App() {
   // Profile PIN Protected Tab Interceptor
   const handleSelectTab = (tab: TabType) => {
     setActiveWatchEpisode(null);
+    if (tab !== currentTab) {
+      setTabHistory(prev => [...prev.filter(t => t !== tab), currentTab]);
+    }
     if (tab === 'reels') {
       if (activeThemeSong) {
         setActiveThemeSong(null);
