@@ -499,7 +499,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <button
             disabled={!hasNextEpisode}
             onClick={handleNextEpisode}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-950/40 border border-indigo-500/50 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-lg shadow-red-950/40 border border-red-500/50 disabled:opacity-40 disabled:pointer-events-none transition active:scale-95 cursor-pointer"
           >
             <span>Next Ep</span>
             <ChevronRight className="w-4 h-4" />
@@ -527,24 +527,45 @@ export const WatchView: React.FC<WatchViewProps> = ({
               <div
                 className="relative flex-1 cursor-text"
                 onClick={() => {
-                  const el = document.getElementById('watch-episode-search-input');
-                  if (el) el.focus();
+                  const input = document.getElementById('watch-episode-search-input') as HTMLInputElement | null;
+                  if (input) {
+                    input.focus();
+                    try {
+                      if ((window as any).AndroidKeyboard?.show) {
+                        (window as any).AndroidKeyboard.show();
+                      }
+                    } catch (_) {}
+                  }
                 }}
-                onTouchStart={() => {
-                  const el = document.getElementById('watch-episode-search-input');
-                  if (el) el.focus();
+                onTouchEnd={() => {
+                  const input = document.getElementById('watch-episode-search-input') as HTMLInputElement | null;
+                  if (input) {
+                    input.focus();
+                    try {
+                      if ((window as any).AndroidKeyboard?.show) {
+                        (window as any).AndroidKeyboard.show();
+                      }
+                    } catch (_) {}
+                  }
                 }}
               >
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
                   id="watch-episode-search-input"
-                  type="text"
-                  inputMode="text"
+                  type="search"
+                  inputMode="numeric"
                   placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
-                  onFocus={e => e.target.select()}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
+                  onFocus={e => {
+                    e.target.select();
+                    try {
+                      if ((window as any).AndroidKeyboard?.show) {
+                        (window as any).AndroidKeyboard.show();
+                      }
+                    } catch (_) {}
+                  }}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                 />
                 {episodeSearchQuery && (

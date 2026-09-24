@@ -1,6 +1,7 @@
 package com.anilove.app;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -11,6 +12,8 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
@@ -159,6 +162,22 @@ public class MainActivity extends BridgeActivity {
                 webView.setFocusable(true);
                 webView.setFocusableInTouchMode(true);
                 webView.requestFocus();
+                webView.addJavascriptInterface(new Object() {
+                    @JavascriptInterface
+                    public void show() {
+                        runOnUiThread(() -> {
+                            try {
+                                if (getBridge() != null && getBridge().getWebView() != null) {
+                                    getBridge().getWebView().requestFocus();
+                                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                    if (imm != null) {
+                                        imm.showSoftInput(getBridge().getWebView(), InputMethodManager.SHOW_FORCED);
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        });
+                    }
+                }, "AndroidKeyboard");
                 WebSettings settings = webView.getSettings();
                 settings.setSupportMultipleWindows(false);
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);
