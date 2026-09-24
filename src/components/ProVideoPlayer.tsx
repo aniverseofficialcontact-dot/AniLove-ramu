@@ -56,7 +56,9 @@ interface ProVideoPlayerProps {
   episodesList?: EpisodeItem[];
   initialTime?: number;
   currentServer?: StreamServerId;
+  selectedSubServer?: string;
   onServerChange?: (server: StreamServerId) => void;
+  onSubServerChange?: (server: string) => void;
   currentAudioLanguage?: StreamLanguage;
   onAudioLanguageChange?: (lang: StreamLanguage) => void;
   onEpisodeChange?: (episodeNumber: number) => void;
@@ -75,7 +77,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   episodesList = [],
   initialTime = 0,
   currentServer,
+  selectedSubServer,
   onServerChange,
+  onSubServerChange,
   currentAudioLanguage,
   onAudioLanguageChange,
   onEpisodeChange,
@@ -89,7 +93,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [duration, setDuration] = useState<number>((anime.duration || 24) * 60);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeServer, setActiveServer] = useState<StreamServerId>(currentServer || DEFAULT_STREAM_PROVIDER_ID);
-  const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(undefined);
+  const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(selectedSubServer || 'Server 1');
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
   const [quality] = useState<StreamResolution>('1080p');
   const [refreshKey, setRefreshKey] = useState<number>(0);
@@ -108,9 +112,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     if (currentServer && currentServer !== activeServer) {
       setActiveServer(currentServer);
-      setSelectedSubServerName(undefined);
     }
   }, [currentServer]);
+
+  useEffect(() => {
+    if (selectedSubServer && selectedSubServer !== selectedSubServerName) {
+      setSelectedSubServerName(selectedSubServer);
+    }
+  }, [selectedSubServer]);
 
   useEffect(() => {
     if (currentAudioLanguage && currentAudioLanguage !== audioMode) {
@@ -558,7 +567,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         startTime: initialTime || 0,
       }).catch(() => {});
     }
-  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings]);
+  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings, selectedSubServerName]);
 
   useEffect(() => {
     return () => {

@@ -411,46 +411,12 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold px-1">
             <span className="flex items-center gap-1.5 text-neutral-200 font-bold">
               <Radio className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-              <span>Streaming Server & Language</span>
+              <span>Streaming Servers</span>
             </span>
             <span className="text-[11px] text-neutral-500">3 Active Stream Servers</span>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server and language options">
-            {/* Multi-Language Dub, Sub & Regional Toggles */}
-            {SUPPORTED_LANGUAGES.map(lang => {
-              const isSelected = selectedAudio === lang.code;
-              let selectedStyle = 'bg-indigo-600 text-white font-black shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400';
-              if (lang.code === 'DUB') {
-                selectedStyle = 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/20 ring-1 ring-amber-400';
-              } else if (lang.code === 'HIN') {
-                selectedStyle = 'bg-orange-600 text-white font-black shadow-lg shadow-orange-600/30 ring-1 ring-orange-400';
-              } else if (lang.code === 'TAM') {
-                selectedStyle = 'bg-emerald-600 text-white font-black shadow-lg shadow-emerald-600/30 ring-1 ring-emerald-400';
-              } else if (lang.code === 'TEL') {
-                selectedStyle = 'bg-cyan-600 text-white font-black shadow-lg shadow-cyan-600/30 ring-1 ring-cyan-400';
-              } else if (lang.code === 'MAL' || lang.code === 'BEN') {
-                selectedStyle = 'bg-purple-600 text-white font-black shadow-lg shadow-purple-600/30 ring-1 ring-purple-400';
-              }
-
-              return (
-                <button
-                  key={lang.code}
-                  onClick={() => setSelectedAudio(lang.code)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                    isSelected
-                      ? selectedStyle
-                      : 'bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-neutral-500'
-                  }`}
-                >
-                  <span>{lang.flag}</span>
-                  <span>{lang.short}</span>
-                </button>
-              );
-            })}
-
-            <div className="h-5 w-px bg-neutral-800 shrink-0 mx-1" />
-
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server options">
             {/* Server 1, Server 2, Server 3 Buttons */}
             {['Server 1', 'Server 2', 'Server 3'].map((srvName, idx) => {
               const isSelected = (selectedSubServer || 'Server 1').toLowerCase() === srvName.toLowerCase();
@@ -458,13 +424,13 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <button
                   key={`wv-srv-${idx}`}
                   onClick={() => setSelectedSubServer(srvName)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
                     isSelected
                       ? 'bg-white text-black font-black shadow-lg shadow-white/10'
                       : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600 hover:text-white'
                   }`}
                 >
-                  <Server className="w-3 h-3" />
+                  <Server className="w-3.5 h-3.5" />
                   <span>{srvName}</span>
                 </button>
               );
