@@ -552,13 +552,28 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
                   id="watch-episode-search-input"
-                  type="search"
-                  inputMode="numeric"
+                  type="text"
+                  inputMode="text"
                   placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
+                  onClick={e => {
+                    e.currentTarget.focus();
+                    try {
+                      if ((window as any).AndroidKeyboard?.show) {
+                        (window as any).AndroidKeyboard.show();
+                      }
+                    } catch (_) {}
+                  }}
+                  onTouchEnd={e => {
+                    e.currentTarget.focus();
+                    try {
+                      if ((window as any).AndroidKeyboard?.show) {
+                        (window as any).AndroidKeyboard.show();
+                      }
+                    } catch (_) {}
+                  }}
                   onFocus={e => {
-                    e.target.select();
                     try {
                       if ((window as any).AndroidKeyboard?.show) {
                         (window as any).AndroidKeyboard.show();
@@ -574,6 +589,11 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       setEpisodeSearchQuery('');
+                      try {
+                        if ((window as any).AndroidKeyboard?.hide) {
+                          (window as any).AndroidKeyboard.hide();
+                        }
+                      } catch (_) {}
                     }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer z-10"
                   >

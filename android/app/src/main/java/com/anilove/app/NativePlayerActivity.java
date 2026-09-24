@@ -1980,7 +1980,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
@@ -2010,17 +2011,42 @@ public class NativePlayerActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
-                if (lower.contains("abyss.to") || lower.contains("decafeligiblyhad") || lower.contains("adsterra") || 
-                    lower.contains("popads") || lower.contains("monetag") || lower.contains("highperformancegate") ||
-                    lower.contains("morphify.net") || lower.contains("doubleclick") || lower.contains("google-analytics") ||
-                    lower.contains("googlesyndication") || lower.contains("adservice") || lower.contains("turnstile") ||
-                    lower.contains("challenge-platform")) {
-                    return true;
+
+                // Block any external hijack, ad redirect, youtube, social, or ad networks
+                if (lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("blinkit") ||
+                    lower.contains("probationthimbledespite") || lower.contains("abyss.to") || lower.contains("decafeligiblyhad") ||
+                    lower.contains("adsterra") || lower.contains("popads") || lower.contains("monetag") ||
+                    lower.contains("highperformancegate") || lower.contains("morphify.net") || lower.contains("doubleclick") ||
+                    lower.contains("google-analytics") || lower.contains("googlesyndication") || lower.contains("adservice") ||
+                    lower.contains("turnstile") || lower.contains("challenge-platform") || lower.contains("amazon.") ||
+                    lower.contains("flipkart.") || lower.contains("play.google.com") || lower.contains("market://") ||
+                    lower.contains("intent://")) {
+                    return true; // Block off-target navigation
                 }
-                if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
+
+                // Allow streaming video hosts and same-origin embeds
+                if (lower.contains("blakiteapi") || lower.contains("abyssplayer") || lower.contains("piratexplay") ||
+                    lower.contains("rubystm") || lower.contains("short.icu") || lower.contains("emturbovid") ||
+                    lower.contains("vidmoly") || lower.contains("cloudy.upns") || lower.contains("strmup.to") ||
+                    lower.contains("gdmirrorbot") || lower.contains("megaplay") || lower.contains("nexabloom") ||
+                    lower.contains("justanime") || lower.contains("watchanimeworld") || lower.contains("anikototv") ||
+                    lower.contains("zephyrix") || lower.contains("vidsrc") || lower.contains("vidlink") ||
+                    lower.contains("autoembed") || lower.contains(".m3u8") || lower.contains(".mp4")) {
                     return false;
                 }
-                return true;
+
+                if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
+                    // Check if it's the current player URL host
+                    try {
+                        String currentHost = new URL(getIntent().getStringExtra("url")).getHost();
+                        String reqHost = new URL(reqUrl).getHost();
+                        if (currentHost != null && currentHost.equalsIgnoreCase(reqHost)) {
+                            return false;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                return true; // Block unknown redirects
             }
 
             @Override
@@ -2029,7 +2055,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String lower = reqUrl.toLowerCase();
 
                 // Block known ad networks, trackers, popup scripts, and verification captchas
-                if (lower.contains("decafeligiblyhad") || lower.contains("morphify.net") || 
+                if (lower.contains("probationthimbledespite") || lower.contains("googletagmanager") ||
+                    lower.contains("decafeligiblyhad") || lower.contains("morphify.net") || 
                     lower.contains("doubleclick") || lower.contains("google-analytics") ||
                     lower.contains("adservice") || lower.contains("fuckadblock") ||
                     lower.contains("popads") || lower.contains("adsterra") ||
@@ -2238,7 +2265,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             referer = "https://justanime.to/";
         } else if (url.contains("anikototv")) {
             referer = "https://anikototv.to/";
-        } else if (url.contains("piratexplay") || url.contains("abyssplayer")) {
+        } else if (url.contains("piratexplay") || url.contains("abyssplayer") || url.contains("blakiteapi")) {
             referer = "https://piratexplay.cc/";
         } else if (url.contains("rubystm")) {
             referer = "https://rubystm.com/";
@@ -2257,8 +2284,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void injectAdEraser() { 
         if (isDirectHls || playerWebView == null) return;
         playerWebView.evaluateJavascript("(function() { " +
+                "  try { window.open = function() { return null; }; } catch(e){} " +
+                "  var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true); " +
                 "  function autoTrigger(win) { " +
                 "    try { " +
+                "      try { win.open = function() { return null; }; } catch(e){} " +
                 "      var doc = win.document; " +
                 "      var form = doc.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
                 "      if (form && !form.hasAttribute('data-auto-sub')) { " +
@@ -2266,8 +2296,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        form.submit(); " +
                 "        return; " +
                 "      } " +
-                "      var countdown = doc.querySelector('#countdownOverlay, .countdown-overlay, #loadingIndicator'); " +
+                "      var countdown = doc.querySelector('#countdownOverlay, .countdown-overlay, #loadingIndicator, .loading-overlay'); " +
                 "      if (countdown) { try { countdown.style.setProperty('display', 'none', 'important'); } catch(e){} } " +
+                "      var artApp = doc.querySelector('.artplayer-app'); " +
+                "      if (artApp) { " +
+                "        try { " +
+                "          artApp.classList.add('show'); " +
+                "          artApp.style.setProperty('display', 'block', 'important'); " +
+                "          artApp.style.setProperty('opacity', '1', 'important'); " +
+                "        } catch(e){} " +
+                "      } " +
                 "      var vf = doc.querySelector('iframe#videoFrame, iframe[src*=\"abyss\"], iframe[src*=\"short.icu\"]'); " +
                 "      if (vf) { " +
                 "        try { " +
@@ -2276,8 +2314,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          vf.style.setProperty('visibility', 'visible', 'important'); " +
                 "        } catch(e){} " +
                 "      } " +
-                "      var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true) || " +
-                "                        (typeof win._aniloveManualPause !== 'undefined' && win._aniloveManualPause === true); " +
                 "      var v = doc.querySelector('video'); " +
                 "      if (v) { " +
                 "        if (v.muted) v.muted = false; " +
@@ -2285,6 +2321,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause')) { " +
                 "          v.play().catch(function(){}); " +
                 "        } " +
+                "      } " +
+                "      if (win.playerInstance && typeof win.playerInstance.play === 'function' && !globalPause) { " +
+                "        try { win.playerInstance.play(); } catch(e){} " +
                 "      } " +
                 "      if (!globalPause) { " +
                 "        var playBtns = doc.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
@@ -2298,16 +2337,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          if (jp) { " +
                 "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
                 "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
-                // Remove "Continue Watching" overlay elements from DOM
                 "            var jwOver = doc.querySelectorAll('.jw-nextup-container, .jw-nextup, .jw-overlay, .jw-dialog'); " +
                 "            jwOver.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
-                // Click any Continue/Resume/Yes button in dialogs
                 "            var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color'); " +
                 "            allBtns.forEach(function(btn) { " +
                 "              var t = (btn.textContent || btn.innerText || '').toLowerCase().trim(); " +
                 "              if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok') { try { btn.click(); } catch(e){} } " +
                 "            }); " +
-                // Register one-time pause→auto-resume listener
                 "            if (!win._jwAniLoveListenerAdded) { " +
                 "              win._jwAniLoveListenerAdded = true; " +
                 "              try { jp.on('ready', function() { jp.setMute(false); jp.setVolume(100); }); } catch(e){} " +
@@ -2331,15 +2367,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  autoTrigger(window); " +
                 "  function absoluteCleanse(win) { " +
                 "    try { " +
+                "      try { win.open = function() { return null; }; } catch(e){} " +
                 "      var doc = win.document; " +
                 "      var style = doc.getElementById('anilove-hybrid-base-style') || doc.createElement('style'); " +
                 "      style.id = 'anilove-hybrid-base-style'; " +
                 "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } ' + " +
-                "        'video, .jw-video, .vjs-tech, .art-video, .art-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } ' + " +
+                "        'video, .jw-video, .vjs-tech, .art-video, .art-video-player, .artplayer-app { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } ' + " +
                 "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; } ' + " +
-                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .plyr__controls, .plyr__control--overlaid, ::-webkit-scrollbar, iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
+                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .plyr__controls, .plyr__control--overlaid, .loading-overlay, .video-title-overlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"]'); " +
+                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, .video-title-overlay, .ad-container, .ad-iframe, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
                 "    } catch(e) {} " +
                 "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +

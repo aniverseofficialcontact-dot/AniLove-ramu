@@ -119,23 +119,12 @@ public class MainActivity extends BridgeActivity {
 
     private void hideSystemBars() {
         try {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             getWindow().getDecorView().post(() -> {
                 try {
-                    View decorView = getWindow().getDecorView();
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                        decorView.setSystemUiVisibility(
-                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        );
-                    }
-                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
+                    WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                     if (controller != null) {
-                        controller.hide(WindowInsetsCompat.Type.systemBars());
+                        controller.hide(WindowInsetsCompat.Type.statusBars());
                         controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                     }
                 } catch (Exception ignored) {}
@@ -162,16 +151,36 @@ public class MainActivity extends BridgeActivity {
                 webView.setFocusable(true);
                 webView.setFocusableInTouchMode(true);
                 webView.requestFocus();
+                webView.requestFocusFromTouch();
                 webView.addJavascriptInterface(new Object() {
                     @JavascriptInterface
                     public void show() {
                         runOnUiThread(() -> {
                             try {
-                                if (getBridge() != null && getBridge().getWebView() != null) {
-                                    getBridge().getWebView().requestFocus();
+                                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+                                if (wv != null) {
+                                    wv.requestFocus();
+                                    wv.requestFocusFromTouch();
                                     InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                                     if (imm != null) {
-                                        imm.showSoftInput(getBridge().getWebView(), InputMethodManager.SHOW_FORCED);
+                                        imm.restartInput(wv);
+                                        imm.showSoftInput(wv, InputMethodManager.SHOW_FORCED);
+                                        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        });
+                    }
+
+                    @JavascriptInterface
+                    public void hide() {
+                        runOnUiThread(() -> {
+                            try {
+                                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+                                if (wv != null) {
+                                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                    if (imm != null) {
+                                        imm.hideSoftInputFromWindow(wv.getWindowToken(), 0);
                                     }
                                 }
                             } catch (Exception ignored) {}
