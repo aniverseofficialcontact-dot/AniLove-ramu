@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -1043,10 +1044,44 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void resetHideTimer() { stopHideTimer(); if (isPlaying && isControlsVisible && !isDragging) { hideHandler.postDelayed(() -> { if (isControlsVisible && isPlaying) { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); } }, 5000); } }
     private void stopHideTimer() { hideHandler.removeCallbacksAndMessages(null); }
 
+    private void simulateTouch(View view) {
+        if (view == null) return;
+        view.post(() -> {
+            try {
+                int width = view.getWidth();
+                int height = view.getHeight();
+                if (width <= 0 || height <= 0) return;
+                float x = width / 2.0f;
+                float y = height / 2.0f;
+                long downTime = SystemClock.uptimeMillis();
+                long eventTime = SystemClock.uptimeMillis();
+                MotionEvent down = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, x, y, 0);
+                MotionEvent up = MotionEvent.obtain(downTime, eventTime + 50, MotionEvent.ACTION_UP, x, y, 0);
+                view.dispatchTouchEvent(down);
+                view.dispatchTouchEvent(up);
+                down.recycle();
+                up.recycle();
+            } catch (Exception ignored) {}
+        });
+    }
+
     private void enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 hideControlsQuietly();
+
+                // Explicitly reset window layout parameters to full window to avoid PiP offset clipping
+                Window window = getWindow();
+                if (window != null) {
+                    WindowManager.LayoutParams lp = window.getAttributes();
+                    lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+                    lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+                    lp.gravity = Gravity.FILL;
+                    lp.x = 0;
+                    lp.y = 0;
+                    window.setAttributes(lp);
+                }
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     try {
                         unregisterReceiver(pipReceiver);
@@ -1082,6 +1117,17 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (isInPictureInPictureMode) {
             hideControlsQuietly();
             if (touchWall != null) touchWall.setVisibility(View.GONE);
+
+            Window window = getWindow();
+            if (window != null) {
+                WindowManager.LayoutParams lp = window.getAttributes();
+                lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+                lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+                lp.gravity = Gravity.FILL;
+                lp.x = 0;
+                lp.y = 0;
+                window.setAttributes(lp);
+            }
             
             if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
             if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
@@ -2031,6 +2077,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (!isDirectHls) {
                     injectAdEraser(); 
                     
+                    // Simulate center touch to unlock web player autoplay & click submit/play overlays
+                    view.postDelayed(() -> simulateTouch(view), 500);
+                    view.postDelayed(() -> simulateTouch(view), 1200);
+                    view.postDelayed(() -> simulateTouch(view), 2500);
+
                     if (startTime > 0) {
                         String resumeScript = "(function() {" +
                                 "  var startT = " + startTime + ";" +
@@ -2061,7 +2112,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                                 "    if (trySeek(window) || seeked) clearInterval(interval);" +
                                 "  }, 500);" +
                                 "  setTimeout(function() { clearInterval(interval); }, 10000);" +
-                                "})();";
+                                "  })()";
                         view.evaluateJavascript(resumeScript, null);
                     }
                 }
@@ -2150,6 +2201,31 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
 
             playerWebView.loadDataWithBaseURL(baseUrl, hlsHtml, "text/html", "UTF-8", null);
+            return;
+        }
+
+        // Wrap embed players (abyssplayer, short.icu, piratexplay, vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
+        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
+            url.contains("vidsrc") || url.contains("vidlink") || url.contains("autoembed")) {
+            isDirectHls = false;
+            String iframeHtml = "<!DOCTYPE html>" +
+                    "<html><head>" +
+                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
+                    "<style>" +
+                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
+                    "  html, body { width: 100vw; height: 100vh; background: #000; overflow: hidden; }" +
+                    "  iframe { width: 100vw; height: 100vh; border: none; position: fixed; top: 0; left: 0; }" +
+                    "</style>" +
+                    "</head><body>" +
+                    "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
+                    "</body></html>";
+
+            String baseUrl = "https://piratexplay.cc/";
+            if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
+            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
+            else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
+
+            playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
             return;
         }
 
