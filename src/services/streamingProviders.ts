@@ -233,6 +233,16 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
   if (rawUrl.includes('short.icu/')) {
     return rawUrl.replace('short.icu/', 'abyssplayer.com/');
   }
+  if (rawUrl.includes('/public/player/') && rawUrl.includes('id=')) {
+    try {
+      const match = rawUrl.match(/[?&]id=([^&]+)/);
+      if (match && match[1]) {
+        return `https://pro.iqsmartgames.com/embed/${match[1]}`;
+      }
+    } catch {
+      // fallback
+    }
+  }
   if (rawUrl.includes('multi.php?data=') || rawUrl.includes('data=')) {
     try {
       const match = rawUrl.match(/[?&]data=([^&]+)/);

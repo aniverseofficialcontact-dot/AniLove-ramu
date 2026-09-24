@@ -564,20 +564,33 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || streamStatus !== 'ready') return;
 
+    let ticking = false;
+    let lastY = 0;
+
     const syncPosition = () => {
       if (playerContainerRef.current) {
         const rect = playerContainerRef.current.getBoundingClientRect();
-        requestAnimationFrame(() => {
-          NativePlayer.updatePosition({ y: Math.round(rect.top) });
-        });
+        const currentY = Math.round(rect.top);
+        if (Math.abs(currentY - lastY) >= 4) {
+          lastY = currentY;
+          NativePlayer.updatePosition({ y: currentY });
+        }
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(syncPosition);
+        ticking = true;
       }
     };
 
-    window.addEventListener('scroll', syncPosition, { passive: true });
-    const interval = setInterval(syncPosition, 32);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    syncPosition();
+
     return () => {
-      window.removeEventListener('scroll', syncPosition);
-      clearInterval(interval);
+      window.removeEventListener('scroll', onScroll);
     };
   }, [streamStatus]);
 

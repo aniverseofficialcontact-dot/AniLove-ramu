@@ -753,14 +753,28 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public void updatePosition(int y) {
         if (isFullscreenMode || isOfflineMode) return;
+        if (Math.abs(currentY - y) < 4) return;
         currentY = y;
         runOnUiThread(() -> {
             try {
                 Window window = getWindow();
                 if (window != null) {
+                    View decorView = window.getDecorView();
+                    if (y < -800) {
+                        if (decorView.getVisibility() != View.GONE) {
+                            decorView.setVisibility(View.GONE);
+                        }
+                        return;
+                    } else {
+                        if (decorView.getVisibility() != View.VISIBLE) {
+                            decorView.setVisibility(View.VISIBLE);
+                        }
+                    }
                     WindowManager.LayoutParams params = window.getAttributes();
-                    params.y = y;
-                    window.setAttributes(params);
+                    if (params.y != y) {
+                        params.y = y;
+                        window.setAttributes(params);
+                    }
                 }
             } catch (Exception ignored) {}
         });
@@ -824,6 +838,34 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String cS = obj.optString("currentSub");
                 if (cS != null && !cS.isEmpty() && !cS.equals("null")) currentSelectedSubtitle = cS;
             } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void onStateUpdate(double current, double duration, boolean pausedInWeb) {
+            runOnUiThread(() -> {
+                if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
+                    loadingProgress.setVisibility(View.GONE);
+                }
+                if (duration > 0) {
+                    textCurrentTime.setText(formatTime((int) current));
+                    textTotalTime.setText(formatTime((int) duration));
+                    int timeLeft = (int) (duration - current);
+                    textTimeLeft.setText("-" + formatTime(timeLeft));
+
+                    if (!isDragging) {
+                        seekBar.setMax((int) duration);
+                        seekBar.setProgress((int) current);
+                    }
+                    if (pausedInWeb == isPlaying) {
+                        isPlaying = !pausedInWeb;
+                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                        if (isPlaying) resetHideTimer(); else stopHideTimer();
+                    }
+                    if (isPlaying && current > 0) {
+                        broadcastProgress(current, duration);
+                    }
+                }
+            });
         }
     }
 
@@ -1623,16 +1665,40 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void setPlaybackSpeed(float speed, boolean permanent) { 
         if (!permanent) { 
             is2xSpeed = true; 
-            indicator2x.setVisibility(View.VISIBLE); 
+            if (indicator2x != null) indicator2x.setVisibility(View.VISIBLE); 
         } else { 
             is2xSpeed = false; 
-            indicator2x.setVisibility(View.GONE); 
+            if (indicator2x != null) indicator2x.setVisibility(View.GONE); 
         } 
         if (isOfflineMode && exoPlayer != null) {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
             return;
         }
-        sendVideoCommand("v.playbackRate = " + speed + ";"); 
+        sendSpeedCommand(speed);
+    }
+
+    private void sendSpeedCommand(float speed) {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var spd = " + speed + "; " +
+                "  function setSpd(w) { try { " +
+                "    var v = w.document.querySelectorAll('video'); " +
+                "    v.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
+                "    var art = w.playerInstance || w.artPlayerInstance || w.art; " +
+                "    if (art) { " +
+                "      try { " +
+                "        if (art.video) art.video.playbackRate = spd; " +
+                "        art.playbackRate = spd; " +
+                "      } catch(e){} " +
+                "    } " +
+                "    if (typeof w.jwplayer === 'function') { " +
+                "      try { var jp = w.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } catch(e){} " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  try { for (var i = 0; i < w.frames.length; i++) { try { setSpd(w.frames[i]); } catch(e){} } } catch(e){} " +
+                "  setSpd(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
     }
     
     private void navigateEpisode(boolean next) {
@@ -1694,7 +1760,36 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayer.seekTo(newPos);
             return;
         }
-        sendVideoCommand("v.currentTime += " + delta + ";");
+        sendSeekCommand(delta);
+    }
+
+    private void sendSeekCommand(int delta) {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var delta = " + delta + "; " +
+                "  function seekInWin(w) { try { " +
+                "    var v = w.document.querySelector('video'); " +
+                "    if (v) { try { v.currentTime = Math.max(0, (v.currentTime || 0) + delta); } catch(e){} } " +
+                "    var art = w.playerInstance || w.artPlayerInstance || w.art; " +
+                "    if (art) { " +
+                "      try { " +
+                "        var cur = art.currentTime || (art.video ? art.video.currentTime : 0) || 0; " +
+                "        var target = Math.max(0, cur + delta); " +
+                "        if (typeof art.seek === 'function') { art.seek(target); } " +
+                "        else { art.currentTime = target; } " +
+                "      } catch(e){} " +
+                "    } " +
+                "    if (typeof w.jwplayer === 'function') { " +
+                "      try { " +
+                "        var jp = w.jwplayer(); " +
+                "        if (jp && typeof jp.seek === 'function') { jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
+                "      } catch(e){} " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  try { for (var i = 0; i < w.frames.length; i++) { try { seekInWin(w.frames[i]); } catch(e) {} } } catch(e){} " +
+                "  seekInWin(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
     }
 
     private void startUpdateLoop() { 
@@ -1886,7 +1981,25 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "if (window.AndroidScrubber && typeof window.AndroidScrubber.onMediaOptions === 'function') { " +
                 "  try { window.AndroidScrubber.onMediaOptions(JSON.stringify(mediaOpts)); } catch(e) {} " +
                 "} " +
-                "return primaryVideo ? [primaryVideo.currentTime, primaryVideo.duration, primaryVideo.paused] : null; " +
+                "if (primaryVideo) { " +
+                "  return [primaryVideo.currentTime, primaryVideo.duration, primaryVideo.paused]; " +
+                "} " +
+                "if (typeof window.jwplayer === 'function') { " +
+                "  try { " +
+                "    var jp = window.jwplayer(); " +
+                "    if (jp && typeof jp.getPosition === 'function') { " +
+                "      var st = jp.getState ? jp.getState() : ''; " +
+                "      return [jp.getPosition() || 0, jp.getDuration() || 0, st === 'paused' || st === 'idle']; " +
+                "    } " +
+                "  } catch(e){} " +
+                "} " +
+                "var art = window.playerInstance || window.artPlayerInstance || window.art; " +
+                "if (art) { " +
+                "  try { " +
+                "    return [art.currentTime || 0, art.duration || 0, art.playing === false || art.isPause]; " +
+                "  } catch(e){} " +
+                "} " +
+                "return null; " +
                 "})();", value -> { 
             if (value != null && !value.equals("null") && !value.isEmpty()) { 
                 try { 
@@ -1961,18 +2074,18 @@ public class NativePlayerActivity extends AppCompatActivity {
         final String artAction;
         if (jsAction.contains(".pause()") && !jsAction.contains(".play()")) {
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().pause(); } catch(e) {} }";
-            artAction = "if (win.playerInstance && typeof win.playerInstance.pause === 'function') { try { win.playerInstance.pause(); } catch(e) {} }";
+            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art && typeof art.pause === 'function') { try { art.pause(); } catch(e) {} }";
         } else if (jsAction.contains(".play()")) {
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().play(); } catch(e) {} }";
-            artAction = "if (win.playerInstance && typeof win.playerInstance.play === 'function') { try { win.playerInstance.play(); } catch(e) {} }";
+            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art && typeof art.play === 'function') { try { art.play(); } catch(e) {} }";
         } else if (jsAction.contains("currentTime")) {
             String seekStr = jsAction.replaceAll(".*currentTime\\s*=\\s*([0-9.]+).*", "$1");
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().seek(" + seekStr + "); } catch(e) {} }";
-            artAction = "if (win.playerInstance && typeof win.playerInstance.seek !== 'undefined') { try { win.playerInstance.seek = " + seekStr + "; } catch(e) {} }";
+            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art) { try { if (typeof art.seek === 'function') art.seek(" + seekStr + "); else art.currentTime = " + seekStr + "; } catch(e) {} }";
         } else if (jsAction.contains("playbackRate")) {
             String speedStr = jsAction.replaceAll(".*playbackRate\\s*=\\s*([0-9.]+).*", "$1");
             jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().setPlaybackRate(" + speedStr + "); } catch(e) {} }";
-            artAction = "";
+            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art) { try { if (art.video) art.video.playbackRate = " + speedStr + "; art.playbackRate = " + speedStr + "; } catch(e) {} }";
         } else {
             jwAction = "";
             artAction = "";
@@ -2102,8 +2215,210 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lower.contains("vignette") || lower.contains("yadro.ru") ||
                     lower.contains("histats") || lower.contains("/ads.") ||
                     lower.contains("/ads/") || lower.contains("ads.js") ||
-                    lower.contains("popunder")) {
+                    lower.contains("popunder") ||
+                    lower.contains("endlesshandbaglinked.com") || // IQSmart popup injection script
+                    lower.contains("openfpcdn.io") ||             // Fingerprinting JS (FingerprintJS)
+                    lower.contains("technocosmos.surf") ||        // IQSmart tracker
+                    lower.contains("track_view.php") ||           // IQSmart view tracker
+                    lower.contains("pixel.morphify") ||           // AbyssPlayer tracker pixel
+                    lower.contains("pagead2.googlesyndication")) { // AdSense
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
+                }
+
+                // Intercept abyssplayer.com main HTML to remove anti-embed top.location redirect to abyss.to
+                if ((lower.contains("abyssplayer.com") || lower.contains("play.abyssplayer.com")) &&
+                    !lower.endsWith(".js") && !lower.endsWith(".css") &&
+                    !lower.endsWith(".png") && !lower.endsWith(".jpg") && !lower.endsWith(".m3u8") &&
+                    !lower.endsWith(".mp4") && !lower.endsWith(".ts") && !lower.endsWith(".svg") && !lower.endsWith(".woff2")) {
+                    try {
+                        java.net.URL u = new java.net.URL(reqUrl);
+                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        conn.setRequestProperty("Referer", "https://piratexplay.cc/");
+                        conn.setConnectTimeout(8000);
+                        conn.setReadTimeout(8000);
+                        if (conn.getResponseCode() == 200) {
+                            java.io.InputStream in = conn.getInputStream();
+                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                sb.append(line).append("\n");
+                            }
+                            reader.close();
+                            String html = sb.toString();
+                            // 1. Fix top.location check — makes the if-condition false, else-branch fires (player loads)
+                            html = html.replace("top.location == self.location", "false")
+                                       .replace("top.location==self.location", "false")
+                                       .replace("top.location === self.location", "false")
+                                       .replace("top.location===self.location", "false");
+                            // 2. Neutralize popup/tracker domains that increment track.window → jwplayer().remove()
+                            html = html.replace("decafeligiblyhad.com", "127.0.0.1");
+                            html = html.replace("morphify.net", "127.0.0.1");
+                            html = html.replace("pagead2.googlesyndication.com", "127.0.0.1");
+                            // 3. Inject comprehensive patch script immediately before </head>
+                            // This runs BEFORE page scripts so window.open spoof is in place when isUseExtension is evaluated
+                            String patchScript =
+                                "<script>\n" +
+                                "(function(){\n" +
+                                // Spoof window.open so isUseExtension = false
+                                // AbyssPlayer checks: 'functionopen(){[nativecode]}' != window.open.toString().replace(/( |\\n)/g,'')
+                                // After .replace(/( |\\n)/g,'') our 'function open() { [native code] }' becomes 'functionopen(){[nativecode]}' ✓
+                                "  try{\n" +
+                                "    var _noop=function(){return null;};\n" +
+                                "    _noop.toString=function(){return 'function open() { [native code] }';};\n" +
+                                "    window.open=_noop;\n" +
+                                "  }catch(e){}\n" +
+                                // Stub fuckAdBlock BEFORE fuckadblock.min.js is loaded
+                                // so the adBlockDetected callback never fires and jwplayer() is never removed
+                                "  function FuckAdBlock(o){this.options={checkOnLoad:false,resetOnSiteChange:false};}\n" +
+                                "  FuckAdBlock.prototype.onDetected=function(cb){return this;};\n" +
+                                "  FuckAdBlock.prototype.onNotDetected=function(cb){if(typeof cb==='function')setTimeout(cb,0);return this;};\n" +
+                                "  FuckAdBlock.prototype.check=function(force){\n" +
+                                "    if(typeof this._onNotDetected==='function')setTimeout(this._onNotDetected,0);\n" +
+                                "    return this;\n" +
+                                "  };\n" +
+                                "  FuckAdBlock.prototype.emitEvent=function(detected){\n" +
+                                "    if(!detected&&typeof this._onNotDetected==='function')this._onNotDetected();\n" +
+                                "  };\n" +
+                                "  window.FuckAdBlock=FuckAdBlock;\n" +
+                                "  var _fab=new FuckAdBlock();\n" +
+                                "  window.blockAdBlock=_fab;\n" +
+                                "  window.fuckAdBlock=_fab;\n" +
+                                // Empty out popup array so popupWindow loop never fires
+                                "  try{\n" +
+                                "    Object.defineProperty(window,'abyssConfig',{\n" +
+                                "      get:function(){return{popups:[]};},set:function(){},configurable:true\n" +
+                                "    });\n" +
+                                "  }catch(e){}\n" +
+                                "})();\n" +
+                                // After DOMContentLoaded: remove overlays, poll for JWPlayer, force play
+                                "document.addEventListener('DOMContentLoaded',function(){\n" +
+                                "  function sweepOverlays(){\n" +
+                                "    ['overlay','loadingOverlay','moreOptionsBtn','downloadButton'].forEach(function(id){\n" +
+                                "      var el=document.getElementById(id);\n" +
+                                "      if(el){el.style.cssText='display:none!important;pointer-events:none!important';try{el.remove();}catch(_){}}\n" +
+                                "    });\n" +
+                                "    document.querySelectorAll('.video-links-modal,.jw-nextup-container,.jw-dialog,.jw-overlay').forEach(function(el){\n" +
+                                "      try{el.remove();}catch(_){}\n" +
+                                "    });\n" +
+                                "  }\n" +
+                                "  sweepOverlays();\n" +
+                                "  var maxTries=60; var tries=0;\n" +
+                                "  var timer=window._aniloveTimer=setInterval(function(){\n" +
+                                "    tries++;\n" +
+                                "    if(tries>maxTries){clearInterval(timer);return;}\n" +
+                                "    sweepOverlays();\n" +
+                                "    try{\n" +
+                                "      if(typeof jwplayer!=='undefined'){\n" +
+                                "        var jp=jwplayer();\n" +
+                                "        if(jp&&typeof jp.getState==='function'){\n" +
+                                "          var st=jp.getState();\n" +
+                                "          try{jp.setMute(false);}catch(e){}\n" +
+                                "          try{if(jp.getVolume&&jp.getVolume()<100)jp.setVolume(100);}catch(e){}\n" +
+                                "          if(st==='idle'||st==='paused'){try{jp.play();}catch(e){}}\n" +
+                                "          if(st==='playing'){clearInterval(timer);return;}\n" +
+                                "        }\n" +
+                                "      }\n" +
+                                "    }catch(e){}\n" +
+                                "    var v=document.querySelector('video');\n" +
+                                "    if(v){\n" +
+                                "      try{v.muted=false;v.volume=1;}catch(e){}\n" +
+                                "      if(!v.paused&&v.currentTime>0){clearInterval(timer);return;}\n" +
+                                "      if(v.paused&&v.readyState>=2){try{v.play();}catch(e){}}\n" +
+                                "    }\n" +
+                                "  },500);\n" +
+                                "});\n" +
+                                "</script>\n";
+                            html = html.replace("</head>", patchScript + "</head>");
+                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Intercept pro.iqsmartgames.com embed pages to defeat adblock detection and auto-load first available video
+                if (lower.contains("iqsmartgames.com") && lower.contains("/embed/") &&
+                    !lower.endsWith(".js") && !lower.endsWith(".css") && !lower.endsWith(".png") &&
+                    !lower.endsWith(".jpg") && !lower.endsWith(".m3u8") && !lower.endsWith(".mp4")) {
+                    try {
+                        java.net.URL u = new java.net.URL(reqUrl);
+                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        conn.setRequestProperty("Referer", "https://piratexplay.cc/");
+                        conn.setConnectTimeout(8000);
+                        conn.setReadTimeout(8000);
+                        if (conn.getResponseCode() == 200) {
+                            java.io.InputStream in = conn.getInputStream();
+                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                sb.append(line).append("\n");
+                            }
+                            reader.close();
+                            String html = sb.toString();
+                            // Block tracker/ad domains
+                            html = html.replace("endlesshandbaglinked.com", "127.0.0.1");
+                            html = html.replace("openfpcdn.io", "127.0.0.1");
+                            html = html.replace("technocosmos.surf", "127.0.0.1");
+                            html = html.replace("track_view.php", "track_view_blocked.php");
+                            // Inject early script: stub adblock bait detection + auto-trigger loadFirstAvailableVideo
+                            String iqPatch =
+                                "<script>\n" +
+                                "(function(){\n" +
+                                // Override detectAdblock to always return false (no adblock detected)
+                                "  window.detectAdblock=function(){return Promise.resolve(false);};\n" +
+                                // Override FingerprintJS to avoid fingerprinting
+                                "  window.FingerprintJS={load:function(){return Promise.resolve({get:function(){return Promise.resolve({visitorId:'anilove'});}});}};\n" +
+                                // Make bait div invisible when checked (offsetHeight trick)
+                                "  var _origCreate=document.createElement.bind(document);\n" +
+                                "  document.createElement=function(tag){\n" +
+                                "    var el=_origCreate(tag);\n" +
+                                "    if(tag==='div'){\n" +
+                                "      Object.defineProperty(el,'offsetHeight',{get:function(){return 1;},configurable:true});\n" +
+                                "      Object.defineProperty(el,'offsetWidth',{get:function(){return 1;},configurable:true});\n" +
+                                "      Object.defineProperty(el,'clientHeight',{get:function(){return 1;},configurable:true});\n" +
+                                "      Object.defineProperty(el,'clientWidth',{get:function(){return 1;},configurable:true});\n" +
+                                "    }\n" +
+                                "    return el;\n" +
+                                "  };\n" +
+                                "})();\n" +
+                                "</script>\n";
+                            html = html.replace("<head>", "<head>\n" + iqPatch);
+                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Intercept iamcdn.net lite.bundle.js to bypass anti-embed & host checks for AbyssPlayer
+                if (lower.contains("iamcdn.net") && lower.contains("lite.bundle.js")) {
+                    try {
+                        java.net.URL u = new java.net.URL(reqUrl);
+                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        conn.setRequestProperty("Referer", "https://abyssplayer.com/");
+                        conn.setConnectTimeout(8000);
+                        conn.setReadTimeout(8000);
+                        if (conn.getResponseCode() == 200) {
+                            java.io.InputStream in = conn.getInputStream();
+                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                sb.append(line).append("\n");
+                            }
+                            reader.close();
+                            String js = sb.toString();
+                            // Bypass anti-embed check in SoTrym
+                            js = js.replace("!_0x3c817d&&!_0x53cb62", "false");
+                            js = js.replace("_0x3c817d=top[", "_0x3c817d=true;top[");
+                            js = js.replace("_0x53cb62='localhost'==", "_0x53cb62=true;'localhost'==");
+                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(js.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                        }
+                    } catch (Exception ignored) {}
                 }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
@@ -2286,17 +2601,49 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
+        if (url.contains("piratexplay.cc/public/player/") && url.contains("id=")) {
+            try {
+                Uri u = Uri.parse(url);
+                String id = u.getQueryParameter("id");
+                if (id != null && !id.trim().isEmpty()) {
+                    url = "https://pro.iqsmartgames.com/embed/" + id.trim();
+                }
+            } catch (Exception ignored) {}
+        } else if (url.contains("multi.php?data=") || url.contains("proxy/multi.php")) {
+            try {
+                Uri u = Uri.parse(url);
+                String data = u.getQueryParameter("data");
+                if (data != null && !data.isEmpty()) {
+                    String decoded = new String(android.util.Base64.decode(data, android.util.Base64.DEFAULT), java.nio.charset.StandardCharsets.UTF_8);
+                    org.json.JSONArray arr = new org.json.JSONArray(decoded);
+                    if (arr.length() > 0) {
+                        String link = arr.getJSONObject(0).optString("link");
+                        if (link != null && !link.isEmpty()) {
+                            String slug = link.substring(link.lastIndexOf('/') + 1);
+                            if (!slug.isEmpty()) {
+                                url = "https://abyssplayer.com/" + slug;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
         isDirectHls = false;
         String referer = "https://www.google.com/";
-        if (url.contains("zephyrix") || url.contains("watchanimeworld") || url.contains("short.icu") || url.contains("animesalt")) {
+        if (url.contains("watchanimeworld")) {
             referer = "https://watchanimeworld.one/";
-        } else if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
+        } else if (url.contains("megaplay")) {
             referer = "https://megaplay.buzz/";
-        } else if (url.contains("justanime.to")) {
+        } else if (url.contains("justanime")) {
             referer = "https://justanime.to/";
-        } else if (url.contains("anikototv")) {
+        } else if (url.contains("anikoto")) {
             referer = "https://anikototv.to/";
-        } else if (url.contains("piratexplay") || url.contains("abyssplayer") || url.contains("blakiteapi")) {
+        } else if (url.contains("blakiteapi")) {
+            referer = "https://blakiteapi.xyz/";
+        } else if (url.contains("iqsmart")) {
+            referer = "https://pro.iqsmartgames.com/";
+        } else if (url.contains("piratexplay") || url.contains("abyssplayer")) {
             referer = "https://piratexplay.cc/";
         } else if (url.contains("rubystm")) {
             referer = "https://rubystm.com/";
@@ -2309,23 +2656,37 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         Map<String, String> headers = new HashMap<>(); 
         headers.put("Referer", referer); 
+        headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         playerWebView.loadUrl(url, headers); 
     }
     
     private void injectAdEraser() { 
         if (isDirectHls || playerWebView == null) return;
         playerWebView.evaluateJavascript("(function() { " +
-                "  try { window.open = function() { return null; }; } catch(e){} " +
+                "  try { " +
+                "    var dOpen = function() { return null; }; " +
+                "    dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
+                "    window.open = dOpen; " +
+                "  } catch(e){} " +
                 "  var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true); " +
                 "  function autoTrigger(win) { " +
                 "    try { " +
-                "      try { win.open = function() { return null; }; } catch(e){} " +
+                "      try { " +
+                "        var dOpen2 = function() { return null; }; " +
+                "        dOpen2.toString = function() { return 'function open() { [native code] }'; }; " +
+                "        win.open = dOpen2; " +
+                "      } catch(e){} " +
                 "      var doc = win.document; " +
+                "      var abyssOverlay = doc.getElementById('overlay'); " +
+                "      if (abyssOverlay) { try { abyssOverlay.remove(); } catch(e){} } " +
+                "      var loadingOverlay = doc.getElementById('loadingOverlay'); " +
+                "      if (loadingOverlay) { try { loadingOverlay.remove(); } catch(e){} } " +
+                "      var videoTitle = doc.querySelector('.video-title-overlay, #titleOverlay, .ad-container, #moreOptionsBtn, #downloadButton, .video-links-modal'); " +
+                "      if (videoTitle) { try { videoTitle.remove(); } catch(e){} } " +
                 "      var form = doc.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
                 "      if (form && !form.hasAttribute('data-auto-sub')) { " +
                 "        form.setAttribute('data-auto-sub', 'true'); " +
-                "        form.submit(); " +
-                "        return; " +
+                "        try { form.submit(); } catch(e){} " +
                 "      } " +
                 "      var countdown = doc.querySelector('#countdownOverlay, .countdown-overlay, #loadingIndicator, .loading-overlay'); " +
                 "      if (countdown) { try { countdown.style.setProperty('display', 'none', 'important'); } catch(e){} } " +
@@ -2353,11 +2714,23 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          v.play().catch(function(){}); " +
                 "        } " +
                 "      } " +
-                "      if (win.playerInstance && typeof win.playerInstance.play === 'function' && !globalPause) { " +
-                "        try { win.playerInstance.play(); } catch(e){} " +
+                "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
+                "      if (art && typeof art.play === 'function' && !globalPause) { " +
+                "        try { " +
+                "          if (art.muted) art.muted = false; " +
+                "          if (art.volume !== undefined && art.volume < 1) art.volume = 1; " +
+                "          if (art.playing === false || art.isPause) art.play(); " +
+                "        } catch(e){} " +
                 "      } " +
+                "      var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color, a, input[type=\"button\"], .btn'); " +
+                "      allBtns.forEach(function(b) { " +
+                "        var t = (b.textContent || b.innerText || b.value || '').toLowerCase().trim(); " +
+                "        if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok' || t.indexOf('continue') === 0 || t.indexOf('resume') === 0) { " +
+                "          try { b.click(); } catch(e){} " +
+                "        } " +
+                "      }); " +
                 "      if (!globalPause) { " +
-                "        var playBtns = doc.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
+                "        var playBtns = doc.querySelectorAll('#playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
                 "        playBtns.forEach(function(btn) { " +
                 "          try { btn.click(); btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
                 "        }); " +
@@ -2370,11 +2743,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
                 "            var jwOver = doc.querySelectorAll('.jw-nextup-container, .jw-nextup, .jw-overlay, .jw-dialog'); " +
                 "            jwOver.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
-                "            var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color'); " +
-                "            allBtns.forEach(function(btn) { " +
-                "              var t = (btn.textContent || btn.innerText || '').toLowerCase().trim(); " +
-                "              if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok') { try { btn.click(); } catch(e){} } " +
-                "            }); " +
                 "            if (!win._jwAniLoveListenerAdded) { " +
                 "              win._jwAniLoveListenerAdded = true; " +
                 "              try { jp.on('ready', function() { jp.setMute(false); jp.setVolume(100); }); } catch(e){} " +
@@ -2398,17 +2766,22 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  autoTrigger(window); " +
                 "  function absoluteCleanse(win) { " +
                 "    try { " +
-                "      try { win.open = function() { return null; }; } catch(e){} " +
+                "      try { " +
+                "        var dOpen = function() { return null; }; " +
+                "        dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
+                "        win.open = dOpen; " +
+                "      } catch(e){} " +
                 "      var doc = win.document; " +
                 "      var style = doc.getElementById('anilove-hybrid-base-style') || doc.createElement('style'); " +
                 "      style.id = 'anilove-hybrid-base-style'; " +
-                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } ' + " +
-                "        '.player-wrapper, .player-container, .artplayer-app, .art-video-player, .jwplayer, .video-js, #artPlayer, #player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: transparent !important; background-color: transparent !important; z-index: 999 !important; display: block !important; opacity: 1 !important; visibility: visible !important; } ' + " +
-                "        'video, .jw-video, .vjs-tech, .art-video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: transparent !important; } ' + " +
-                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; } ' + " +
-                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .loading-overlay, .video-title-overlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
+                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } ' + " +
+                "        '.player-wrapper, .player-container, .artplayer-app, .art-video-player, .jwplayer, .video-js, #artPlayer, #player { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; background: #000 !important; background-color: #000 !important; display: block !important; opacity: 1 !important; visibility: visible !important; } ' + " +
+                "        'iframe#playerFrame, iframe#videoFrame, iframe[src*=\"iqsmart\"], iframe[src*=\"piratex\"], iframe[src*=\"abyss\"], iframe[src*=\"blakite\"], iframe[src*=\"rubystm\"], iframe[src*=\"embed\"], iframe[src*=\"player\"], iframe[src*=\"v2\"], iframe[src*=\"public\"] { width: 100% !important; height: 100% !important; border: none !important; margin: 0 !important; padding: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important; z-index: 9999 !important; } ' + " +
+                "        'video, .jw-video, .vjs-tech, .art-video { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important; opacity: 1 !important; } ' + " +
+                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; animation: none !important; transition: opacity 0s !important; } ' + " +
+                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, #downloadButton, #moreOptionsBtn, .video-links-modal, .download-btn, #btn-download, #download, .menuButton, #menuButton, iframe[src*=\"probation\"], iframe[src*=\"doubleclick\"], iframe[src*=\"googlesyndication\"], iframe[src*=\"decafeligiblyhad\"], iframe[src*=\"exosrv\"], iframe[src*=\"adsterra\"], iframe[src*=\"popads\"], iframe[src*=\"popcash\"], iframe[src*=\"clocid\"], div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, .video-title-overlay, .ad-container, .ad-iframe, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
+                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
                 "    } catch(e) {} " +
                 "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
