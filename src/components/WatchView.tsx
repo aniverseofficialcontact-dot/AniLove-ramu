@@ -614,44 +614,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
               </div>
             </div>
 
-            {/* Quick 1-Tap Episode Number Dialpad Bar */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-1 scrollbar-none">
-              <span className="text-[10px] font-black uppercase tracking-widest text-red-400 shrink-0 mr-1 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                <span>Jump To Ep #:</span>
-              </span>
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map(digit => (
-                <button
-                  key={`quick-digit-${digit}`}
-                  type="button"
-                  onClick={() => setEpisodeSearchQuery(prev => prev + digit)}
-                  className="px-3 py-1.5 rounded-xl bg-[#131726] hover:bg-[#1f263e] active:scale-90 border border-white/15 text-white font-extrabold text-xs shadow-md transition shrink-0 cursor-pointer"
-                >
-                  {digit}
-                </button>
-              ))}
-              {episodeSearchQuery && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setEpisodeSearchQuery(prev => prev.slice(0, -1))}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold text-xs transition shrink-0 cursor-pointer active:scale-90"
-                    title="Backspace"
-                  >
-                    ⌫ Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEpisodeSearchQuery('')}
-                    className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-extrabold text-xs transition shrink-0 cursor-pointer active:scale-90"
-                    title="Clear search"
-                  >
-                    ✕ Clear
-                  </button>
-                </>
-              )}
-            </div>
-
             {/* Episode Range Chunks for Long Series */}
             {episodeRanges.length > 0 && !episodeSearchQuery && (
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
