@@ -22,7 +22,6 @@ import {
   getCanonicalEpisodeArtwork,
   ExtendedEpisodeInfo,
 } from '../services/episodeMetadataService';
-import { launchNativePlayer } from '../services/nativePlayer';
 import { Capacitor } from '@capacitor/core';
 
 export interface ResolvedThemeTrack {
@@ -1389,15 +1388,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (Capacitor.isNativePlatform()) {
-                                  launchNativePlayer({
-                                    anime: currentAnime,
-                                    episodeNumber: ep.number,
-                                    startTime: 0,
-                                    audio: 'DUB',
-                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
-                                  }).catch(() => {});
-                                } else if (onPlayStream) {
+                                if (onPlayStream) {
                                   onClose();
                                   onPlayStream(currentAnime, ep.number, 0);
                                 } else {
@@ -1586,15 +1577,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (Capacitor.isNativePlatform()) {
-                                  launchNativePlayer({
-                                    anime: currentAnime,
-                                    episodeNumber: ep.number,
-                                    startTime: 0,
-                                    audio: 'DUB',
-                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
-                                  }).catch(() => {});
-                                } else if (onPlayStream) {
+                                if (onPlayStream) {
                                   onClose();
                                   onPlayStream(currentAnime, ep.number, 0);
                                 } else {
@@ -1698,15 +1681,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             <div
                               key={ep.number}
                               onClick={() => {
-                                if (Capacitor.isNativePlatform()) {
-                                  launchNativePlayer({
-                                    anime: currentAnime,
-                                    episodeNumber: ep.number,
-                                    startTime: 0,
-                                    audio: 'DUB',
-                                    totalEpisodes: episodeList.length || episodesTotal || currentAnime.episodes,
-                                  }).catch(() => {});
-                                } else if (onPlayStream) {
+                                if (onPlayStream) {
                                   onClose();
                                   onPlayStream(currentAnime, ep.number, 0);
                                 } else {
