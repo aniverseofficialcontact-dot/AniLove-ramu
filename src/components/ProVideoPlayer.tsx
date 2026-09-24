@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   RefreshCw,
   AlertCircle,
-  Server,
-  Play,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';
@@ -58,9 +56,7 @@ interface ProVideoPlayerProps {
   episodesList?: EpisodeItem[];
   initialTime?: number;
   currentServer?: StreamServerId;
-  selectedSubServer?: string;
   onServerChange?: (server: StreamServerId) => void;
-  onSubServerChange?: (subServerName: string) => void;
   currentAudioLanguage?: StreamLanguage;
   onAudioLanguageChange?: (lang: StreamLanguage) => void;
   onEpisodeChange?: (episodeNumber: number) => void;
@@ -79,9 +75,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   episodesList = [],
   initialTime = 0,
   currentServer,
-  selectedSubServer,
   onServerChange,
-  onSubServerChange,
   currentAudioLanguage,
   onAudioLanguageChange,
   onEpisodeChange,
@@ -95,7 +89,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [duration, setDuration] = useState<number>((anime.duration || 24) * 60);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeServer, setActiveServer] = useState<StreamServerId>(currentServer || DEFAULT_STREAM_PROVIDER_ID);
-  const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(selectedSubServer || 'Server 1');
+  const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(undefined);
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
   const [quality] = useState<StreamResolution>('1080p');
   const [refreshKey, setRefreshKey] = useState<number>(0);
@@ -114,14 +108,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     if (currentServer && currentServer !== activeServer) {
       setActiveServer(currentServer);
+      setSelectedSubServerName(undefined);
     }
   }, [currentServer]);
-
-  useEffect(() => {
-    if (selectedSubServer && selectedSubServer !== selectedSubServerName) {
-      setSelectedSubServerName(selectedSubServer);
-    }
-  }, [selectedSubServer]);
 
   useEffect(() => {
     if (currentAudioLanguage && currentAudioLanguage !== audioMode) {
@@ -608,73 +597,25 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {streamSource?.url && streamStatus !== 'error' ? (
-          Capacitor.isNativePlatform() ? (
-            <div 
-              onClick={() => {
-                if (streamSource?.url) {
-                  const currentEpNum = Number(episodeNumber);
-                  const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-                  NativePlayer.play({
-                    url: streamSource.url,
-                    subtitleUrl: streamSource.subtitleUrl,
-                    subtitleLang: streamSource.subtitleLang,
-                    title: `${dTitle} - Ep ${episodeNumber}`,
-                    hasNext: episodesList.length > episodeNumber,
-                    hasPrev: episodeNumber > 1,
-                    startFullscreen: false,
-                    yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
-                    anilistId: anime.id,
-                    episodeNumber: Number(episodeNumber),
-                    audio: audioMode,
-                    advancePlayer: settings?.advancePlayerEnabled ?? false,
-                    startTime: initialTime || 0,
-                  }).catch(() => {});
-                }
-              }}
-              className="w-full h-full relative flex flex-col items-center justify-center bg-black cursor-pointer group overflow-hidden"
-            >
-              {coverUrl && (
-                <img
-                  src={coverUrl}
-                  alt={displayTitle}
-                  className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-sm scale-105 transition duration-500 group-hover:scale-110"
-                  referrerPolicy="no-referrer"
-                />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/85" />
-              <div className="relative z-10 flex flex-col items-center justify-center text-center p-4 space-y-2.5">
-                <div className="w-14 h-14 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-xl shadow-indigo-600/40 group-hover:scale-110 transition duration-300">
-                  <Play className="w-7 h-7 fill-current ml-1" />
-                </div>
-                <div className="text-sm font-bold text-white tracking-wide truncate max-w-[280px]">
-                  {displayTitle}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-neutral-300">
-                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700/60 font-semibold text-indigo-300">
-                    Episode {episodeNumber}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-700/60 font-semibold text-amber-300">
-                    {audioMode}
-                  </span>
-                </div>
-                <div className="text-[11px] text-neutral-400 font-medium pt-1">
-                  Playing in Native Player ΓÇó Tap to resume controls
-                </div>
-              </div>
+        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
+          <div className="w-full h-full relative group bg-black z-10">
+            <div className="absolute inset-0 bg-black z-0" />
+            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
+               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
+               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Player Active</div>
             </div>
-          ) : (
-            <iframe
-              key={`${streamSource.url}-${refreshKey}`}
-              ref={iframeRef}
-              src={streamSource.url}
-              title={`${displayTitle} - Episode ${episodeNumber}`}
-              className="w-full h-full border-0 pointer-events-auto block"
-              allowFullScreen
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              onLoad={() => setStreamStatus('ready')}
-            />
-          )
+          </div>
+        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
+          <iframe
+            key={`${streamSource.url}-${refreshKey}`}
+            ref={iframeRef}
+            src={streamSource.url}
+            title={`${displayTitle} - Episode ${episodeNumber}`}
+            className="w-full h-full border-0 pointer-events-auto block"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            onLoad={() => setStreamStatus('ready')}
+          />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-black/90 p-4 text-center">
             {streamStatus === 'loading' ? (
@@ -760,28 +701,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Server 1 / Server 2 / Server 3 Buttons & Refresh Button */}
-          <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
-            {(streamSource?.availableServers || []).map((srv, idx) => {
-              const activeName = selectedSubServerName || streamSource?.selectedServerName || 'Server 1';
-              const isSelected = activeName.toLowerCase() === srv.name.toLowerCase();
-              return (
-                <button
-                  key={`pvp-srv-${idx}`}
-                  type="button"
-                  onClick={() => setSelectedSubServerName(srv.name)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-400'
-                      : 'bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-700/80 hover:bg-neutral-800'
-                  }`}
-                >
-                  <Server className="w-3 h-3" />
-                  <span>{srv.name}</span>
-                </button>
-              );
-            })}
-
+          {/* Right: Only Refresh Button */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleReloadStream}
