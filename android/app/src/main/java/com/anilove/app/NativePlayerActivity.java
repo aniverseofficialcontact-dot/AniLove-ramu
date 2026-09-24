@@ -214,8 +214,13 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         isPlaying = true;
         if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+        if (textCurrentTime != null) textCurrentTime.setText("00:00");
+        if (textTimeLeft != null) textTimeLeft.setText("-00:00");
+        if (seekBar != null) seekBar.setProgress(0);
+        btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
 
         if (playerWebView != null) {
+            playerWebView.evaluateJavascript("(function(){var e=document.querySelectorAll('video,audio'); for(var i=0;i<e.length;i++){e[i].pause();e[i].src='';}})();", null);
             playerWebView.stopLoading();
         }
         if (exoPlayer != null) {
@@ -344,7 +349,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
                 if (topBar != null) {
-                    topBar.setPadding(topBar.getPaddingLeft(), 0, topBar.getPaddingRight(), topBar.getPaddingBottom());
+                    topBar.setVisibility(View.VISIBLE);
+                    topBar.setPadding(topBar.getPaddingLeft(), 16, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
         } else if (isOfflineMode) {
@@ -390,6 +396,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     statusBarFiller.setLayoutParams(lp);
                 }
                 if (topBar != null) {
+                    topBar.setVisibility(View.VISIBLE);
                     topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
@@ -436,6 +443,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     statusBarFiller.setLayoutParams(lp);
                 }
                 if (topBar != null) {
+                    topBar.setVisibility(View.VISIBLE);
                     topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
@@ -1050,14 +1058,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     PictureInPictureParams.Builder pipBuilder = new PictureInPictureParams.Builder()
                             .setAspectRatio(new Rational(16, 9));
 
-                    if (playerWebView != null) {
-                        Rect visibleRect = new Rect();
-                        playerWebView.getGlobalVisibleRect(visibleRect);
-                        if (visibleRect.width() > 0 && visibleRect.height() > 0) {
-                            pipBuilder.setSourceRectHint(visibleRect);
-                        }
-                    }
-
                     enterPictureInPictureMode(pipBuilder.build());
                 } else {
                     enterPictureInPictureMode();
@@ -1077,15 +1077,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         final View portraitBottom = findViewById(R.id.portrait_bottom_container);
         final View videoRoot = findViewById(R.id.video_root_container);
         final View topBar = findViewById(R.id.top_bar);
+        final View touchWall = findViewById(R.id.touch_wall);
 
         if (isInPictureInPictureMode) {
             hideControlsQuietly();
-            findViewById(R.id.touch_wall).setVisibility(View.GONE);
+            if (touchWall != null) touchWall.setVisibility(View.GONE);
             
             if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
             if (bottomGapFiller != null) bottomGapFiller.setVisibility(View.GONE);
             if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
-            if (topBar != null) topBar.setVisibility(View.GONE);
             if (videoRoot != null) {
                 ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
                 lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -1093,13 +1093,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 videoRoot.setLayoutParams(lp);
             }
         } else {
-            findViewById(R.id.touch_wall).setVisibility(View.VISIBLE);
+            if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+            if (topBar != null) topBar.setVisibility(View.VISIBLE);
             try {
                 unregisterReceiver(pipReceiver);
             } catch (Exception e) {}
 
             applyWindowSettings(getIntent());
-            if (isControlsVisible) toggleControlsVisibility();
+            hideControlsQuietly();
         }
     }
 
@@ -1794,15 +1795,20 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      if (primaryVideo.paused && !manualPause) { " +
                 "        primaryVideo.play().catch(function(){}); " +
                 "      } " +
-                "    } else if (!globalPause) { " +
-                "      var bigPlay = win.document.querySelector('#overlay, #playback, #vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play'); " +
-                "      if (bigPlay && !bigPlay.hasAttribute('data-auto-clicked')) { bigPlay.setAttribute('data-auto-clicked','1'); try { bigPlay.click(); } catch(e){} } " +
+                "    } " +
+                "    if (!globalPause) { " +
+                "      var bigPlays = win.document.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
+                "      bigPlays.forEach(function(bp) { " +
+                "        try { bp.click(); bp.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
+                "      }); " +
                 "      if (typeof win.jwplayer === 'function') { " +
                 "        try { " +
                 "          var jp = win.jwplayer(); " +
-                "          if (jp && jp.getMute && jp.getMute()) jp.setMute(false); " +
-                "          if (jp && jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
-                "          if (jp && jp.getState && jp.getState() === 'idle') jp.play(); " +
+                "          if (jp) { " +
+                "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
+                "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
+                "            if (jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) jp.play(); " +
+                "          } " +
                 "        } catch(e){} " +
                 "      } " +
                 "    } " +
@@ -2195,21 +2201,32 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          vf.style.setProperty('visibility', 'visible', 'important'); " +
                 "        } catch(e){} " +
                 "      } " +
-                "      var btn = doc.querySelector('#overlay, #playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
-                "      if (btn && !btn.hasAttribute('data-auto-clicked')) { " +
-                "        btn.setAttribute('data-auto-clicked', 'true'); " +
-                "        try { btn.click(); } catch(e){} " +
-                "      } " +
+                "      var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true) || " +
+                "                        (typeof win._aniloveManualPause !== 'undefined' && win._aniloveManualPause === true); " +
                 "      var v = doc.querySelector('video'); " +
                 "      if (v) { " +
                 "        if (v.muted) v.muted = false; " +
                 "        if (v.volume < 1.0) v.volume = 1.0; " +
+                "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause')) { " +
+                "          v.play().catch(function(){}); " +
+                "        } " +
+                "      } " +
+                "      if (!globalPause) { " +
+                "        var playBtns = doc.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
+                "        playBtns.forEach(function(btn) { " +
+                "          try { btn.click(); btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
+                "        }); " +
                 "      } " +
                 "      if (typeof win.jwplayer === 'function') { " +
                 "        try { " +
                 "          var jp = win.jwplayer(); " +
-                "          if (jp && jp.getMute && jp.getMute()) jp.setMute(false); " +
-                "          if (jp && jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
+                "          if (jp) { " +
+                "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
+                "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
+                "            if (!globalPause && jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) { " +
+                "              jp.play(); " +
+                "            } " +
+                "          } " +
                 "        } catch(e) {} " +
                 "      } " +
                 "    } catch(e) {} " +
@@ -2224,7 +2241,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } ' + " +
                 "        'video, .jw-video, .vjs-tech, .art-video, .art-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } ' + " +
                 "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; } ' + " +
-                "        'iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"overlay\"]:not(#overlay):not(#playback), div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
+                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .plyr__controls, .plyr__control--overlaid, ::-webkit-scrollbar, iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"]'); " +
                 "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
