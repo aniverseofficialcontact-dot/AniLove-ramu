@@ -83,6 +83,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   currentAudioLanguage,
   onAudioLanguageChange,
   onEpisodeChange,
+  onClosePlayer,
   onThumbnailStyleChange,
   onProgressUpdate,
   initialThumbnailStyle = 'snapshot',
