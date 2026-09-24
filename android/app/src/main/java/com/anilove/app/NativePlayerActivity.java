@@ -522,13 +522,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         indicatorBrightness = findViewById(R.id.indicator_brightness);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         
-        findViewById(R.id.close_button).setOnClickListener(v -> {
-            if (navigationListener != null) {
-                navigationListener.onBack();
-            }
-            finish();
-            overridePendingTransition(0, 0);
-        });
         btnPlayPause.setOnClickListener(v -> togglePlayPause());
         findViewById(R.id.btn_settings).setOnClickListener(v -> showSettingsMenu());
         btnCaptions = findViewById(R.id.btn_captions);
