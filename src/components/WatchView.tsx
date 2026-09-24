@@ -310,12 +310,29 @@ export const WatchView: React.FC<WatchViewProps> = ({
     setEpisodeSearchQuery('');
   }, [anime?.id]);
 
-  // Filter episodes by search query, range chunks, and sort order (capped to 50 items for superfast rendering)
+  // Filter episodes by search query, range chunks, and sort order
   const filteredEpisodes = useMemo(() => {
     let list = episodeList;
 
-    // Apply Range Filter if active and no search query
-    if (selectedEpisodeRange !== 'all' && episodeRanges.length > 0 && !episodeSearchQuery.trim()) {
+    const q = episodeSearchQuery.toLowerCase().trim();
+    if (q) {
+      const numMatch = q.match(/\d+/);
+      const targetNum = numMatch ? parseInt(numMatch[0], 10) : null;
+
+      list = list.filter(ep => {
+        const titleMatch = ep.title ? ep.title.toLowerCase().includes(q) : false;
+        const synopsisMatch = ep.synopsis ? ep.synopsis.toLowerCase().includes(q) : false;
+        const numberExactMatch = targetNum !== null && ep.number === targetNum;
+        const numberTextMatch =
+          `episode ${ep.number}`.includes(q) ||
+          `ep ${ep.number}`.includes(q) ||
+          `ep.${ep.number}`.includes(q) ||
+          `#${ep.number}`.includes(q) ||
+          `${ep.number}` === q;
+
+        return titleMatch || synopsisMatch || numberExactMatch || numberTextMatch;
+      });
+    } else if (selectedEpisodeRange !== 'all' && episodeRanges.length > 0) {
       const parts = selectedEpisodeRange.split(/[–\-]/).map(Number);
       if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
         const [start, end] = parts;
@@ -324,23 +341,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
           list = ranged;
         }
       }
-    } else if (episodeSearchQuery.trim()) {
-      const q = episodeSearchQuery.toLowerCase().trim();
-      const cleanNum = q.replace(/^(?:episode|ep|#)\s*/i, '').trim();
-      list = list.filter(
-        ep =>
-          ep.title.toLowerCase().includes(q) ||
-          `episode ${ep.number}`.includes(q) ||
-          `ep ${ep.number}`.includes(q) ||
-          `${ep.number}` === q ||
-          `${ep.number}` === cleanNum
-      );
-      if (list.length > 60) {
-        list = list.slice(0, 60);
-      }
-    } else if (selectedEpisodeRange === 'all' && list.length > 50) {
-      // For massive lists in 'all' mode, slice to 50 to prevent DOM thrashing and lag
-      list = list.slice(0, 50);
     }
 
     if (!sortAsc) {
@@ -532,327 +532,341 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         </div>
 
-        {/* Episode Catalog Browser */}
-        <div className="w-full text-left px-3 sm:px-0">
-          <div className="p-4 sm:p-6 rounded-2xl bg-[#0a0a0d] border border-neutral-800 space-y-4">
-            {/* Header with view switch */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <Tv className="w-4 h-4 text-blue-400" />
-                <h3 className="font-black text-sm sm:text-base text-white tracking-tight">
-                  Episodes
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 text-[11px] font-bold">
-                  {episodeList.length}
-                </span>
+        {/* Episode Catalog Browser (Seamless Borderless Design) */}
+        <div className="w-full text-left px-3 sm:px-0 space-y-4">
+          {/* Section Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <Tv className="w-5 h-5 text-indigo-400" />
+              <h3 className="font-black text-base sm:text-lg text-white tracking-tight">
+                Episodes
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#111422] border border-white/10 text-neutral-300 text-xs font-bold shadow-sm">
+                {episodeList.length}
+              </span>
+            </div>
+          </div>
+
+          {/* Episode Search Filter & Action Bar */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
+                  value={episodeSearchQuery}
+                  onChange={e => setEpisodeSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 transition shadow-inner"
+                />
+                {episodeSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setEpisodeSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 p-1 rounded-xl">
+              {/* Download Episodes Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setShowDownloadModal(true)}
+                className="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-pink-500/20 transition cursor-pointer shrink-0 active:scale-95"
+                title="Download episodes for offline viewing"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Download</span>
+              </button>
+
+              {/* Sort Asc/Desc Button */}
+              <button
+                type="button"
+                onClick={() => setSortAsc(prev => !prev)}
+                className={`p-2.5 rounded-2xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
+                  !sortAsc
+                    ? 'bg-indigo-600/90 border-indigo-400 text-white shadow-md shadow-indigo-600/20'
+                    : 'bg-[#0d101a] hover:bg-[#141926] border-white/10 text-neutral-300 hover:text-white'
+                }`}
+                title={sortAsc ? 'Sort Descending (Newest first)' : 'Sort Ascending (Oldest first)'}
+              >
+                <ArrowUpDown className="w-4 h-4 text-indigo-400" />
+                <span className="hidden md:inline text-xs">{sortAsc ? '1-N' : 'N-1'}</span>
+              </button>
+
+              {/* Grid / List Layout Switcher (Single Unified Toggle) */}
+              <div className="flex items-center bg-[#0d101a] border border-white/10 p-1 rounded-2xl shrink-0">
                 <button
                   type="button"
                   onClick={() => setEpisodeViewMode('list')}
-                  className={`p-1.5 rounded-lg transition cursor-pointer ${
-                    episodeViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:text-white'
+                  className={`p-1.5 rounded-xl transition cursor-pointer ${
+                    episodeViewMode === 'list'
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                      : 'text-neutral-400 hover:text-white'
                   }`}
-                  title="List View"
+                  title="List layout"
                 >
                   <List className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setEpisodeViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition cursor-pointer ${
-                    episodeViewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:text-white'
+                  className={`p-1.5 rounded-xl transition cursor-pointer ${
+                    episodeViewMode === 'grid'
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                      : 'text-neutral-400 hover:text-white'
                   }`}
-                  title="Grid View"
+                  title="Grid layout"
                 >
                   <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Episode Search Filter & Action Bar */}
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder={`Search ${episodeList.length} episodes by name or #...`}
-                    value={episodeSearchQuery}
-                    onChange={e => setEpisodeSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-8 py-2.5 rounded-xl bg-[#111420] border border-neutral-800/90 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500 transition shadow-inner"
-                  />
-                  {episodeSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setEpisodeSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Download Episodes Modal Trigger */}
+            {/* Episode Range Chunks for Long Series */}
+            {episodeRanges.length > 0 && !episodeSearchQuery && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
                 <button
                   type="button"
-                  onClick={() => setShowDownloadModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 hover:from-pink-600 hover:to-violet-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-pink-500/20 transition cursor-pointer shrink-0 active:scale-95"
-                  title="Download episodes for offline viewing"
-                >
-                  <Download className="w-4 h-4" />
-                  <span className="hidden sm:inline">Download</span>
-                </button>
-
-                {/* Sort Asc/Desc Button */}
-                <button
-                  type="button"
-                  onClick={() => setSortAsc(prev => !prev)}
-                  className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
-                    !sortAsc
-                      ? 'bg-indigo-600/90 border-indigo-400 text-white'
-                      : 'bg-[#111420] hover:bg-[#181d2f] border-neutral-800 text-neutral-300 hover:text-white'
+                  onClick={() => setSelectedEpisodeRange('all')}
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition shrink-0 cursor-pointer ${
+                    selectedEpisodeRange === 'all'
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                      : 'bg-[#0d101a] text-neutral-400 hover:text-neutral-200 border border-white/10'
                   }`}
-                  title={sortAsc ? 'Sort Descending (Newest first)' : 'Sort Ascending (Oldest first)'}
                 >
-                  <ArrowUpDown className="w-4 h-4 text-indigo-400" />
-                  <span className="hidden md:inline text-xs">{sortAsc ? '1-N' : 'N-1'}</span>
+                  All ({episodeList.length})
                 </button>
-
-                {/* Grid / List Layout Switcher */}
-                <div className="flex items-center bg-[#111420] border border-neutral-800 p-1 rounded-xl shrink-0">
+                {episodeRanges.map(r => (
                   <button
+                    key={r.label}
                     type="button"
-                    onClick={() => setEpisodeViewMode('list')}
-                    className={`p-1.5 rounded-lg transition cursor-pointer ${
-                      episodeViewMode === 'list'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
-                    title="List layout"
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEpisodeViewMode('grid')}
-                    className={`p-1.5 rounded-lg transition cursor-pointer ${
-                      episodeViewMode === 'grid'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
-                    title="Grid layout"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Episode Range Chunks for Long Series (>50 episodes like One Piece, Naruto, Bleach) */}
-              {episodeRanges.length > 0 && !episodeSearchQuery && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEpisodeRange('all')}
-                    className={`px-3 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer ${
-                      selectedEpisodeRange === 'all'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-neutral-900/80 text-neutral-400 hover:text-neutral-200 border border-neutral-800'
+                    onClick={() => setSelectedEpisodeRange(r.label)}
+                    className={`px-3.5 py-1.5 rounded-xl font-bold transition shrink-0 cursor-pointer ${
+                      selectedEpisodeRange === r.label
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                        : 'bg-[#0d101a] text-neutral-400 hover:text-neutral-200 border border-white/10'
                     }`}
                   >
-                    All ({episodeList.length})
+                    {r.label}
                   </button>
-                  {episodeRanges.map(r => (
-                    <button
-                      key={r.label}
-                      type="button"
-                      onClick={() => setSelectedEpisodeRange(r.label)}
-                      className={`px-3 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer ${
-                        selectedEpisodeRange === r.label
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-neutral-900/80 text-neutral-400 hover:text-neutral-200 border border-neutral-800'
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Episode Grid or List */}
-            {episodeViewMode === 'grid' ? (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 max-h-[500px] overflow-y-auto pr-1">
-                {filteredEpisodes.map(ep => {
-                  const isCurrent = ep.number === episodeNumber;
-                  const isWatched = ep.number <= currentProgress;
-
-                  return (
-                    <button
-                      key={ep.number}
-                      onClick={() => {
-                        onEpisodeChange(ep.number);
-                        onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
-                      }}
-                      className={`p-3 rounded-xl text-center font-bold text-xs transition border cursor-pointer ${
-                        isCurrent
-                          ? 'bg-neutral-950 text-red-400 border-red-500/80 shadow-lg shadow-black/60 ring-2 ring-red-500/50'
-                          : isWatched
-                          ? 'bg-emerald-950/30 border-emerald-600/30 text-emerald-300 hover:bg-neutral-900'
-                          : 'bg-[#111420] border-neutral-800 text-neutral-300 hover:bg-[#181d2f] hover:text-white'
-                      }`}
-                    >
-                      <div>EP {ep.number}</div>
-                      {isWatched && !isCurrent && (
-                        <div className="text-[10px] text-emerald-400 mt-0.5">Watched</div>
-                      )}
-                      {isCurrent && <div className="text-[10px] text-red-400 mt-0.5 font-black">Now playing</div>}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
-                {filteredEpisodes.map(ep => {
-                  const isCurrent = ep.number === episodeNumber;
-                  const isWatched = ep.number <= currentProgress;
-
-                  return (
-                    <div
-                      key={ep.number}
-                      onClick={() => {
-                        onEpisodeChange(ep.number);
-                        onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
-                      }}
-                      className={`group flex items-start gap-3.5 sm:gap-4 p-3 rounded-2xl border transition-all duration-200 cursor-pointer select-none ${
-                        isCurrent
-                          ? 'bg-[#131724] border-neutral-700 shadow-xl shadow-black/60 ring-1 ring-red-500/50'
-                          : 'bg-[#0e111a]/95 hover:bg-[#141926] border-neutral-800/80 hover:border-neutral-700'
-                      }`}
-                    >
-                      {/* 16:9 Thumbnail */}
-                      <div className="relative w-36 sm:w-44 md:w-48 aspect-video rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-neutral-800/90 shadow-md">
-                        {ep.thumbnail ? (
-                          <img
-                            src={ep.thumbnail}
-                            alt={ep.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                            referrerPolicy="no-referrer"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-neutral-600 bg-neutral-900">
-                            <Film className="w-6 h-6" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-                        {/* Top-Left: Active Playing Live Red Indicator Dot */}
-                        {isCurrent && (
-                          <div className="absolute top-2 left-2 flex items-center justify-center">
-                            <span className="relative flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600 ring-2 ring-white/40" />
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Top-Right: Filler 'F' badge */}
-                        {ep.filler && (
-                          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[9px] shadow-sm">
-                            F
-                          </span>
-                        )}
-
-                        {/* Bottom-Right: EP number pill badge */}
-                        <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-sm text-white font-black text-[11px] border border-white/10 tracking-tight">
-                          EP {ep.number}
-                        </div>
-
-                        {/* Hover play icon overlay if not currently playing */}
-                        {!isCurrent && (
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                            <div className="w-8 h-8 rounded-full bg-indigo-600/90 flex items-center justify-center text-white shadow-lg">
-                              <Play className="w-4 h-4 fill-white translate-x-0.5" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right Details: Title, Filler Badge & Synopsis */}
-                      <div className="flex-1 min-w-0 py-0.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4
-                            className={`font-bold text-sm sm:text-base leading-snug truncate ${
-                              isCurrent
-                                ? 'text-red-500 font-extrabold'
-                                : 'text-white group-hover:text-indigo-200'
-                            }`}
-                          >
-                            {ep.title}
-                          </h4>
-
-                          {/* Yellow 'FILLER' pill tag on right */}
-                          {ep.filler && (
-                            <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shrink-0 shadow-sm">
-                              FILLER
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Episode Synopsis Line */}
-                        <p className="text-neutral-400 text-xs sm:text-sm line-clamp-2 mt-1 leading-relaxed">
-                          {ep.synopsis || `Episode ${ep.number} of ${title}. Stream in high definition with original multi-track audio and subtitles.`}
-                        </p>
-
-                        <div className="flex items-center gap-3 mt-2 text-[11px]">
-                          {isCurrent ? (
-                            <span className="font-bold text-red-400 flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                              Currently playing
-                            </span>
-                          ) : isWatched ? (
-                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              Watched
-                            </span>
-                          ) : (
-                            <span className="text-neutral-400">24m • HD</span>
-                          )}
-
-                          {isEpisodeDownloaded(anime.id, ep.number) && (
-                            <span className="text-violet-400 font-semibold flex items-center gap-1">
-                              <Download className="w-3.5 h-3.5 text-violet-400" />
-                              <span>Downloaded</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Watched Toggle Checkmark */}
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          const nextProgress = isWatched ? ep.number - 1 : ep.number;
-                          onUpdateProgress(anime, nextProgress);
-                        }}
-                        className={`p-2 rounded-xl transition shrink-0 ${
-                          isWatched
-                            ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 bg-emerald-950/20 border border-emerald-500/30'
-                            : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-neutral-800'
-                        }`}
-                        title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                      >
-                        <Eye className={`w-4 h-4 ${isWatched ? 'text-emerald-400 fill-emerald-400/20' : ''}`} />
-                      </button>
-                    </div>
-                  );
-                })}
+                ))}
               </div>
             )}
           </div>
+
+          {/* Episode Cards Display (Grid or List) */}
+          {episodeViewMode === 'grid' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[600px] overflow-y-auto pr-1">
+              {filteredEpisodes.map(ep => {
+                const isCurrent = ep.number === episodeNumber;
+                const isWatched = ep.number <= currentProgress;
+
+                return (
+                  <button
+                    key={ep.number}
+                    onClick={() => {
+                      onEpisodeChange(ep.number);
+                      onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
+                    }}
+                    className={`group relative overflow-hidden rounded-2xl text-left transition-all duration-300 border cursor-pointer ${
+                      isCurrent
+                        ? 'bg-[#151228] border-pink-500/80 shadow-xl shadow-pink-500/10 ring-2 ring-pink-500/60'
+                        : isWatched
+                        ? 'bg-[#0a1215] border-emerald-500/30 hover:border-emerald-500/60'
+                        : 'bg-[#0e111a] hover:bg-[#141926] border-white/10 hover:border-indigo-500/40'
+                    }`}
+                  >
+                    <div className="relative aspect-video w-full overflow-hidden bg-neutral-900">
+                      {ep.thumbnail ? (
+                        <img
+                          src={ep.thumbnail}
+                          alt={ep.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-600 bg-neutral-900">
+                          <Film className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+
+                      {/* Live Playing Indicator */}
+                      {isCurrent && (
+                        <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-600/90 text-white font-black text-[9px] shadow-lg backdrop-blur-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                          <span>PLAYING</span>
+                        </div>
+                      )}
+
+                      {/* EP Number Badge */}
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-lg bg-black/85 backdrop-blur-md text-white font-black text-[11px] border border-white/10">
+                        EP {ep.number}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5">
+                      <h4 className={`font-bold text-xs truncate leading-snug ${isCurrent ? 'text-pink-400' : 'text-neutral-200 group-hover:text-white'}`}>
+                        {ep.title}
+                      </h4>
+                      <div className="flex items-center justify-between mt-1 text-[10px]">
+                        {isCurrent ? (
+                          <span className="text-pink-400 font-extrabold">Now Playing</span>
+                        ) : isWatched ? (
+                          <span className="text-emerald-400 font-bold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Watched
+                          </span>
+                        ) : (
+                          <span className="text-neutral-500">Episode {ep.number}</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
+              {filteredEpisodes.map(ep => {
+                const isCurrent = ep.number === episodeNumber;
+                const isWatched = ep.number <= currentProgress;
+
+                return (
+                  <div
+                    key={ep.number}
+                    onClick={() => {
+                      onEpisodeChange(ep.number);
+                      onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
+                    }}
+                    className={`group flex items-start gap-3.5 sm:gap-4 p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none ${
+                      isCurrent
+                        ? 'bg-[#151228]/90 border-pink-500/70 shadow-xl shadow-pink-500/10 ring-1 ring-pink-500/50'
+                        : 'bg-[#0d101a]/90 hover:bg-[#131726] border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    {/* 16:9 Thumbnail */}
+                    <div className="relative w-36 sm:w-44 md:w-48 aspect-video rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 shadow-md">
+                      {ep.thumbnail ? (
+                        <img
+                          src={ep.thumbnail}
+                          alt={ep.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-600 bg-neutral-900">
+                          <Film className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                      {/* Live Playing Indicator */}
+                      {isCurrent && (
+                        <div className="absolute top-2 left-2 flex items-center justify-center">
+                          <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-600 ring-2 ring-white/40" />
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Filler 'F' Badge */}
+                      {ep.filler && (
+                        <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[9px] shadow-sm">
+                          F
+                        </span>
+                      )}
+
+                      {/* EP Number Badge */}
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-sm text-white font-black text-[11px] border border-white/10 tracking-tight">
+                        EP {ep.number}
+                      </div>
+
+                      {/* Hover Play Button Overlay */}
+                      {!isCurrent && (
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                          <div className="w-8 h-8 rounded-full bg-indigo-600/90 flex items-center justify-center text-white shadow-lg">
+                            <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Details */}
+                    <div className="flex-1 min-w-0 py-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4
+                          className={`font-bold text-sm sm:text-base leading-snug truncate ${
+                            isCurrent
+                              ? 'text-pink-400 font-extrabold'
+                              : 'text-white group-hover:text-indigo-200'
+                          }`}
+                        >
+                          {ep.title}
+                        </h4>
+
+                        {ep.filler && (
+                          <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shrink-0 shadow-sm">
+                            FILLER
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-neutral-400 text-xs sm:text-sm line-clamp-2 mt-1 leading-relaxed">
+                        {ep.synopsis || `Episode ${ep.number} of ${title}. Stream in high definition with original multi-track audio and subtitles.`}
+                      </p>
+
+                      <div className="flex items-center gap-3 mt-2 text-[11px]">
+                        {isCurrent ? (
+                          <span className="font-bold text-pink-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse" />
+                            Currently playing
+                          </span>
+                        ) : isWatched ? (
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Watched
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400">24m • HD</span>
+                        )}
+
+                        {isEpisodeDownloaded(anime.id, ep.number) && (
+                          <span className="text-violet-400 font-semibold flex items-center gap-1">
+                            <Download className="w-3.5 h-3.5 text-violet-400" />
+                            <span>Downloaded</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Watched Checkmark Toggle */}
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        const nextProgress = isWatched ? ep.number - 1 : ep.number;
+                        onUpdateProgress(anime, nextProgress);
+                      }}
+                      className={`p-2 rounded-xl transition shrink-0 ${
+                        isWatched
+                          ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 bg-emerald-950/20 border border-emerald-500/30'
+                          : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-neutral-800'
+                      }`}
+                      title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                    >
+                      <Eye className={`w-4 h-4 ${isWatched ? 'text-emerald-400 fill-emerald-400/20' : ''}`} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Franchise Watch Order (Main Story Chronological Order - Strictly Excluding Movies) */}
