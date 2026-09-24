@@ -438,48 +438,50 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         </section>
 
-        {/* Episode metadata & Description */}
-        <section className="mx-3 sm:mx-0 rounded-3xl bg-[#08080b] border border-neutral-800/80 p-4 sm:p-5 shadow-2xl">
-          <div className="flex gap-4">
-            {coverUrl && (
-              <img
-                src={coverUrl}
-                alt={`${title} cover`}
-                className="w-24 sm:w-32 aspect-[2/3] rounded-2xl object-cover border border-neutral-700/70 shadow-xl shrink-0"
-              />
-            )}
+        {/* Episode metadata & Description with Background Banner Image */}
+        <section className="relative mx-3 sm:mx-0 rounded-3xl overflow-hidden border border-neutral-800/80 shadow-2xl bg-[#08080b]">
+          {/* Full Background Banner Image */}
+          {(anime.bannerImage || coverUrl) && (
+            <img
+              src={anime.bannerImage || coverUrl}
+              alt={`${title} background`}
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-50 scale-105"
+            />
+          )}
+          {/* Dark Gradient Overlay for perfect readability */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#08080b]/95 via-[#08080b]/85 to-[#08080b]/50 sm:from-[#08080b]/90 sm:via-[#08080b]/75 sm:to-[#08080b]/30" />
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-400">
-                <Film className="w-3.5 h-3.5" />
-                <span>Episode {currentEpisodeData.number}</span>
-              </div>
-              <h2 className="mt-1 text-xl sm:text-3xl font-black leading-tight text-white">{title}</h2>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-neutral-300">
-                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-300 border border-yellow-500/20">
-                  <Star className="w-3.5 h-3.5 fill-yellow-300" />
-                  {score ? `${score}%` : 'N/A'}
-                </span>
-                <span className="rounded-full bg-neutral-900 px-2.5 py-1 border border-neutral-800">
-                  {currentEpisodeData.title}
-                </span>
-                {anime.format && (
-                  <span className="rounded-full bg-neutral-900 px-2.5 py-1 border border-neutral-800">{anime.format}</span>
-                )}
-              </div>
-              <p className={`mt-3 text-sm leading-relaxed text-neutral-400 ${showFullSynopsis ? '' : 'line-clamp-3'}`}>
-                {synopsis}
-              </p>
-              {synopsis.length > 180 && (
-                <button
-                  type="button"
-                  onClick={() => setShowFullSynopsis(value => !value)}
-                  className="mt-2 text-xs font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
-                >
-                  {showFullSynopsis ? 'Show less' : 'Read more'}
-                </button>
+          {/* Foreground Content */}
+          <div className="relative z-10 p-4 sm:p-6 w-full min-w-0">
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-400">
+              <Film className="w-3.5 h-3.5" />
+              <span>Episode {currentEpisodeData.number}</span>
+            </div>
+            <h2 className="mt-1 text-2xl sm:text-4xl font-black leading-tight text-white drop-shadow-md">{title}</h2>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs font-bold text-neutral-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/20 px-2.5 py-1 text-yellow-300 border border-yellow-500/30 backdrop-blur-md">
+                <Star className="w-3.5 h-3.5 fill-yellow-300" />
+                {score ? `${score}%` : 'N/A'}
+              </span>
+              <span className="rounded-full bg-black/60 px-3 py-1 border border-white/10 backdrop-blur-md text-white">
+                {currentEpisodeData.title}
+              </span>
+              {anime.format && (
+                <span className="rounded-full bg-black/60 px-3 py-1 border border-white/10 backdrop-blur-md text-white">{anime.format}</span>
               )}
             </div>
+            <p className={`mt-3 text-xs sm:text-sm leading-relaxed text-neutral-300 drop-shadow ${showFullSynopsis ? '' : 'line-clamp-3'}`}>
+              {synopsis}
+            </p>
+            {synopsis.length > 180 && (
+              <button
+                type="button"
+                onClick={() => setShowFullSynopsis(value => !value)}
+                className="mt-2 text-xs font-bold text-blue-400 hover:text-blue-300 cursor-pointer"
+              >
+                {showFullSynopsis ? 'Show less' : 'Read more'}
+              </button>
+            )}
           </div>
         </section>
 
