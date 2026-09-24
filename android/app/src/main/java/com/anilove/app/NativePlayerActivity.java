@@ -212,13 +212,32 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateMetadataFromIntent(intent);
         applyWindowSettings(intent);
 
-        String url = intent.getStringExtra("url");
-        if (url != null && !url.isEmpty()) {
-            runOnUiThread(() -> {
-                if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
-                setupHybridEngine(url);
-            });
+        isPlaying = true;
+        if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+
+        if (playerWebView != null) {
+            playerWebView.stopLoading();
         }
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+        }
+
+        isOfflineMode = intent.getBooleanExtra("offlineMode", false);
+        if (isOfflineMode) {
+            if (playerWebView != null) playerWebView.setVisibility(View.GONE);
+            if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
+            setupExoPlayer(intent.getStringExtra("localFilePath"), intent.getStringExtra("localSubPath"));
+        } else {
+            if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
+            if (playerWebView != null) {
+                playerWebView.setVisibility(View.VISIBLE);
+                String url = intent.getStringExtra("url");
+                if (url != null && !url.isEmpty()) {
+                    setupHybridEngine(url);
+                }
+            }
+        }
+        resetHideTimer();
     }
 
     private int getPhysicalScreenWidth() {
@@ -967,27 +986,48 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         if (isPlaying) {
-            // Pause: set data-manual-pause on video AND a window-level flag for JWPlayer
+            isPlaying = false;
+            // Pause: set data-manual-pause on video AND _aniloveManualPause flag across all frames
             sendVideoCommand("v.pause(); v.setAttribute('data-manual-pause', 'true');");
             if (playerWebView != null) {
                 playerWebView.evaluateJavascript(
-                    "(function(){ window._aniloveManualPause = true; " +
-                    "if(typeof jwplayer==='function'){try{jwplayer().pause();}catch(e){}} })();", null);
+                    "(function(){ " +
+                    "  function setP(w){ " +
+                    "    try { " +
+                    "      w._aniloveManualPause = true; " +
+                    "      var v = w.document.querySelector('video'); " +
+                    "      if (v) { v.pause(); v.setAttribute('data-manual-pause', 'true'); } " +
+                    "      if (typeof w.jwplayer === 'function') { try { w.jwplayer().pause(); } catch(e){} } " +
+                    "    } catch(e){} " +
+                    "    for(var i=0; i<w.frames.length; i++){ try{ setP(w.frames[i]); }catch(e){} } " +
+                    "  } " +
+                    "  setP(window); " +
+                    "})();", null);
             }
             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
             stopHideTimer();
         } else {
+            isPlaying = true;
             // Play: clear flags and play
             sendVideoCommand("v.removeAttribute('data-manual-pause'); v.play().catch(function(){});");
             if (playerWebView != null) {
                 playerWebView.evaluateJavascript(
-                    "(function(){ window._aniloveManualPause = false; " +
-                    "if(typeof jwplayer==='function'){try{jwplayer().play();}catch(e){}} })();", null);
+                    "(function(){ " +
+                    "  function setP(w){ " +
+                    "    try { " +
+                    "      w._aniloveManualPause = false; " +
+                    "      var v = w.document.querySelector('video'); " +
+                    "      if (v) { v.removeAttribute('data-manual-pause'); v.play().catch(function(){}); } " +
+                    "      if (typeof w.jwplayer === 'function') { try { w.jwplayer().play(); } catch(e){} } " +
+                    "    } catch(e){} " +
+                    "    for(var i=0; i<w.frames.length; i++){ try{ setP(w.frames[i]); }catch(e){} } " +
+                    "  } " +
+                    "  setP(window); " +
+                    "})();", null);
             }
             btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
             resetHideTimer();
         }
-        isPlaying = !isPlaying;
     }
 
     private void toggleControlsVisibility() { isControlsVisible = !isControlsVisible; controlsOverlay.setVisibility(isControlsVisible ? View.VISIBLE : View.GONE); if (isControlsVisible) resetHideTimer(); }
@@ -1533,8 +1573,8 @@ public class NativePlayerActivity extends AppCompatActivity {
     
     private void navigateEpisode(boolean next) {
         if (navigationListener != null) {
+            if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
             navigationListener.onNavigate(next);
-            finish();
             return;
         }
 
@@ -1745,16 +1785,26 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      } " +
                 "      if (!primaryVideo && vids.length > 0) primaryVideo = vids[0]; " +
                 "    } " +
-                "    var globalPause = window._aniloveManualPause === true; " +
+                "    var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true) || " +
+                "                      (typeof win._aniloveManualPause !== 'undefined' && win._aniloveManualPause === true); " +
                 "    if (primaryVideo) { " +
                 "      var manualPause = primaryVideo.hasAttribute('data-manual-pause') || globalPause; " +
+                "      if (primaryVideo.muted) { primaryVideo.muted = false; } " +
+                "      if (primaryVideo.volume < 1.0) { primaryVideo.volume = 1.0; } " +
                 "      if (primaryVideo.paused && !manualPause) { " +
                 "        primaryVideo.play().catch(function(){}); " +
                 "      } " +
                 "    } else if (!globalPause) { " +
-                "      var bigPlay = win.document.querySelector('#vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play'); " +
-                "      if (bigPlay && !bigPlay.hasAttribute('data-auto-clicked')) { bigPlay.setAttribute('data-auto-clicked','1'); bigPlay.click(); } " +
-                "      if (typeof win.jwplayer === 'function') { try { var jp=win.jwplayer(); if(jp && jp.getState && jp.getState()==='idle') jp.play(); } catch(e){} } " +
+                "      var bigPlay = win.document.querySelector('#overlay, #playback, #vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play'); " +
+                "      if (bigPlay && !bigPlay.hasAttribute('data-auto-clicked')) { bigPlay.setAttribute('data-auto-clicked','1'); try { bigPlay.click(); } catch(e){} } " +
+                "      if (typeof win.jwplayer === 'function') { " +
+                "        try { " +
+                "          var jp = win.jwplayer(); " +
+                "          if (jp && jp.getMute && jp.getMute()) jp.setMute(false); " +
+                "          if (jp && jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
+                "          if (jp && jp.getState && jp.getState() === 'idle') jp.play(); " +
+                "        } catch(e){} " +
+                "      } " +
                 "    } " +
                 "  } catch(e) {} " +
                 "  for (var i = 0; i < win.frames.length; i++) { try { penetrateAndPlay(win.frames[i]); } catch(e) {} } " +
@@ -2078,6 +2128,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             referer = "https://justanime.to/";
         } else if (url.contains("anikototv")) {
             referer = "https://anikototv.to/";
+        } else if (url.contains("piratexplay") || url.contains("abyssplayer")) {
+            referer = "https://piratexplay.cc/";
+        } else if (url.contains("rubystm")) {
+            referer = "https://rubystm.com/";
         } else {
             try {
                 referer = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
@@ -2102,15 +2156,31 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        form.submit(); " +
                 "        return; " +
                 "      } " +
-                "      var btn = doc.querySelector('#vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
+                "      var countdown = doc.querySelector('#countdownOverlay, .countdown-overlay, #loadingIndicator'); " +
+                "      if (countdown) { try { countdown.style.setProperty('display', 'none', 'important'); } catch(e){} } " +
+                "      var vf = doc.querySelector('iframe#videoFrame, iframe[src*=\"abyss\"], iframe[src*=\"short.icu\"]'); " +
+                "      if (vf) { " +
+                "        try { " +
+                "          vf.style.setProperty('opacity', '1', 'important'); " +
+                "          vf.style.setProperty('pointer-events', 'auto', 'important'); " +
+                "          vf.style.setProperty('visibility', 'visible', 'important'); " +
+                "        } catch(e){} " +
+                "      } " +
+                "      var btn = doc.querySelector('#overlay, #playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
                 "      if (btn && !btn.hasAttribute('data-auto-clicked')) { " +
                 "        btn.setAttribute('data-auto-clicked', 'true'); " +
-                "        btn.click(); " +
+                "        try { btn.click(); } catch(e){} " +
+                "      } " +
+                "      var v = doc.querySelector('video'); " +
+                "      if (v) { " +
+                "        if (v.muted) v.muted = false; " +
+                "        if (v.volume < 1.0) v.volume = 1.0; " +
                 "      } " +
                 "      if (typeof win.jwplayer === 'function') { " +
                 "        try { " +
                 "          var jp = win.jwplayer(); " +
-                "          if (jp && jp.getState && jp.getState() !== 'playing' && !jp.paused) { jp.play(); } " +
+                "          if (jp && jp.getMute && jp.getMute()) jp.setMute(false); " +
+                "          if (jp && jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
                 "        } catch(e) {} " +
                 "      } " +
                 "    } catch(e) {} " +
