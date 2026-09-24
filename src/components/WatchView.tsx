@@ -553,10 +553,17 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <input
                   id="watch-episode-search-input"
                   type="text"
-                  inputMode="text"
-                  placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder={`Search ${episodeList.length} episodes by # or name...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    e.stopPropagation();
+                  }}
+                  onKeyUp={e => {
+                    e.stopPropagation();
+                  }}
                   onClick={e => {
                     e.currentTarget.focus();
                     try {
@@ -580,7 +587,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
                       }
                     } catch (_) {}
                   }}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto z-0"
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                 />
                 {episodeSearchQuery && (

@@ -848,6 +848,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
 
       if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
