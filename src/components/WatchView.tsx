@@ -542,13 +542,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
                   onKeyDown={e => e.stopPropagation()}
                   onKeyUp={e => e.stopPropagation()}
-                  onFocus={e => {
-                    try {
-                      if ((window as any).AndroidKeyboard?.show) {
-                        (window as any).AndroidKeyboard.show();
-                      }
-                    } catch (_) {}
-                  }}
                   className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
                   style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                 />
@@ -558,11 +551,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       setEpisodeSearchQuery('');
-                      try {
-                        if ((window as any).AndroidKeyboard?.hide) {
-                          (window as any).AndroidKeyboard.hide();
-                        }
-                      } catch (_) {}
                     }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer z-10"
                   >

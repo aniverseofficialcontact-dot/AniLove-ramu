@@ -162,45 +162,6 @@ public class MainActivity extends BridgeActivity {
         try {
             WebView webView = getBridge() != null ? getBridge().getWebView() : null;
             if (webView != null) {
-                webView.setFocusable(true);
-                webView.setFocusableInTouchMode(true);
-                webView.requestFocus();
-                webView.requestFocusFromTouch();
-                webView.addJavascriptInterface(new Object() {
-                    @JavascriptInterface
-                    public void show() {
-                        runOnUiThread(() -> {
-                            try {
-                                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
-                                if (wv != null) {
-                                    wv.requestFocus();
-                                    wv.requestFocusFromTouch();
-                                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                                    if (imm != null) {
-                                        imm.restartInput(wv);
-                                        imm.showSoftInput(wv, InputMethodManager.SHOW_FORCED);
-                                        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                        });
-                    }
-
-                    @JavascriptInterface
-                    public void hide() {
-                        runOnUiThread(() -> {
-                            try {
-                                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
-                                if (wv != null) {
-                                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                                    if (imm != null) {
-                                        imm.hideSoftInputFromWindow(wv.getWindowToken(), 0);
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                        });
-                    }
-                }, "AndroidKeyboard");
                 WebSettings settings = webView.getSettings();
                 settings.setSupportMultipleWindows(false);
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);
