@@ -89,6 +89,12 @@
                 android:layout_alignParentEnd="true" />
         </RelativeLayout>
 
+        <!-- SUBTITLE TRACK / LANGUAGE -->
+        <TextView android:id="@+id/label_caption_track" style="@style/CaptionSettingLabel" android:text="SUBTITLE TRACK" android:visibility="gone" />
+        <HorizontalScrollView android:id="@+id/scroll_caption_track" style="@style/CaptionScroll" android:visibility="gone">
+            <LinearLayout android:id="@+id/group_caption_track" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
         <!-- BACKGROUND OPACITY -->
         <TextView style="@style/CaptionSettingLabel" android:text="BACKGROUND OPACITY" />
         <HorizontalScrollView style="@style/CaptionScroll">

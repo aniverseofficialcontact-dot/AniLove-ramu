@@ -37,6 +37,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -61,6 +62,9 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.net.URL;
@@ -124,6 +128,14 @@ public class NativePlayerActivity extends AppCompatActivity {
     private float currentPermanentSpeed = 1.0f;
     private boolean isVolumeBoosted = false;
     private boolean isSubtitlesEnabled = true;
+
+    // Real-Time Dynamic Media Track States
+    private List<String> detectedQualities = new ArrayList<>();
+    private List<String> detectedAudios = new ArrayList<>();
+    private List<String> detectedSubtitles = new ArrayList<>();
+    private String currentSelectedQuality = "Auto";
+    private String currentSelectedAudio = "Hindi";
+    private String currentSelectedSubtitle = "Off";
     
     // Caption State
     private String bgOpacity = "0";
@@ -602,8 +614,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         } else {
             exoPlayerView.setVisibility(View.GONE);
             playerWebView.setVisibility(View.VISIBLE);
-            setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
             playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidScrubber");
+            setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
         }
         startUpdateLoop();
         resetHideTimer();
@@ -723,8 +735,214 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public class ScrubberInterface {
         @JavascriptInterface
-        public void processFrame(String base64) {
+        public void processFrame(String base64) {}
+
+        @JavascriptInterface
+        public void onMediaOptions(String json) {
+            if (json == null || json.isEmpty()) return;
+            try {
+                JSONObject obj = new JSONObject(json);
+                JSONArray qArr = obj.optJSONArray("qualities");
+                if (qArr != null && qArr.length() > 0) {
+                    List<String> list = new ArrayList<>();
+                    for (int i = 0; i < qArr.length(); i++) {
+                        String q = qArr.getString(i);
+                        if (q != null && !q.isEmpty() && !list.contains(q)) list.add(q);
+                    }
+                    if (!list.isEmpty()) detectedQualities = list;
+                }
+                JSONArray aArr = obj.optJSONArray("audios");
+                if (aArr != null && aArr.length() > 0) {
+                    List<String> list = new ArrayList<>();
+                    for (int i = 0; i < aArr.length(); i++) {
+                        String a = aArr.getString(i);
+                        if (a != null && !a.isEmpty() && !list.contains(a)) list.add(a);
+                    }
+                    if (!list.isEmpty()) detectedAudios = list;
+                }
+                JSONArray sArr = obj.optJSONArray("subtitles");
+                if (sArr != null && sArr.length() > 0) {
+                    List<String> list = new ArrayList<>();
+                    for (int i = 0; i < sArr.length(); i++) {
+                        String s = sArr.getString(i);
+                        if (s != null && !s.isEmpty() && !list.contains(s)) list.add(s);
+                    }
+                    if (!list.isEmpty()) detectedSubtitles = list;
+                }
+                String cQ = obj.optString("currentQuality");
+                if (cQ != null && !cQ.isEmpty() && !cQ.equals("null")) currentSelectedQuality = cQ;
+                String cA = obj.optString("currentAudio");
+                if (cA != null && !cA.isEmpty() && !cA.equals("null")) {
+                    currentSelectedAudio = cA;
+                    updateAudioBadge(cA);
+                }
+                String cS = obj.optString("currentSub");
+                if (cS != null && !cS.isEmpty() && !cS.equals("null")) currentSelectedSubtitle = cS;
+            } catch (Exception ignored) {}
         }
+    }
+
+    private void changeVideoQuality(String quality) {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var q = '" + quality.replace("'", "\\'") + "'; " +
+                "  function setQ(w) { try { " +
+                "    if (w.hls && w.hls.levels) { " +
+                "      if (q.toLowerCase() === 'auto') { w.hls.currentLevel = -1; return true; } " +
+                "      for (var i = 0; i < w.hls.levels.length; i++) { " +
+                "        var lvl = w.hls.levels[i]; " +
+                "        var lbl = (lvl.name || (lvl.height ? lvl.height + 'p' : '')).toLowerCase(); " +
+                "        if (lbl.indexOf(q.toLowerCase()) !== -1) { w.hls.currentLevel = i; return true; } " +
+                "      } " +
+                "    } " +
+                "    if (typeof w.jwplayer === 'function') { " +
+                "      var p = w.jwplayer(); " +
+                "      if (p && typeof p.getQualityLevels === 'function') { " +
+                "        var qList = p.getQualityLevels(); " +
+                "        for (var j = 0; j < qList.length; j++) { " +
+                "          var jLbl = (qList[j].label || (qList[j].height ? qList[j].height + 'p' : '')).toLowerCase(); " +
+                "          if (jLbl.indexOf(q.toLowerCase()) !== -1) { p.setCurrentQuality(j); return true; } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  for (var f = 0; f < w.frames.length; f++) { try { if (setQ(w.frames[f])) return true; } catch(e) {} } " +
+                "  return false; } " +
+                "  setQ(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+    }
+
+    private void changeAudioLanguage(String audioLang) {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var target = '" + audioLang.replace("'", "\\'").toLowerCase() + "'; " +
+                "  function match(name) { " +
+                "    if (!name) return false; " +
+                "    var n = name.toLowerCase(); " +
+                "    if (target.indexOf('hin') !== -1) return n.indexOf('hin') !== -1 || n.indexOf('hi') !== -1; " +
+                "    if (target.indexOf('eng') !== -1 || target.indexOf('dub') !== -1) return n.indexOf('eng') !== -1 || n.indexOf('en') !== -1 || n.indexOf('dub') !== -1; " +
+                "    if (target.indexOf('jpn') !== -1 || target.indexOf('sub') !== -1 || target.indexOf('jap') !== -1) return n.indexOf('jpn') !== -1 || n.indexOf('ja') !== -1 || n.indexOf('sub') !== -1 || n.indexOf('orig') !== -1; " +
+                "    if (target.indexOf('tam') !== -1) return n.indexOf('tam') !== -1 || n.indexOf('ta') !== -1; " +
+                "    if (target.indexOf('tel') !== -1) return n.indexOf('tel') !== -1 || n.indexOf('te') !== -1; " +
+                "    if (target.indexOf('mal') !== -1) return n.indexOf('mal') !== -1 || n.indexOf('ml') !== -1; " +
+                "    if (target.indexOf('kan') !== -1) return n.indexOf('kan') !== -1 || n.indexOf('kn') !== -1; " +
+                "    if (target.indexOf('ben') !== -1) return n.indexOf('ben') !== -1 || n.indexOf('bn') !== -1; " +
+                "    return n.indexOf(target) !== -1; " +
+                "  } " +
+                "  function setA(w) { try { " +
+                "    if (w.hls && w.hls.audioTracks) { " +
+                "      for (var i = 0; i < w.hls.audioTracks.length; i++) { " +
+                "        var at = w.hls.audioTracks[i]; " +
+                "        var all = ((at.name || '') + ' ' + (at.label || '') + ' ' + (at.lang || '')).toLowerCase(); " +
+                "        if (match(all)) { w.hls.audioTrack = i; return true; } " +
+                "      } " +
+                "    } " +
+                "    if (typeof w.jwplayer === 'function') { " +
+                "      var p = w.jwplayer(); " +
+                "      if (p && typeof p.getAudioTracks === 'function') { " +
+                "        var tracks = p.getAudioTracks(); " +
+                "        for (var j = 0; j < tracks.length; j++) { " +
+                "          var jAll = ((tracks[j].name || '') + ' ' + (tracks[j].label || '') + ' ' + (tracks[j].language || '')).toLowerCase(); " +
+                "          if (match(jAll)) { p.setCurrentAudioTrack(j); return true; } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "    var vids = w.document.querySelectorAll('video'); " +
+                "    for (var v = 0; v < vids.length; v++) { " +
+                "      var vid = vids[v]; " +
+                "      if (vid.audioTracks && vid.audioTracks.length > 0) { " +
+                "        for (var a = 0; a < vid.audioTracks.length; a++) { " +
+                "          var tr = vid.audioTracks[a]; " +
+                "          var trAll = ((tr.label || '') + ' ' + (tr.language || '')).toLowerCase(); " +
+                "          if (match(trAll)) { " +
+                "            for (var o = 0; o < vid.audioTracks.length; o++) vid.audioTracks[o].enabled = (o === a); " +
+                "            return true; " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "    var langBtns = w.document.querySelectorAll('.server-item, .language-item, .lang-btn, [data-lang], [data-audio]'); " +
+                "    for (var b = 0; b < langBtns.length; b++) { " +
+                "      var bTxt = (langBtns[b].innerText || langBtns[b].getAttribute('data-lang') || '').toLowerCase(); " +
+                "      if (match(bTxt)) { langBtns[b].click(); return true; } " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  for (var f = 0; f < w.frames.length; f++) { try { if (setA(w.frames[f])) return true; } catch(e) {} } " +
+                "  return false; } " +
+                "  setA(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+    }
+
+    private void changeSubtitleTrack(String subTrack) {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var target = '" + subTrack.replace("'", "\\'").toLowerCase() + "'; " +
+                "  function setS(w) { try { " +
+                "    if (w.hls && w.hls.subtitleTracks) { " +
+                "      if (target === 'off') { w.hls.subtitleTrack = -1; return true; } " +
+                "      for (var i = 0; i < w.hls.subtitleTracks.length; i++) { " +
+                "        var st = w.hls.subtitleTracks[i]; " +
+                "        var sAll = ((st.name || '') + ' ' + (st.label || '') + ' ' + (st.lang || '')).toLowerCase(); " +
+                "        if (sAll.indexOf(target) !== -1) { w.hls.subtitleTrack = i; return true; } " +
+                "      } " +
+                "    } " +
+                "    if (typeof w.jwplayer === 'function') { " +
+                "      var p = w.jwplayer(); " +
+                "      if (p && typeof p.getCaptionsList === 'function') { " +
+                "        var cList = p.getCaptionsList(); " +
+                "        for (var j = 0; j < cList.length; j++) { " +
+                "          var cAll = ((cList[j].label || '') + ' ' + (cList[j].language || '')).toLowerCase(); " +
+                "          if (target === 'off' && cList[j].id === 'off') { p.setCurrentCaptions(j); return true; } " +
+                "          if (cAll.indexOf(target) !== -1) { p.setCurrentCaptions(j); return true; } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "    var vids = w.document.querySelectorAll('video'); " +
+                "    for (var v = 0; v < vids.length; v++) { " +
+                "      var vid = vids[v]; " +
+                "      if (vid.textTracks) { " +
+                "        for (var t = 0; t < vid.textTracks.length; t++) { " +
+                "          var tt = vid.textTracks[t]; " +
+                "          var ttAll = ((tt.label || '') + ' ' + (tt.language || '')).toLowerCase(); " +
+                "          if (target === 'off') { tt.mode = 'disabled'; } " +
+                "          else if (ttAll.indexOf(target) !== -1) { tt.mode = 'showing'; } " +
+                "          else { tt.mode = 'hidden'; } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  for (var f = 0; f < w.frames.length; f++) { try { if (setS(w.frames[f])) return true; } catch(e) {} } " +
+                "  return false; } " +
+                "  setS(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+    }
+
+    private boolean isAudioMatch(String opt, String target) {
+        if (opt == null || target == null) return false;
+        String o = opt.toLowerCase();
+        String t = target.toLowerCase();
+        if (o.equals(t)) return true;
+        if (t.contains("hin") && o.contains("hin")) return true;
+        if ((t.contains("eng") || t.contains("dub")) && (o.contains("eng") || o.contains("dub"))) return true;
+        if ((t.contains("jpn") || t.contains("sub") || t.contains("jap")) && (o.contains("jpn") || o.contains("sub") || o.contains("jap"))) return true;
+        if (t.contains("tam") && o.contains("tam")) return true;
+        if (t.contains("tel") && o.contains("tel")) return true;
+        if (t.contains("mal") && o.contains("mal")) return true;
+        if (t.contains("kan") && o.contains("kan")) return true;
+        if (t.contains("ben") && o.contains("ben")) return true;
+        return false;
+    }
+
+    private void updateAudioBadge(String audioText) {
+        runOnUiThread(() -> {
+            TextView portraitBadge = findViewById(R.id.portrait_badge_audio);
+            if (portraitBadge != null) {
+                portraitBadge.setText(audioText.toUpperCase());
+            }
+        });
     }
 
     private void showSeekIndicator(boolean forward) {
@@ -753,7 +971,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
             stopHideTimer();
         } else {
-            sendVideoCommand("v.play(); v.removeAttribute('data-manual-pause');");
+            sendVideoCommand("v.removeAttribute('data-manual-pause'); v.play().catch(function(){});");
             btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
             resetHideTimer();
         }
@@ -839,9 +1057,84 @@ public class NativePlayerActivity extends AppCompatActivity {
         dialog.setContentView(view);
         BottomSheetBehavior behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
-        switchBoost.setChecked(isVolumeBoosted); 
-        switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
+
+        // 1. Dynamic Video Quality Buttons
+        LinearLayout qualityContainer = view.findViewById(R.id.quality_container);
+        if (qualityContainer != null) {
+            qualityContainer.removeAllViews();
+            List<String> qList = new ArrayList<>(detectedQualities);
+            if (qList.isEmpty()) {
+                qList.add("Auto");
+                qList.add("1080p");
+                qList.add("720p");
+                qList.add("480p");
+                qList.add("360p");
+            }
+            for (String q : qList) {
+                TextView btn = new TextView(this);
+                btn.setText(q);
+                btn.setPadding(32, 12, 32, 12);
+                btn.setTextSize(12);
+                btn.setGravity(Gravity.CENTER);
+                btn.setMinWidth(110);
+                highlightButton(btn, q.equalsIgnoreCase(currentSelectedQuality));
+                btn.setOnClickListener(v -> {
+                    currentSelectedQuality = q;
+                    changeVideoQuality(q);
+                    for (int i = 0; i < qualityContainer.getChildCount(); i++) {
+                        View child = qualityContainer.getChildAt(i);
+                        if (child instanceof TextView) {
+                            highlightButton((TextView) child, ((TextView) child).getText().toString().equalsIgnoreCase(q));
+                        }
+                    }
+                });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.setMargins(0, 0, 16, 0);
+                qualityContainer.addView(btn, lp);
+            }
+        }
+
+        // 2. Dynamic Audio Language Buttons
+        LinearLayout audioContainer = view.findViewById(R.id.audio_container);
+        if (audioContainer != null) {
+            audioContainer.removeAllViews();
+            List<String> aList = new ArrayList<>(detectedAudios);
+            if (aList.isEmpty()) {
+                aList.add("Hindi");
+                aList.add("ENG (Dub)");
+                aList.add("JAP (Sub)");
+                aList.add("Tamil");
+                aList.add("Telugu");
+                aList.add("Malayalam");
+                aList.add("Kannada");
+                aList.add("Bengali");
+            }
+            for (String a : aList) {
+                TextView btn = new TextView(this);
+                btn.setText(a);
+                btn.setPadding(32, 12, 32, 12);
+                btn.setTextSize(12);
+                btn.setGravity(Gravity.CENTER);
+                btn.setMinWidth(110);
+                highlightButton(btn, isAudioMatch(a, currentSelectedAudio));
+                btn.setOnClickListener(v -> {
+                    currentSelectedAudio = a;
+                    changeAudioLanguage(a);
+                    updateAudioBadge(a);
+                    for (int i = 0; i < audioContainer.getChildCount(); i++) {
+                        View child = audioContainer.getChildAt(i);
+                        if (child instanceof TextView) {
+                            highlightButton((TextView) child, ((TextView) child).getText().toString().equalsIgnoreCase(a));
+                        }
+                    }
+                });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.setMargins(0, 0, 16, 0);
+                audioContainer.addView(btn, lp);
+            }
+        }
+
+        // 3. Playback Speed Buttons
         TextView[] speedBtns = { view.findViewById(R.id.speed_btn_05), view.findViewById(R.id.speed_btn_1), view.findViewById(R.id.speed_btn_125), view.findViewById(R.id.speed_btn_15), view.findViewById(R.id.speed_btn_2) };
         float[] speeds = {0.5f, 1.0f, 1.25f, 1.5f, 2.0f};
         for (int i = 0; i < speedBtns.length; i++) { 
@@ -854,6 +1147,23 @@ public class NativePlayerActivity extends AppCompatActivity {
                 for (TextView b : speedBtns) highlightButton(b, b == btn); 
             }); 
         }
+
+        // 4. Subtitles Customizer Link
+        View btnOpenCaptions = view.findViewById(R.id.btn_open_captions_sheet);
+        if (btnOpenCaptions != null) {
+            btnOpenCaptions.setOnClickListener(v -> {
+                dialog.dismiss();
+                showCaptionMenu();
+            });
+        }
+
+        // 5. Volume Booster
+        SwitchCompat switchBoost = view.findViewById(R.id.switch_volume_boost); 
+        if (switchBoost != null) {
+            switchBoost.setChecked(isVolumeBoosted); 
+            switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
+        }
+
         dialog.show();
     }
 
@@ -898,6 +1208,32 @@ public class NativePlayerActivity extends AppCompatActivity {
                 toggleWebSubtitles(checked); 
                 updateVisibility.run();
             });
+        }
+
+        // Setup Subtitle Track group if multiple detected
+        LinearLayout groupTrack = view.findViewById(R.id.group_caption_track);
+        TextView labelTrack = view.findViewById(R.id.label_caption_track);
+        View scrollTrack = view.findViewById(R.id.scroll_caption_track);
+
+        if (groupTrack != null && labelTrack != null && scrollTrack != null) {
+            List<String> subList = new ArrayList<>(detectedSubtitles);
+            if (!subList.contains("Off")) subList.add(0, "Off");
+            if (subList.size() > 1) {
+                labelTrack.setVisibility(View.VISIBLE);
+                scrollTrack.setVisibility(View.VISIBLE);
+                setupCaptionGroup(groupTrack, subList.toArray(new String[0]), currentSelectedSubtitle, val -> {
+                    currentSelectedSubtitle = val;
+                    if (val.equalsIgnoreCase("Off")) {
+                        toggleWebSubtitles(false);
+                    } else {
+                        toggleWebSubtitles(true);
+                        changeSubtitleTrack(val);
+                    }
+                });
+            } else {
+                labelTrack.setVisibility(View.GONE);
+                scrollTrack.setVisibility(View.GONE);
+            }
         }
 
         captionPreview = view.findViewById(R.id.caption_preview);
@@ -1270,25 +1606,147 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
+        if (playerWebView == null) return;
+
+        // Run continuous ad eraser sweep & auto-cleanse
+        injectAdEraser();
+
         playerWebView.evaluateJavascript("(function() { " +
-                "function penetrate(win, callback) { " +
-                "  try { callback(win); } catch(e) {} " +
-                "  for (var i = 0; i < win.frames.length; i++) { " +
-                "    try { penetrate(win.frames[i], callback); } catch(e) {} " +
+                "function scan(w) { " +
+                "  var qualities = []; var audios = []; var subtitles = []; " +
+                "  var currentQuality = ''; var currentAudio = ''; var currentSub = ''; " +
+                "  function probe(win) { " +
+                "    try { " +
+                "      var d = win.document; " +
+                "      if (typeof win.jwplayer === 'function') { " +
+                "        var p = win.jwplayer(); " +
+                "        if (p && typeof p.getQualityLevels === 'function') { " +
+                "          var qList = p.getQualityLevels(); " +
+                "          if (qList && qList.length > 0) { " +
+                "            var curQ = p.getCurrentQuality(); " +
+                "            for (var i = 0; i < qList.length; i++) { " +
+                "              var lbl = qList[i].label || (qList[i].height ? qList[i].height + 'p' : 'Auto'); " +
+                "              if (qualities.indexOf(lbl) === -1) qualities.push(lbl); " +
+                "              if (curQ === i) currentQuality = lbl; " +
+                "            } " +
+                "          } " +
+                "        } " +
+                "        if (p && typeof p.getAudioTracks === 'function') { " +
+                "          var aList = p.getAudioTracks(); " +
+                "          if (aList && aList.length > 0) { " +
+                "            var curA = p.getCurrentAudioTrack(); " +
+                "            for (var j = 0; j < aList.length; j++) { " +
+                "              var aLbl = aList[j].name || aList[j].label || aList[j].language || ('Audio ' + (j + 1)); " +
+                "              if (audios.indexOf(aLbl) === -1) audios.push(aLbl); " +
+                "              if (curA === j) currentAudio = aLbl; " +
+                "            } " +
+                "          } " +
+                "        } " +
+                "        if (p && typeof p.getCaptionsList === 'function') { " +
+                "          var cList = p.getCaptionsList(); " +
+                "          if (cList && cList.length > 0) { " +
+                "            var curC = p.getCurrentCaptions(); " +
+                "            for (var k = 0; k < cList.length; k++) { " +
+                "              var cLbl = cList[k].label || cList[k].language || ('Caption ' + (k + 1)); " +
+                "              if (subtitles.indexOf(cLbl) === -1) subtitles.push(cLbl); " +
+                "              if (curC === k) currentSub = cLbl; " +
+                "            } " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "      if (win.hls) { " +
+                "        if (win.hls.levels && win.hls.levels.length > 0) { " +
+                "          if (qualities.indexOf('Auto') === -1) qualities.push('Auto'); " +
+                "          for (var l = 0; l < win.hls.levels.length; l++) { " +
+                "            var lvl = win.hls.levels[l]; " +
+                "            var hLbl = lvl.name || (lvl.height ? lvl.height + 'p' : ('Level ' + l)); " +
+                "            if (qualities.indexOf(hLbl) === -1) qualities.push(hLbl); " +
+                "            if (win.hls.currentLevel === l) currentQuality = hLbl; " +
+                "          } " +
+                "          if (win.hls.currentLevel === -1) currentQuality = 'Auto'; " +
+                "        } " +
+                "        if (win.hls.audioTracks && win.hls.audioTracks.length > 0) { " +
+                "          for (var m = 0; m < win.hls.audioTracks.length; m++) { " +
+                "            var at = win.hls.audioTracks[m]; " +
+                "            var atLbl = at.name || at.label || at.lang || ('Audio ' + (m + 1)); " +
+                "            if (audios.indexOf(atLbl) === -1) audios.push(atLbl); " +
+                "            if (win.hls.audioTrack === m) currentAudio = atLbl; " +
+                "          } " +
+                "        } " +
+                "        if (win.hls.subtitleTracks && win.hls.subtitleTracks.length > 0) { " +
+                "          for (var n = 0; n < win.hls.subtitleTracks.length; n++) { " +
+                "            var st = win.hls.subtitleTracks[n]; " +
+                "            var stLbl = st.name || st.label || st.lang || ('Sub ' + (n + 1)); " +
+                "            if (subtitles.indexOf(stLbl) === -1) subtitles.push(stLbl); " +
+                "            if (win.hls.subtitleTrack === n) currentSub = stLbl; " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "      var vids = d.querySelectorAll('video'); " +
+                "      for (var v = 0; v < vids.length; v++) { " +
+                "        var vid = vids[v]; " +
+                "        if (vid.audioTracks && vid.audioTracks.length > 0) { " +
+                "          for (var a = 0; a < vid.audioTracks.length; a++) { " +
+                "            var tr = vid.audioTracks[a]; " +
+                "            var trLbl = tr.label || tr.language || ('Audio ' + (a + 1)); " +
+                "            if (audios.indexOf(trLbl) === -1) audios.push(trLbl); " +
+                "            if (tr.enabled) currentAudio = trLbl; " +
+                "          } " +
+                "        } " +
+                "        if (vid.textTracks && vid.textTracks.length > 0) { " +
+                "          for (var t = 0; t < vid.textTracks.length; t++) { " +
+                "            var tt = vid.textTracks[t]; " +
+                "            var ttLbl = tt.label || tt.language || ('Subtitle ' + (t + 1)); " +
+                "            if (subtitles.indexOf(ttLbl) === -1) subtitles.push(ttLbl); " +
+                "            if (tt.mode === 'showing') currentSub = ttLbl; " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "      var langBtns = d.querySelectorAll('.server-item, .language-item, .lang-btn, [data-lang], [data-audio]'); " +
+                "      langBtns.forEach(function(b) { " +
+                "        var bTxt = (b.innerText || b.getAttribute('data-lang') || '').trim(); " +
+                "        if (bTxt && audios.indexOf(bTxt) === -1) audios.push(bTxt); " +
+                "      }); " +
+                "    } catch(e) {} " +
+                "    for (var f = 0; f < win.frames.length; f++) { try { probe(win.frames[f]); } catch(e) {} } " +
                 "  } " +
+                "  probe(w); " +
+                "  return { qualities: qualities, audios: audios, subtitles: subtitles, currentQuality: currentQuality, currentAudio: currentAudio, currentSub: currentSub }; " +
                 "} " +
-                "var v = null; " +
-                "penetrate(window, function(w) { try { if(!v) v = w.document.querySelector('video'); }catch(e){} }); " +
-                "return v ? [v.currentTime, v.duration, v.paused] : null; " +
+                "var primaryVideo = null; " +
+                "function penetrateAndPlay(win) { " +
+                "  try { " +
+                "    if (!primaryVideo) primaryVideo = win.document.querySelector('video'); " +
+                "    if (primaryVideo) { " +
+                "      if (primaryVideo.paused && !primaryVideo.hasAttribute('data-manual-pause')) { " +
+                "        primaryVideo.play().catch(function(){}); " +
+                "      } " +
+                "    } else { " +
+                "      var bigPlay = win.document.querySelector('.jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .play-btn, .plyr__control--overlaid, button[aria-label*=\"Play\"], [class*=\"play-icon\"], [class*=\"play-btn\"]'); " +
+                "      if (bigPlay) bigPlay.click(); " +
+                "    } " +
+                "  } catch(e) {} " +
+                "  for (var i = 0; i < win.frames.length; i++) { try { penetrateAndPlay(win.frames[i]); } catch(e) {} } " +
+                "} " +
+                "penetrateAndPlay(window); " +
+                "var mediaOpts = scan(window); " +
+                "if (window.AndroidScrubber && typeof window.AndroidScrubber.onMediaOptions === 'function') { " +
+                "  try { window.AndroidScrubber.onMediaOptions(JSON.stringify(mediaOpts)); } catch(e) {} " +
+                "} " +
+                "return primaryVideo ? [primaryVideo.currentTime, primaryVideo.duration, primaryVideo.paused] : null; " +
                 "})();", value -> { 
             if (value != null && !value.equals("null") && !value.isEmpty()) { 
                 try { 
                     String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); 
                     if (parts.length >= 3) { 
-                        double current = Double.parseDouble(parts[0]); 
-                        double duration = Double.parseDouble(parts[1]); 
-                        boolean pausedInWeb = Boolean.parseBoolean(parts[2]); 
+                        double current = Double.parseDouble(parts[0].trim()); 
+                        double duration = Double.parseDouble(parts[1].trim()); 
+                        boolean pausedInWeb = Boolean.parseBoolean(parts[2].trim()); 
                         
+                        if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
+                            loadingProgress.setVisibility(View.GONE);
+                        }
+
                         textCurrentTime.setText(formatTime((int) current)); 
                         textTotalTime.setText(formatTime((int) duration)); 
                         
@@ -1345,7 +1803,19 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void sendVideoCommand(String jsAction) { 
         if (playerWebView != null) {
-            playerWebView.evaluateJavascript("(function() { function findVideo(win) { try { var v = win.document.querySelector('video'); if (v) return v; } catch(e) {} for (var i = 0; i < win.frames.length; i++) { try { var fv = findVideo(win.frames[i]); if (fv) return fv; } catch(e) {} } return null; } var v = findVideo(window); if (v) { " + jsAction + " } })();", null); 
+            playerWebView.evaluateJavascript("(function() { " +
+                    "function findAndExec(win) { " +
+                    "  try { " +
+                    "    var v = win.document.querySelector('video'); " +
+                    "    if (v) { " + jsAction + " return true; } " +
+                    "  } catch(e) {} " +
+                    "  for (var i = 0; i < win.frames.length; i++) { " +
+                    "    try { if (findAndExec(win.frames[i])) return true; } catch(e) {} " +
+                    "  } " +
+                    "  return false; " +
+                    "} " +
+                    "findAndExec(window); " +
+                    "})();", null); 
         }
     }
 
@@ -1358,14 +1828,31 @@ public class NativePlayerActivity extends AppCompatActivity {
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+        try {
+            CookieManager cookieManager = CookieManager.getInstance();
+            cookieManager.setAcceptCookie(true);
+            cookieManager.setAcceptThirdPartyCookies(playerWebView, true);
+        } catch (Exception ignored) {}
         
         playerWebView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                return false; // Block popup ads
+            }
+
             @Override
             public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
                 Log.d("PlayerDiagnostics", consoleMessage.message() + " -- From line "
@@ -1376,6 +1863,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         playerWebView.setWebViewClient(new WebViewClient() { 
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String reqUrl = request.getUrl().toString();
+                if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
+                    return false;
+                }
+                return true;
+            }
+
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
@@ -1399,17 +1895,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             @Override public void onPageStarted(WebView view, String url, Bitmap favicon) { 
                 super.onPageStarted(view, url, favicon); 
                 if (!isDirectHls) {
-                    view.loadUrl("javascript:(function() { " +
-                            "  var style = document.createElement('style'); " +
-                            "  style.innerHTML = 'body, html { background: black !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } " +
-                            "  video, .jw-video, .vjs-tech, .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay { " +
-                            "    visibility: visible !important; opacity: 1 !important; display: block !important; " +
-                            "  } " +
-                            "  video, .jw-video, .vjs-tech { " +
-                            "    position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; z-index: 1000 !important; " +
-                            "  }'; " +
-                            "  document.head.appendChild(style); " +
-                            "})();"); 
                     injectAdEraser(); 
                 }
             } 
@@ -1458,87 +1943,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                 String audio = getIntent().getStringExtra("audio");
                 final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
-                String audioScript = "(function() {" +
-                        "  var target = '" + targetAudio + "';" +
-                        "  function matchTrack(t) {" +
-                        "    if (!t) return false;" +
-                        "    var all = ((t.language || '') + ' ' + (t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.id || '') + ' ' + (t.title || '')).toLowerCase();" +
-                        "    if (target === 'dub' || target === 'eng' || target === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
-                        "    if (target === 'sub' || target === 'jpn' || target === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
-                        "    if (target === 'hin' || target === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyJwTrack(p) {" +
-                        "    if (!p || typeof p.getAudioTracks !== 'function') return false;" +
-                        "    var tracks = p.getAudioTracks();" +
-                        "    if (tracks && tracks.length > 0) {" +
-                        "      for (var i = 0; i < tracks.length; i++) {" +
-                        "        if (matchTrack(tracks[i])) {" +
-                        "          if (p.getCurrentAudioTrack() !== i) p.setCurrentAudioTrack(i);" +
-                        "          return true;" +
-                        "        }" +
-                        "      }" +
-                        "    }" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyHtml5Track(doc) {" +
-                        "    try {" +
-                        "      var videos = doc.querySelectorAll('video');" +
-                        "      for (var i = 0; i < videos.length; i++) {" +
-                        "        var v = videos[i];" +
-                        "        if (v.audioTracks && v.audioTracks.length > 0) {" +
-                        "          for (var j = 0; j < v.audioTracks.length; j++) {" +
-                        "            var tr = v.audioTracks[j];" +
-                        "            if (matchTrack(tr)) { tr.enabled = true; return true; }" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "    } catch(e) {}" +
-                        "    return false;" +
-                        "  }" +
-                        "  function applyHlsTrack(win) {" +
-                        "    try {" +
-                        "      if (win.hls && win.hls.audioTracks && win.hls.audioTracks.length > 0) {" +
-                        "        for (var h = 0; h < win.hls.audioTracks.length; h++) {" +
-                        "          if (matchTrack(win.hls.audioTracks[h])) {" +
-                        "            if (win.hls.audioTrack !== h) win.hls.audioTrack = h;" +
-                        "            return true;" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "    } catch(e) {}" +
-                        "    return false;" +
-                        "  }" +
-                        "  function penetrateAudio(win) {" +
-                        "    try {" +
-                        "      if (typeof win.jwplayer === 'function') {" +
-                        "        var p = win.jwplayer();" +
-                        "        if (p) {" +
-                        "          if (applyJwTrack(p)) return true;" +
-                        "          if (!win._jwAudioHooked) {" +
-                        "            win._jwAudioHooked = true;" +
-                        "            p.on('ready', function() { applyJwTrack(p); });" +
-                        "            p.on('audioTracks', function() { applyJwTrack(p); });" +
-                        "            p.on('play', function() { applyJwTrack(p); });" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "      if (applyHlsTrack(win)) return true;" +
-                        "      if (win.document && applyHtml5Track(win.document)) return true;" +
-                        "    } catch(e) {}" +
-                        "    for (var j = 0; j < win.frames.length; j++) {" +
-                        "      try { if (penetrateAudio(win.frames[j])) return true; } catch(e) {}" +
-                        "    }" +
-                        "    return false;" +
-                        "  }" +
-                        "  penetrateAudio(window);" +
-                        "  var attempts = 0;" +
-                        "  var interval = setInterval(function() {" +
-                        "    attempts++;" +
-                        "    if (penetrateAudio(window) || attempts > 35) clearInterval(interval);" +
-                        "  }, 150);" +
-                        "})();";
-                view.evaluateJavascript(audioScript, null);
+                changeAudioLanguage(targetAudio);
             } 
         }); 
 
@@ -1622,17 +2027,21 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         isDirectHls = false;
-        String referer = "https://anikototv.to/";
+        String referer = "https://www.google.com/";
         if (url.contains("zephyrix") || url.contains("watchanimeworld") || url.contains("short.icu") || url.contains("animesalt")) {
             referer = "https://watchanimeworld.one/";
         } else if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
             referer = "https://megaplay.buzz/";
         } else if (url.contains("justanime.to")) {
             referer = "https://justanime.to/";
+        } else if (url.contains("anikototv")) {
+            referer = "https://anikototv.to/";
         } else {
             try {
                 referer = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+                referer = "https://www.google.com/";
+            }
         }
         Map<String, String> headers = new HashMap<>(); 
         headers.put("Referer", referer); 
@@ -1645,9 +2054,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  function absoluteCleanse(win) { " +
                 "    try { " +
                 "      var doc = win.document; " +
-                "      var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"]'; " +
+                "      var style = doc.getElementById('anilove-hybrid-base-style') || doc.createElement('style'); " +
+                "      style.id = 'anilove-hybrid-base-style'; " +
+                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } " +
+                "      video, .jw-video, .vjs-tech, .art-video, .art-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } " +
+                "      .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; }'; " +
+                "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "      " +
-                "      // 1. Force all potential captions to be visible instantly in this frame" +
+                "      var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"]'; " +
                 "      var subs = doc.querySelectorAll(subSelectors); " +
                 "      subs.forEach(function(s) { " +
                 "        s.style.setProperty('visibility', 'visible', 'important'); " +
@@ -1657,15 +2071,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        s.style.setProperty('pointer-events', 'auto', 'important'); " +
                 "      }); " +
                 "      " +
-                "      // 2. Find video or frame containing video" +
                 "      var v = doc.querySelector('video'); " +
                 "      if (!v) { " +
                 "        for (var i = 0; i < win.frames.length; i++) { " +
                 "          try { if (win.frames[i].document.querySelector('video')) { v = win.frames[i].frameElement; break; } } catch(e) {} " +
                 "        } " +
                 "      } " +
-                "      " +
-                "      // 3. Only hide things if we have a primary video/frame to protect" +
                 "      if (v) { " +
                 "        doc.body.style.setProperty('background', 'black', 'important'); " +
                 "        var all = doc.querySelectorAll('body *'); " +
@@ -1675,11 +2086,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "            el.style.setProperty('opacity', '1', 'important'); " +
                 "            return; " +
                 "          } " +
-                "          " +
-                "          // Check if it's a whitelisted caption (either direct match or contains one)" +
                 "          var isSafe = false; " +
                 "          subs.forEach(function(s) { if (s === el || el.contains(s)) isSafe = true; }); " +
-                "          " +
                 "          if (isSafe) { " +
                 "            el.style.setProperty('visibility', 'visible', 'important'); " +
                 "            el.style.setProperty('opacity', '1', 'important'); " +
@@ -1689,15 +2097,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "            el.style.setProperty('pointer-events', 'none', 'important'); " +
                 "          } " +
                 "        }); " +
-                "        " +
                 "        if (v.tagName !== 'IFRAME') { " +
                 "          v.style.setProperty('visibility', 'visible', 'important'); " +
                 "          v.style.setProperty('opacity', '1', 'important'); " +
                 "          v.style.setProperty('position', 'fixed', 'important'); " +
                 "          v.style.setProperty('top', '0', 'important'); " +
                 "          v.style.setProperty('left', '0', 'important'); " +
-                "          v.style.setProperty('width', '100%', 'important'); " +
-                "          v.style.setProperty('height', '100%', 'important'); " +
+                "          v.style.setProperty('width', '100vw', 'important'); " +
+                "          v.style.setProperty('height', '100vh', 'important'); " +
                 "          v.style.setProperty('object-fit', 'contain', 'important'); " +
                 "          v.style.setProperty('z-index', '1000', 'important'); " +
                 "        } " +
