@@ -1958,6 +1958,14 @@ public class NativePlayerActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
+                String lower = reqUrl.toLowerCase();
+                if (lower.contains("abyss.to") || lower.contains("decafeligiblyhad") || lower.contains("adsterra") || 
+                    lower.contains("popads") || lower.contains("monetag") || lower.contains("highperformancegate") ||
+                    lower.contains("morphify.net") || lower.contains("doubleclick") || lower.contains("google-analytics") ||
+                    lower.contains("googlesyndication") || lower.contains("adservice") || lower.contains("turnstile") ||
+                    lower.contains("challenge-platform")) {
+                    return true;
+                }
                 if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
                     return false;
                 }
@@ -1968,6 +1976,27 @@ public class NativePlayerActivity extends AppCompatActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
+
+                // Block known ad networks, trackers, popup scripts, and verification captchas
+                if (lower.contains("decafeligiblyhad") || lower.contains("morphify.net") || 
+                    lower.contains("doubleclick") || lower.contains("google-analytics") ||
+                    lower.contains("adservice") || lower.contains("fuckadblock") ||
+                    lower.contains("popads") || lower.contains("adsterra") ||
+                    lower.contains("alwingulla") || lower.contains("monetag") ||
+                    lower.contains("challenge-platform") || lower.contains("turnstile") ||
+                    lower.contains("cloudflareinsights") || lower.contains("googlesyndication") ||
+                    lower.contains("pagead") || lower.contains("adsystem") ||
+                    lower.contains("propeller") || lower.contains("adnxs") ||
+                    lower.contains("adform") || lower.contains("outbrain") ||
+                    lower.contains("taboola") || lower.contains("trafficjunky") ||
+                    lower.contains("exozoic") || lower.contains("zergnet") ||
+                    lower.contains("vignette") || lower.contains("yadro.ru") ||
+                    lower.contains("histats") || lower.contains("/ads.") ||
+                    lower.contains("/ads/") || lower.contains("ads.js") ||
+                    lower.contains("popunder")) {
+                    return new WebResourceResponse("text/plain", "UTF-8", new java.io.ByteArrayInputStream("".getBytes()));
+                }
+
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
                 String audio = getIntent().getStringExtra("audio");
@@ -2192,59 +2221,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var doc = win.document; " +
                 "      var style = doc.getElementById('anilove-hybrid-base-style') || doc.createElement('style'); " +
                 "      style.id = 'anilove-hybrid-base-style'; " +
-                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } " +
-                "      video, .jw-video, .vjs-tech, .art-video, .art-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } " +
-                "      .art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; }'; " +
+                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; } ' + " +
+                "        'video, .jw-video, .vjs-tech, .art-video, .art-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; z-index: 1000 !important; visibility: visible !important; opacity: 1 !important; display: block !important; background: #000 !important; } ' + " +
+                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; } ' + " +
+                "        'iframe:not(#videoFrame):not([src*=\"abyss\"]):not([src*=\"blob\"]):not([src*=\"stream\"]), div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"overlay\"]:not(#overlay):not(#playback), div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "      " +
-                "      var subSelectors = '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"]'; " +
-                "      var subs = doc.querySelectorAll(subSelectors); " +
-                "      subs.forEach(function(s) { " +
-                "        s.style.setProperty('visibility', 'visible', 'important'); " +
-                "        s.style.setProperty('opacity', '1', 'important'); " +
-                "        s.style.setProperty('display', 'block', 'important'); " +
-                "        s.style.setProperty('z-index', '2147483647', 'important'); " +
-                "        s.style.setProperty('pointer-events', 'auto', 'important'); " +
-                "      }); " +
-                "      " +
-                "      var v = doc.querySelector('video'); " +
-                "      if (!v) { " +
-                "        for (var i = 0; i < win.frames.length; i++) { " +
-                "          try { if (win.frames[i].document.querySelector('video')) { v = win.frames[i].frameElement; break; } } catch(e) {} " +
-                "        } " +
-                "      } " +
-                "      if (v) { " +
-                "        doc.body.style.setProperty('background', 'black', 'important'); " +
-                "        var all = doc.querySelectorAll('body *'); " +
-                "        all.forEach(function(el) { " +
-                "          if (el === v || el.contains(v)) { " +
-                "            el.style.setProperty('visibility', 'visible', 'important'); " +
-                "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            return; " +
-                "          } " +
-                "          var isSafe = false; " +
-                "          subs.forEach(function(s) { if (s === el || el.contains(s)) isSafe = true; }); " +
-                "          if (isSafe) { " +
-                "            el.style.setProperty('visibility', 'visible', 'important'); " +
-                "            el.style.setProperty('opacity', '1', 'important'); " +
-                "            el.style.setProperty('pointer-events', 'auto', 'important'); " +
-                "          } else { " +
-                "            el.style.setProperty('visibility', 'hidden', 'important'); " +
-                "            el.style.setProperty('pointer-events', 'none', 'important'); " +
-                "          } " +
-                "        }); " +
-                "        if (v.tagName !== 'IFRAME') { " +
-                "          v.style.setProperty('visibility', 'visible', 'important'); " +
-                "          v.style.setProperty('opacity', '1', 'important'); " +
-                "          v.style.setProperty('position', 'fixed', 'important'); " +
-                "          v.style.setProperty('top', '0', 'important'); " +
-                "          v.style.setProperty('left', '0', 'important'); " +
-                "          v.style.setProperty('width', '100vw', 'important'); " +
-                "          v.style.setProperty('height', '100vh', 'important'); " +
-                "          v.style.setProperty('object-fit', 'contain', 'important'); " +
-                "          v.style.setProperty('z-index', '1000', 'important'); " +
-                "        } " +
-                "      } " +
+                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"]'); " +
+                "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
                 "    } catch(e) {} " +
                 "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
                 "  } " +

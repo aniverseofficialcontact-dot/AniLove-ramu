@@ -228,6 +228,46 @@ export async function resolveEpisodeSource({
     const streamInfo = data.stream;
     const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
+function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): string {
+  if (!rawUrl) return rawUrl;
+  if (rawUrl.includes('multi.php?data=') || rawUrl.includes('piratexplay.cc')) {
+    try {
+      const match = rawUrl.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        const decoded = atob(decodeURIComponent(match[1]));
+        const list = JSON.parse(decoded);
+        if (Array.isArray(list) && list.length > 0) {
+          const isDub = language === 'DUB';
+          let target = list[0];
+          if (isDub) {
+            const dubItem = list.find((i: any) => {
+              const l = (i.language || '').toLowerCase();
+              return l.includes('hin') || l.includes('eng') || l.includes('dub');
+            });
+            if (dubItem) target = dubItem;
+          } else {
+            const subItem = list.find((i: any) => {
+              const l = (i.language || '').toLowerCase();
+              return l.includes('jap') || l.includes('sub');
+            });
+            if (subItem) target = subItem;
+          }
+          if (target && target.link) {
+            const slug = target.link.split('/').filter(Boolean).pop();
+            if (slug) {
+              return `https://abyssplayer.com/${slug}`;
+            }
+            return target.link.replace('short.icu', 'abyssplayer.com');
+          }
+        }
+      }
+    } catch {
+      // fallback to rawUrl
+    }
+  }
+  return rawUrl;
+}
+
     // STRICT FILTER: Keep ONLY Server 1, Server 2, and Server 3
     let targetServers = rawServers.filter(s =>
       s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
@@ -236,6 +276,12 @@ export async function resolveEpisodeSource({
     if (targetServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
       targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
     }
+
+    // Unpack direct player URLs (e.g. Server 3 abyssplayer extraction)
+    targetServers = targetServers.map(s => ({
+      name: s.name,
+      url: unpackServerUrl(s.url, language),
+    }));
 
     const availableServers: AvailableServerOption[] = targetServers.map(srv => ({
       name: srv.name,
@@ -262,7 +308,7 @@ export async function resolveEpisodeSource({
       }
     }
 
-    const selectedUrl = selectedServer?.url || streamInfo.streamLink || streamInfo.file;
+    const selectedUrl = unpackServerUrl(selectedServer?.url || streamInfo.streamLink || streamInfo.file, language);
 
     if (selectedUrl) {
       return {
