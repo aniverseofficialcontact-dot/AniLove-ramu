@@ -967,11 +967,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         if (isPlaying) {
+            // Pause: set data-manual-pause on video AND a window-level flag for JWPlayer
             sendVideoCommand("v.pause(); v.setAttribute('data-manual-pause', 'true');");
+            if (playerWebView != null) {
+                playerWebView.evaluateJavascript(
+                    "(function(){ window._aniloveManualPause = true; " +
+                    "if(typeof jwplayer==='function'){try{jwplayer().pause();}catch(e){}} })();", null);
+            }
             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
             stopHideTimer();
         } else {
+            // Play: clear flags and play
             sendVideoCommand("v.removeAttribute('data-manual-pause'); v.play().catch(function(){});");
+            if (playerWebView != null) {
+                playerWebView.evaluateJavascript(
+                    "(function(){ window._aniloveManualPause = false; " +
+                    "if(typeof jwplayer==='function'){try{jwplayer().play();}catch(e){}} })();", null);
+            }
             btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
             resetHideTimer();
         }
@@ -1413,8 +1425,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
                 ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
                 ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions, " +
-                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
-                "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
+                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
+
+        String containerSelectorsJs = containerSelectors.replace("'", "\\'");
 
         String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
                 ".artplayer-subtitles p, .artplayer-subtitles span, " +
@@ -1463,13 +1476,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "  display: inline-block !important; " +
                 "} ";
 
+        // Escape single quotes in CSS so it's safe to embed inside JS single-quoted string
+        String cssEscaped = css.replace("\\", "\\\\").replace("'", "\\'");
+
         String js = "(function() { " +
                 "  function apply(win) { try { " +
                 "    var doc = win.document; " +
                 "    var style = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
                 "    style.id = 'anilove-caption-style'; " +
-                "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) doc.head.appendChild(style); " +
+                "    style.textContent = '" + cssEscaped + "'; " +
+                "    if(!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "    var artSubs = doc.querySelectorAll('.art-subtitle'); " +
                 "    artSubs.forEach(function(sub) { " +
                 "      sub.style.setProperty('position', 'absolute', 'important'); " +
@@ -1484,7 +1500,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    }); " +
                 "    var v = doc.querySelector('video'); " +
                 "    if (v && v.textTracks) { " +
-                "      var hasCustom = doc.querySelector('" + containerSelectors + "'); " +
+                "      var hasCustom = doc.querySelector('" + containerSelectorsJs + "'); " +
                 "      var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
                 "      if (customVisible) { " +
                 "        for(var i=0; i<v.textTracks.length; i++) { " +
@@ -1720,16 +1736,25 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    if (form && !form.hasAttribute('data-auto-sub')) { " +
                 "      form.setAttribute('data-auto-sub', 'true'); " +
                 "      form.submit(); " +
+                "      return; " +
                 "    } " +
-                "    if (!primaryVideo) primaryVideo = win.document.querySelector('video'); " +
+                "    if (!primaryVideo) { " +
+                "      var vids = win.document.querySelectorAll('video'); " +
+                "      for (var vi = 0; vi < vids.length; vi++) { " +
+                "        if (vids[vi].readyState >= 1 || vids[vi].src || vids[vi].currentSrc) { primaryVideo = vids[vi]; break; } " +
+                "      } " +
+                "      if (!primaryVideo && vids.length > 0) primaryVideo = vids[0]; " +
+                "    } " +
+                "    var globalPause = window._aniloveManualPause === true; " +
                 "    if (primaryVideo) { " +
-                "      if (primaryVideo.paused && !primaryVideo.hasAttribute('data-manual-pause')) { " +
+                "      var manualPause = primaryVideo.hasAttribute('data-manual-pause') || globalPause; " +
+                "      if (primaryVideo.paused && !manualPause) { " +
                 "        primaryVideo.play().catch(function(){}); " +
                 "      } " +
-                "    } else { " +
-                "      var bigPlay = win.document.querySelector('#vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid, button[aria-label*=\"Play\"], [class*=\"play-icon\"], [class*=\"play-btn\"]'); " +
-                "      if (bigPlay) bigPlay.click(); " +
-                "      if (typeof win.jwplayer === 'function') { try { win.jwplayer().play(); } catch(e){} } " +
+                "    } else if (!globalPause) { " +
+                "      var bigPlay = win.document.querySelector('#vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play'); " +
+                "      if (bigPlay && !bigPlay.hasAttribute('data-auto-clicked')) { bigPlay.setAttribute('data-auto-clicked','1'); bigPlay.click(); } " +
+                "      if (typeof win.jwplayer === 'function') { try { var jp=win.jwplayer(); if(jp && jp.getState && jp.getState()==='idle') jp.play(); } catch(e){} } " +
                 "    } " +
                 "  } catch(e) {} " +
                 "  for (var i = 0; i < win.frames.length; i++) { try { penetrateAndPlay(win.frames[i]); } catch(e) {} } " +
@@ -1807,33 +1832,33 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void sendVideoCommand(String jsAction) { 
-        if (playerWebView != null) {
-            playerWebView.evaluateJavascript("(function() { " +
-                    "function findAndExec(win) { " +
-                    "  try { " +
-                    "    var v = win.document.querySelector('video'); " +
-                    "    if (v) { " + jsAction + " } " +
-                    "    if (typeof win.jwplayer === 'function') { " +
-                    "      var p = win.jwplayer(); " +
-                    "      if (p) { " +
-                    "        if ('" + jsAction.replace("'", "\\'") + "'.indexOf('pause') !== -1) p.pause(); " +
-                    "        else if ('" + jsAction.replace("'", "\\'") + "'.indexOf('play') !== -1) p.play(); " +
-                    "        else if ('" + jsAction.replace("'", "\\'") + "'.indexOf('currentTime') !== -1 && typeof p.seek === 'function') { " +
-                    "          var m = '" + jsAction.replace("'", "\\'") + "'.match(/currentTime\\s*=\\s*([0-9.]+)/); " +
-                    "          if (m) p.seek(parseFloat(m[1])); " +
-                    "        } " +
-                    "      } " +
-                    "    } " +
-                    "  } catch(e) {} " +
-                    "  for (var i = 0; i < win.frames.length; i++) { " +
-                    "    try { findAndExec(win.frames[i]); } catch(e) {} " +
-                    "  } " +
-                    "  return false; " +
-                    "} " +
-                    "findAndExec(window); " +
-                    "})();", null); 
+    private void sendVideoCommand(String jsAction) {
+        if (playerWebView == null) return;
+        // Determine JW command from Java side to avoid broken JS string embedding
+        final String jwAction;
+        if (jsAction.contains(".pause()") && !jsAction.contains(".play()")) {
+            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().pause(); } catch(e) {} }";
+        } else if (jsAction.contains(".play()")) {
+            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().play(); } catch(e) {} }";
+        } else if (jsAction.contains("playbackRate")) {
+            String speedStr = jsAction.replaceAll(".*playbackRate\\s*=\\s*([0-9.]+).*", "$1");
+            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().setPlaybackRate(" + speedStr + "); } catch(e) {} }";
+        } else {
+            jwAction = "";
         }
+        playerWebView.evaluateJavascript("(function() { " +
+                "function findAndExec(win) { " +
+                "  try { " +
+                "    var v = win.document.querySelector('video'); " +
+                "    if (v) { " + jsAction + " } " +
+                "    " + jwAction + " " +
+                "  } catch(e) {} " +
+                "  for (var i = 0; i < win.frames.length; i++) { " +
+                "    try { findAndExec(win.frames[i]); } catch(e) {} " +
+                "  } " +
+                "} " +
+                "findAndExec(window); " +
+                "})();", null);
     }
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }

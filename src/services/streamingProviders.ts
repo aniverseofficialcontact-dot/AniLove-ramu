@@ -243,11 +243,22 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
+    // Try to find requested server in API response
     let selectedServer = targetServers[0];
     if (serverName) {
       const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
       if (matched) {
         selectedServer = matched;
+      } else {
+        // Requested server not in API response → use direct embed URL for that server
+        const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
+        return {
+          status: 'available',
+          source: {
+            ...directSource,
+            availableServers,
+          },
+        };
       }
     }
 

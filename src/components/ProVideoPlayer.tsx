@@ -107,6 +107,10 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   // Refs
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Cache: stores {serverName → url} for the currently-loaded episode so server switching is instant
+  const serverUrlCache = useRef<Record<string, string>>({});
+  const episodeCacheKey = useRef<string>('');
+  const baseSourceRef = useRef<StreamSource | null>(null); // last full source for fast-path spreading
 
   // Synchronize incoming props
   useEffect(() => {
@@ -126,6 +130,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       setAudioMode(currentAudioLanguage);
     }
   }, [currentAudioLanguage]);
+
+  // Clear server URL cache when episode or anime changes (new episode = new API call needed)
+  useEffect(() => {
+    serverUrlCache.current = {};
+    episodeCacheKey.current = '';
+    baseSourceRef.current = null;
+  }, [episodeNumber, anime.id]);
 
   // Synchronize preferences on mount
   useEffect(() => {
@@ -398,9 +409,30 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Main stream resolution effect
+  // Main stream resolution effect — with server URL cache for instant server switching
   useEffect(() => {
     let cancelled = false;
+
+    // Cache key identifies a unique episode (ignoring server, since all servers come in one API call)
+    const cacheKey = `${anime.id}_${episodeNumber}_${activeServer}_${audioMode}`;
+    const requestedServer = selectedSubServerName || 'Server 1';
+
+    // ── FAST PATH: URL already cached for this episode ──────────────────────
+    if (episodeCacheKey.current === cacheKey && serverUrlCache.current[requestedServer] && baseSourceRef.current) {
+      const cachedUrl = serverUrlCache.current[requestedServer];
+      // Build a StreamSource from the cache without any API call
+      const cachedSource: StreamSource = {
+        ...baseSourceRef.current,
+        url: cachedUrl,
+        selectedServerName: requestedServer,
+      };
+      setStreamSource(cachedSource);
+      setStreamStatus('ready');
+      setStreamMessage('');
+      return;
+    }
+
+    // ── SLOW PATH: First load or episode changed — call API ──────────────────
     setStreamSource(null);
     setStreamStatus('loading');
     setStreamMessage(`Connecting to ${activeServer}...`);
@@ -411,12 +443,23 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       providerId: activeServer,
       language: audioMode,
       resolution: quality,
-      serverName: selectedSubServerName,
+      serverName: requestedServer,
     })
       .then(result => {
         if (cancelled) return;
 
         if (result.status === 'available' && result.source) {
+          // Populate cache with ALL server URLs returned by the API
+          if (result.source.availableServers?.length) {
+            episodeCacheKey.current = cacheKey;
+            serverUrlCache.current = {};
+            result.source.availableServers.forEach(srv => {
+              if (srv.name && srv.linkId) {
+                serverUrlCache.current[srv.name] = srv.linkId;
+              }
+            });
+          }
+          baseSourceRef.current = result.source;
           setStreamSource(result.source);
           setStreamStatus('ready');
           setStreamMessage('');
