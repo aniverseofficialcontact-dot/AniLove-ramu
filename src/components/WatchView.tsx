@@ -551,19 +551,21 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <input
                   type="text"
                   placeholder={`Search ${episodeList.length} episodes by name, #, or keyword...`}
                   value={episodeSearchQuery}
                   onChange={e => setEpisodeSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 transition shadow-inner"
+                  onFocus={e => e.target.select()}
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
+                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                 />
                 {episodeSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setEpisodeSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer z-10"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -869,9 +871,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
           )}
         </div>
 
-        {/* Franchise Watch Order (Main Story Chronological Order - Strictly Excluding Movies) */}
+        {/* Franchise Watch Order (Main Story Chronological Order - Borderless Design) */}
         {mainStoryWatchOrder && mainStoryWatchOrder.length > 0 && (
-          <section className="mx-3 sm:mx-0 rounded-2xl sm:rounded-3xl bg-[#0a0a0e] border border-neutral-800/80 p-4 sm:p-6 shadow-2xl space-y-4">
+          <section className="mx-3 sm:mx-0 space-y-4 pt-2">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
