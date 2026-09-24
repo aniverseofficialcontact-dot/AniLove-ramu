@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -67,6 +68,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
@@ -647,6 +649,21 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         startUpdateLoop();
         resetHideTimer();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
+            if (MainActivity.instance != null && MainActivity.instance.getBridge() != null && MainActivity.instance.getBridge().getWebView() != null) {
+                WebView wv = MainActivity.instance.getBridge().getWebView();
+                wv.post(() -> {
+                    wv.requestFocus();
+                    wv.requestFocusFromTouch();
+                });
+            }
+            return false;
+        }
+        return super.onTouchEvent(event);
     }
 
     private void setupExoPlayer(String videoPath, String subPath) {
@@ -2007,7 +2024,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         playerWebView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
                 return false; // Block popup ads
             }
 
@@ -2086,7 +2103,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lower.contains("histats") || lower.contains("/ads.") ||
                     lower.contains("/ads/") || lower.contains("ads.js") ||
                     lower.contains("popunder")) {
-                    return new WebResourceResponse("text/plain", "UTF-8", new java.io.ByteArrayInputStream("".getBytes()));
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
                 }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);

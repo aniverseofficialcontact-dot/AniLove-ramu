@@ -583,9 +583,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   const lastLaunchedKey = useRef<string | null>(null);
 
-  // Launch Fullscreen Native ExoPlayer when requested
-  const handleLaunchNativeFullscreen = useCallback(() => {
-    if (Capacitor.isNativePlatform() && streamSource?.url) {
+  // Auto-launch Hybrid Native Player for Inline Experience on Android
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
+      const launchKey = `${streamSource.url}__${audioMode}__${episodeNumber}__${activeServer}__${selectedSubServerName || ''}`;
+      if (lastLaunchedKey.current === launchKey) return;
+      lastLaunchedKey.current = launchKey;
+
       const currentEpNum = Number(episodeNumber);
       const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
@@ -606,8 +610,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         title: `${dTitle} - Ep ${episodeNumber}`,
         hasNext: episodesList.length > episodeNumber,
         hasPrev: episodeNumber > 1,
-        startFullscreen: true,
-        yOffset: 0,
+        startFullscreen: false,
+        yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
         anilistId: anime.id,
         episodeNumber: Number(episodeNumber),
         audio: audioMode,
@@ -615,7 +619,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         startTime: initialTime || 0,
       }).catch(() => {});
     }
-  }, [streamSource?.url, episodeNumber, audioMode, anime.id, settings, episodesList.length, initialTime, onClosePlayer, onEpisodeChange]);
+  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
 
   useEffect(() => {
     return () => {
@@ -654,7 +658,15 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {streamSource?.url && streamStatus !== 'error' ? (
+        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
+          <div className="w-full h-full relative group bg-black z-10">
+            <div className="absolute inset-0 bg-black z-0" />
+            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
+               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
+               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Hybrid Native Player Active</div>
+            </div>
+          </div>
+        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
           <iframe
             key={`${streamSource.url}-${refreshKey}`}
             ref={iframeRef}
