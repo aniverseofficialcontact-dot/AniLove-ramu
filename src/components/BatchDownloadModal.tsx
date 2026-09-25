@@ -19,7 +19,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   episodes,
   currentEpisodeNumber,
   initialAudio = 'DUB',
-  initialServer = 'None',
+  initialServer = 'Server 1',
   onClose,
   onOpenDownloadsView,
 }) => {
@@ -151,11 +151,9 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedServer(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
             >
-              {STREAM_PROVIDERS.map(p => (
-                <option key={p.id} value={p.serverMatch || p.label}>
-                  {p.label}
-                </option>
-              ))}
+              <option value="Server 1">Server 1 (Fast HLS)</option>
+              <option value="Server 2">Server 2 (AbyssPlayer / Multi-Audio)</option>
+              <option value="Server 3">Server 3 (IQSmart / Embed)</option>
             </select>
           </div>
         </div>

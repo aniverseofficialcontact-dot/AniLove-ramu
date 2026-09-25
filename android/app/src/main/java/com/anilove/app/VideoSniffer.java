@@ -254,21 +254,45 @@ public class VideoSniffer {
         Log.d(TAG, "Sniffing started for: " + pageUrl);
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
-                Map<String, String> headers = new HashMap<>();
-                String referer = "https://vidlink.pro/";
-                if (pageUrl.contains("justanime.to")) {
-                    referer = "https://justanime.to/";
-                } else if (pageUrl.contains("vidlink.pro")) {
-                    referer = "https://vidlink.pro/";
-                } else if (pageUrl.contains("autoembed.co")) {
-                    referer = "https://autoembed.co/";
-                } else if (pageUrl.contains("smashystream.com")) {
-                    referer = "https://player.smashystream.com/";
+                if (pageUrl.contains("abyssplayer") || pageUrl.contains("short.icu") ||
+                    pageUrl.contains("piratexplay") || pageUrl.contains("iqsmart") ||
+                    pageUrl.contains("rubystm") || pageUrl.contains("vidsrc") ||
+                    pageUrl.contains("vidlink") || pageUrl.contains("autoembed") ||
+                    pageUrl.contains("embed") || pageUrl.contains("public")) {
+
+                    String iframeHtml = "<!DOCTYPE html>" +
+                            "<html><head>" +
+                            "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                            "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}iframe{width:100%;height:100%;border:none;}</style>" +
+                            "</head><body>" +
+                            "<iframe id='videoFrame' src='" + pageUrl.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
+                            "</body></html>";
+
+                    String baseUrl = "https://piratexplay.cc/";
+                    if (pageUrl.contains("vidlink")) baseUrl = "https://vidlink.pro/";
+                    else if (pageUrl.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
+                    else if (pageUrl.contains("autoembed")) baseUrl = "https://autoembed.co/";
+                    else if (pageUrl.contains("rubystm")) baseUrl = "https://rubystm.com/";
+                    else if (pageUrl.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
+
+                    Log.i(TAG, "Loading embed in sniffer iframe via loadDataWithBaseURL: " + baseUrl);
+                    webView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
+                } else {
+                    Map<String, String> headers = new HashMap<>();
+                    String referer = "https://piratexplay.cc/";
+                    if (pageUrl.contains("justanime.to")) {
+                        referer = "https://justanime.to/";
+                    } else if (pageUrl.contains("vidlink.pro")) {
+                        referer = "https://vidlink.pro/";
+                    } else if (pageUrl.contains("rubystm")) {
+                        referer = "https://rubystm.com/";
+                    } else if (pageUrl.contains("iqsmart")) {
+                        referer = "https://pro.iqsmartgames.com/";
+                    }
+                    headers.put("Referer", referer);
+                    headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                    webView.loadUrl(pageUrl, headers);
                 }
-                headers.put("Referer", referer);
-                headers.put("Origin", referer.substring(0, referer.length() - 1));
-                headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
-                webView.loadUrl(pageUrl, headers);
             } catch (Exception e) {
                 Log.e(TAG, "Error loading URL in sniffer", e);
             }

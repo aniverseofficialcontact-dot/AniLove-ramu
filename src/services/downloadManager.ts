@@ -127,7 +127,7 @@ export async function queueBatchEpisodeDownloads(
   anime: Anime,
   episodes: Episode[],
   audio: StreamLanguage = 'DUB',
-  serverName: string = 'None',
+  serverName: string = 'Server 1',
   quality: string = '1080p'
 ): Promise<{ queuedCount: number; errors: string[] }> {
   let queuedCount = 0;

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -30,6 +31,7 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -394,25 +396,83 @@ public class EpisodeDownloadService extends Service {
         }
     }
 
+    private String unpackServerUrlInJava(String rawUrl, String audio) {
+        if (rawUrl == null || rawUrl.isEmpty()) return rawUrl;
+        if (rawUrl.contains("short.icu/")) {
+            return rawUrl.replace("short.icu/", "abyssplayer.com/");
+        }
+        if (rawUrl.contains("/public/player/") && rawUrl.contains("id=")) {
+            try {
+                int idIdx = rawUrl.indexOf("id=");
+                if (idIdx != -1) {
+                    String id = rawUrl.substring(idIdx + 3);
+                    int ampIdx = id.indexOf("&");
+                    if (ampIdx != -1) id = id.substring(0, ampIdx);
+                    return "https://pro.iqsmartgames.com/embed/" + id;
+                }
+            } catch (Exception ignored) {}
+        }
+        if (rawUrl.contains("multi.php?data=") || rawUrl.contains("data=")) {
+            try {
+                int dataIdx = rawUrl.indexOf("data=");
+                if (dataIdx != -1) {
+                    String dataStr = rawUrl.substring(dataIdx + 5);
+                    int ampIdx = dataStr.indexOf("&");
+                    if (ampIdx != -1) dataStr = dataStr.substring(0, ampIdx);
+                    dataStr = URLDecoder.decode(dataStr, "UTF-8");
+                    byte[] decodedBytes = Base64.decode(dataStr, Base64.DEFAULT);
+                    String jsonStr = new String(decodedBytes, "UTF-8");
+                    JSONArray arr = new JSONArray(jsonStr);
+                    if (arr.length() > 0) {
+                        String reqAud = audio != null ? audio.toLowerCase() : "dub";
+                        JSONObject target = arr.optJSONObject(0);
+                        for (int i = 0; i < arr.length(); i++) {
+                            JSONObject obj = arr.optJSONObject(i);
+                            if (obj != null) {
+                                String lang = obj.optString("language", "").toLowerCase();
+                                if (reqAud.contains("hin") && lang.contains("hin")) { target = obj; break; }
+                                else if (reqAud.contains("tam") && lang.contains("tam")) { target = obj; break; }
+                                else if (reqAud.contains("tel") && lang.contains("tel")) { target = obj; break; }
+                                else if (reqAud.contains("sub") && (lang.contains("jap") || lang.contains("sub"))) { target = obj; break; }
+                                else if (reqAud.contains("dub") && (lang.contains("eng") || lang.contains("dub"))) { target = obj; break; }
+                            }
+                        }
+                        if (target != null && target.has("link")) {
+                            String link = target.optString("link", "");
+                            if (link.contains("short.icu/")) {
+                                return link.replace("short.icu/", "abyssplayer.com/");
+                            }
+                            return link;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return rawUrl;
+    }
+
     /**
      * Calls the AnimeWorld India v1 PHP Stream API's /stream.php endpoint
      * to get direct stream links/embeds for downloading.
      */
     private String[] tryServerSideExtractFull(DownloadItem item) {
         try {
-            String safeSlug = item.animeTitle != null
-                ? item.animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
-                : "anime";
-            String episodeSlug = safeSlug + "-season-1-" + item.anilistId + "-1x" + item.episodeNumber;
-
-            StringBuilder urlBuilder = new StringBuilder("https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?id=");
-            urlBuilder.append(URLEncoder.encode(episodeSlug, "UTF-8"));
+            StringBuilder urlBuilder = new StringBuilder("https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?");
+            if (item.anilistId > 0) {
+                urlBuilder.append("anilistId=").append(item.anilistId).append("&ep=").append(item.episodeNumber);
+            } else {
+                String safeSlug = item.animeTitle != null
+                    ? item.animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
+                    : "anime";
+                String episodeSlug = safeSlug + "-season-1-1x" + item.episodeNumber;
+                urlBuilder.append("id=").append(URLEncoder.encode(episodeSlug, "UTF-8"));
+            }
 
             if (item.isOngoing) {
                 urlBuilder.append("&ongoing=true");
             }
 
-            Log.i(TAG, "[ServerExtract] Querying AnimeWorld v1 API for: " + item.animeTitle + " EP" + item.episodeNumber + " (slug: " + episodeSlug + ")");
+            Log.i(TAG, "[ServerExtract] Querying AnimeWorld v1 API: " + urlBuilder.toString());
 
             URL url = new URL(urlBuilder.toString());
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -420,7 +480,7 @@ public class EpisodeDownloadService extends Service {
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(35000);
             conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
 
             int responseCode = conn.getResponseCode();
             Log.i(TAG, "[ServerExtract] AnimeWorld response code: " + responseCode);
@@ -436,9 +496,35 @@ public class EpisodeDownloadService extends Service {
                 if (resObj.optBoolean("success", false)) {
                     JSONObject streamObj = resObj.optJSONObject("stream");
                     if (streamObj != null) {
-                        String mainLink = streamObj.optString("streamLink", streamObj.optString("file", ""));
-                        if (mainLink != null && !mainLink.isEmpty()) {
-                            return new String[]{mainLink, ""};
+                        JSONArray serversArr = streamObj.optJSONArray("servers");
+                        String rawUrl = null;
+
+                        if (serversArr != null && serversArr.length() > 0) {
+                            String reqServer = item.serverName != null ? item.serverName.toLowerCase() : "server 1";
+                            for (int i = 0; i < serversArr.length(); i++) {
+                                JSONObject s = serversArr.optJSONObject(i);
+                                if (s != null) {
+                                    String sName = s.optString("name", "");
+                                    if (sName.toLowerCase().equals(reqServer)) {
+                                        rawUrl = s.optString("url", "");
+                                        break;
+                                    }
+                                }
+                            }
+                            if (rawUrl == null || rawUrl.isEmpty()) {
+                                JSONObject s0 = serversArr.optJSONObject(0);
+                                if (s0 != null) rawUrl = s0.optString("url", "");
+                            }
+                        }
+
+                        if (rawUrl == null || rawUrl.isEmpty()) {
+                            rawUrl = streamObj.optString("streamLink", streamObj.optString("file", ""));
+                        }
+
+                        if (rawUrl != null && !rawUrl.isEmpty()) {
+                            String unpacked = unpackServerUrlInJava(rawUrl, item.audio);
+                            Log.i(TAG, "[ServerExtract] Selected raw server URL: " + rawUrl + " -> unpacked: " + unpacked);
+                            return new String[]{unpacked, ""};
                         }
                     }
                 }
