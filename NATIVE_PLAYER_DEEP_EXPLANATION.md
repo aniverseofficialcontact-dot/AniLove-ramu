@@ -42,7 +42,7 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 - **Root Cause Analysis**:
   1. **Continuous Play Trigger & Click Loop**: `injectAdEraser()` was executing every 1 second via `syncPlayerState()` and querying play buttons (`.art-icon-play`, `.jw-display-icon-container`, `#playback`, etc.) and invoking `.click()` and `.play()` unconditionally. When the HTML5 video element was buffering new segment chunks at the 1-minute mark, these repeated click and `.play()` calls interrupted Chrome's internal media pipeline, causing video decoding to lock up.
   2. **Ad-Block Filter Over-Blocking Media Resources**: `shouldInterceptRequest` was returning blank responses for URLs matching patterns like `openfpcdn.io` or containing `/ads/`, which some stream providers use to serve video segment chunks (`.ts` / `.m4s`).
-  3. **HLS.js Web Worker & Error Recovery Missing**: In direct HLS mode, `enableWorker: true` in `hls.js` was subject to Web Worker CORS/XHR throttling in WebView. Furthermore, `hls.js` lacked an `Hls.Events.ERROR` handler to automatically recover from media and network stalls.
+  3. **HLS.js Web Worker & Error Recovery Missing**: In direct HLS mode, `enableWorker: true` in `hlsHtml` was subject to Web Worker CORS/XHR throttling in WebView. Furthermore, `hls.js` lacked an `Hls.Events.ERROR` handler to automatically recover from media and network stalls.
   4. **OS Power Manager CPU Throttling**: The native window lacked `FLAG_KEEP_SCREEN_ON`, allowing Android OS to throttle CPU/GPU/WebView decoding after 1 minute of touch inactivity.
 
 #### **Technical Changes Applied**:
@@ -118,3 +118,12 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   2. **ExoPlayer Release & Task Removal**:
      - Updated `onPause()`, `onStop()`, and `onDestroy()` in `NativePlayerActivity.java` to call `exoPlayer.setPlayWhenReady(false)`, `exoPlayer.pause()`, `exoPlayer.stop()`, and `exoPlayer.release()`.
      - Added `onTaskRemoved(Intent rootIntent)` in `EpisodeDownloadService.java` to finish `NativePlayerActivity` and release media instances when the app is swiped away from recent tasks.
+
+---
+
+### 8. Anime Poster Cards Library & Exact File Size Display
+- **Implementation**:
+  - Overhauled [DownloadsView.tsx](file:///C:/Users/sanya/StudioProjects/AniLove2/src/components/DownloadsView.tsx) to group all downloaded episodes by **Anime Series**.
+  - Displays each anime as a poster card featuring cover image, total downloaded episode count badge, and total storage space consumed.
+  - Tapping an Anime Card expands into a dedicated sub-view displaying all downloaded episodes for that specific anime series.
+  - Every episode card explicitly displays the exact MB/GB file size on disk (`Size: 380.5 MB`) alongside audio language and video quality tags.
