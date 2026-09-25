@@ -91,49 +91,35 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
 
   const studioName = anime.studios?.nodes?.[0]?.name;
 
-  // Touch and hold detection for mobile / touch devices (preventing browser callout menu)
+  // Passive scroll-cancelled hold gesture for card preview
   const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
     isLongPressTriggeredRef.current = false;
-
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
 
-    // Start 260ms hold timer to activate preview overlay without triggering browser contextmenu
+    const cancelOnScroll = () => {
+      if (touchTimerRef.current) {
+        clearTimeout(touchTimerRef.current);
+        touchTimerRef.current = null;
+      }
+      window.removeEventListener('scroll', cancelOnScroll);
+    };
+
+    window.addEventListener('scroll', cancelOnScroll, { passive: true });
+
     touchTimerRef.current = setTimeout(() => {
       isLongPressTriggeredRef.current = true;
       setIsHeld(true);
       window.dispatchEvent(new CustomEvent('anilove:active_preview_card', { detail: { cardId: anime.id } }));
-      // Gentle haptic feedback if supported
+      window.removeEventListener('scroll', cancelOnScroll);
       try {
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate(30);
         }
       } catch (_) {}
-    }, 260);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchTimerRef.current) return;
-    const touch = e.touches[0];
-    const diffX = Math.abs(touch.clientX - touchStartPosRef.current.x);
-    const diffY = Math.abs(touch.clientY - touchStartPosRef.current.y);
-
-    // Cancel if finger moved more than 16px (user is scrolling)
-    if (diffX > 16 || diffY > 16) {
-      clearTimeout(touchTimerRef.current);
-      touchTimerRef.current = null;
-    }
+    }, 280);
   };
 
   const handleTouchEnd = () => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current);
-      touchTimerRef.current = null;
-    }
-  };
-
-  const handleTouchCancel = () => {
     if (touchTimerRef.current) {
       clearTimeout(touchTimerRef.current);
       touchTimerRef.current = null;
@@ -267,8 +253,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         e.preventDefault();
         e.stopPropagation();
       }}
-      className="anime-card group relative flex flex-col transition-transform duration-200 ease-out select-none cursor-pointer no-callout hover:-translate-y-1.5"
+      className={`anime-card group relative flex flex-col transition-transform duration-200 ease-out select-none cursor-pointer no-callout ${
+        isHeld ? '-translate-y-2 scale-[1.02] shadow-2xl z-30' : 'hover:-translate-y-1.5'
+      }`}
       onClick={handleCardClick}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {/* Poster Image Container */}
       <div
