@@ -2499,7 +2499,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "    return false;" +
                     "  }" +
                     "  if (Hls.isSupported()) {" +
-                    "    var hls = new Hls({ enableWorker: false, lowLatencyMode: false, maxBufferLength: 60, maxMaxBufferLength: 120, maxBufferSize: 60 * 1000 * 1000, manifestLoadingTimeOut: 20000, levelLoadingTimeOut: 20000 });" +
+                    "    var hls = new Hls({ enableWorker: false, lowLatencyMode: true, startFragPrefetch: true, maxBufferLength: 120, maxMaxBufferLength: 300, maxBufferSize: 120 * 1024 * 1024, manifestLoadingTimeOut: 15000, levelLoadingTimeOut: 15000, fragLoadingTimeOut: 20000 });" +
                     "    hls.loadSource(streamUrl);" +
                     "    hls.attachMedia(v);" +
                     "    function selectAudioTrack() {" +

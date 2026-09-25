@@ -48,7 +48,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     };
   }, []);
 
-  const [availableQualities, setAvailableQualities] = useState<string[]>(['1080p', '720p', '480p']);
+  const [availableQualities, setAvailableQualities] = useState<string[]>(['720p', '480p']);
 
   // Sync available languages and qualities dynamically from stream API
   useEffect(() => {

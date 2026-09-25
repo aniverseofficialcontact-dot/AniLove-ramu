@@ -263,7 +263,7 @@ export function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'
 
 export async function probeHlsResolutions(playlistUrl: string): Promise<StreamResolution[]> {
   if (!playlistUrl || !playlistUrl.includes('.m3u8')) {
-    return ['1080p', '720p', '480p'];
+    return ['720p', '480p'];
   }
   try {
     const controller = new AbortController();

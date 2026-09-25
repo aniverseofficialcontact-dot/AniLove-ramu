@@ -121,9 +121,10 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 
 ---
 
-### 8. Anime Poster Cards Library & Exact File Size Display
-- **Implementation**:
-  - Overhauled [DownloadsView.tsx](file:///C:/Users/sanya/StudioProjects/AniLove2/src/components/DownloadsView.tsx) to group all downloaded episodes by **Anime Series**.
-  - Displays each anime as a poster card featuring cover image, total downloaded episode count badge, and total storage space consumed.
-  - Tapping an Anime Card expands into a dedicated sub-view displaying all downloaded episodes for that specific anime series.
-  - Every episode card explicitly displays the exact MB/GB file size on disk (`Size: 380.5 MB`) alongside audio language and video quality tags.
+### 8. Low-Latency Instant Playback & Quality Probing Default
+- **Technical Changes Applied**:
+  1. **Low-Latency & Fragment Pre-Fetch in `hlsHtml`**:
+     - Configured `hls.js` with `lowLatencyMode: true`, `startFragPrefetch: true`, and `maxBufferSize: 120MB`.
+     - Pre-fetches video fragments during manifest parsing for instant playback startup with zero buffering delay.
+  2. **Stream Quality Fallback Probing**:
+     - Updated `probeHlsResolutions` in [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts) to fallback to `['720p', '480p']` when a stream does not contain a 1080p master variant, hiding `1080p` on non-1080p episodes.
