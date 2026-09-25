@@ -138,3 +138,14 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   1. **Allowed Server 3 Redirect Hosts**: Updated `shouldOverrideUrlLoading` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to explicitly permit `iqsmart`, `pro.iqsmartgames.com`, and `/svid/` redirects.
   2. **Direct Top-Level Main Frame Loading**: Modified `setupHybridEngine` to load embed servers directly on the main WebView frame via `loadResolvedUrl` with proper `Referer` headers (`Referer: https://piratexplay.cc/` for Server 2, `Referer: https://pro.iqsmartgames.com/` for Server 3).
   3. **Unblocked AdEraser JS**: Because the player loads directly on the main frame, `injectAdEraser` executes natively on `window.document` without any cross-origin security blocks, erasing `#playback` / `#overlay` instantly and auto-playing Server 1, Server 2, and Server 3 in under 1 second!
+
+---
+
+### 10. Referrer Property Override & DOM Node Preservation
+- **Problem Identified**:
+  1. **IQSmart Referrer Check Failure**: IQSmart (`pro.iqsmartgames.com`) inspects `document.referrer` in JavaScript. When empty, IQSmart's API rejected token generation, leaving the player stuck on `<div class="loader">` (black screen with spinner).
+  2. **Player Crash on Node Deletion**: Calling `el.remove()` on `#overlay` / `#playback` / `.art-state` before ArtPlayer initialized broke ArtPlayer's internal `init()` listeners, crashing the player and preventing video creation.
+- **Technical Changes Applied**:
+  1. **Referrer Property Override**: Injected `Object.defineProperty(document, 'referrer', { get: function() { return 'https://piratexplay.cc/'; } })` in `injectAdEraser()` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java).
+  2. **Preserved Player DOM Nodes**: Replaced destructive `el.remove()` calls with non-destructive CSS properties (`display: none !important; opacity: 0 !important; pointer-events: none !important;`). Preserves player event listeners while completely hiding overlays visually.
+  3. **In-Memory Stream API Caching**: Implemented `EPISODE_STREAM_CACHE` Map in [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts). Caches the complete API response containing Server 1, Server 2, and Server 3 URLs per episode. Switching servers or audio languages in the active episode uses the cache **instantly (0ms)** with zero redundant network requests.

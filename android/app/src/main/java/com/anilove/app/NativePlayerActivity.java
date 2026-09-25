@@ -815,18 +815,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                 Window window = getWindow();
                 if (window != null) {
                     View decorView = window.getDecorView();
-                    if (y <= -9000) {
-                        decorView.setVisibility(View.GONE);
-                        return;
-                    }
                     if (decorView.getVisibility() != View.VISIBLE) {
                         decorView.setVisibility(View.VISIBLE);
                     }
-                    int targetY = Math.max(0, y);
-                    currentY = targetY;
                     WindowManager.LayoutParams params = window.getAttributes();
-                    if (params.y != targetY) {
-                        params.y = targetY;
+                    if (params.y != 0) {
+                        params.y = 0;
                         window.setAttributes(params);
                     }
                 }
@@ -2606,6 +2600,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var dOpen = function() { return null; }; " +
                 "    dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
                 "    window.open = dOpen; " +
+                "    try { " +
+                "      Object.defineProperty(document, 'referrer', { " +
+                "        get: function() { return 'https://piratexplay.cc/'; }, " +
+                "        configurable: true " +
+                "      }); " +
+                "    } catch(err){} " +
                 "  } catch(e){} " +
                 "  var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true); " +
                 "  function autoTrigger(win) { " +
@@ -2643,12 +2643,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        }); " +
                 "      } " +
                 "      var doc = win.document; " +
-                "      var abyssOverlay = doc.getElementById('overlay'); " +
-                "      if (abyssOverlay) { try { abyssOverlay.remove(); } catch(e){} } " +
-                "      var loadingOverlay = doc.getElementById('loadingOverlay'); " +
-                "      if (loadingOverlay) { try { loadingOverlay.remove(); } catch(e){} } " +
-                "      var videoTitle = doc.querySelector('.video-title-overlay, #titleOverlay, .ad-container, #moreOptionsBtn, #downloadButton, .video-links-modal'); " +
-                "      if (videoTitle) { try { videoTitle.remove(); } catch(e){} } " +
+                "      var junkOverlays = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
+                "      junkOverlays.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
                 "      var form = doc.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
                 "      if (form && !form.hasAttribute('data-auto-sub')) { " +
                 "        form.setAttribute('data-auto-sub', 'true'); " +

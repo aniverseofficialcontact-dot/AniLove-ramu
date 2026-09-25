@@ -299,6 +299,8 @@ export async function probeHlsResolutions(playlistUrl: string): Promise<StreamRe
   return ['720p', '480p'];
 }
 
+const EPISODE_STREAM_CACHE = new Map<string, any>();
+
 /**
  * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter.
  * Fetches exclusively Server 1, Server 2, and Server 3.
@@ -316,60 +318,72 @@ export async function resolveEpisodeSource({
   const anilistId = anime.id;
   const isOngoing = anime.status === 'RELEASING';
 
-  const queryParams = new URLSearchParams();
-
-  if (anilistId) {
-    queryParams.set('anilistId', String(anilistId));
-    queryParams.set('ep', String(episodeNumber));
-  } else {
-    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-    const cleanSlug = englishTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    queryParams.set('id', `${cleanSlug}-season-1-1x${episodeNumber}`);
-  }
-
-  if (isOngoing) {
-    queryParams.set('ongoing', 'true');
-  }
-
-  if (refresh) {
-    queryParams.set('refresh', 'true');
-  }
-
-  const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
-  const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
+  const cacheKey = `${anilistId || anime.title}_ep${episodeNumber}_${language}`;
 
   let data: any = null;
 
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const httpRes = await CapacitorHttp.get({
-        url: streamUrlReq,
-        headers: { 'Accept': 'application/json' },
-      });
-      if (httpRes.status === 200 && httpRes.data) {
-        data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
-      }
-    } catch {
-      // Fallback
-    }
+  if (!refresh && EPISODE_STREAM_CACHE.has(cacheKey)) {
+    data = EPISODE_STREAM_CACHE.get(cacheKey);
   }
 
   if (!data) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 9500);
+    const queryParams = new URLSearchParams();
 
-    try {
-      const res = await fetch(streamUrlReq, {
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal,
-      });
-      if (res.ok) {
-        data = await res.json();
+    if (anilistId) {
+      queryParams.set('anilistId', String(anilistId));
+      queryParams.set('ep', String(episodeNumber));
+    } else {
+      const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+      const cleanSlug = englishTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      queryParams.set('id', `${cleanSlug}-season-1-1x${episodeNumber}`);
+    }
+
+    if (isOngoing) {
+      queryParams.set('ongoing', 'true');
+    }
+
+    if (refresh) {
+      queryParams.set('refresh', 'true');
+    }
+
+    const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
+    const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const httpRes = await CapacitorHttp.get({
+          url: streamUrlReq,
+          headers: { 'Accept': 'application/json' },
+        });
+        if (httpRes.status === 200 && httpRes.data) {
+          data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+        }
+      } catch {
+        // Fallback
       }
-    } catch {
-      // Fallback
-    } finally {
-      clearTimeout(timeoutId);
+    }
+
+    if (!data) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9500);
+
+      try {
+        const res = await fetch(streamUrlReq, {
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {
+        // Fallback
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    if (data && data.success) {
+      EPISODE_STREAM_CACHE.set(cacheKey, data);
     }
   }
 
