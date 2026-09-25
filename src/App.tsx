@@ -1465,8 +1465,8 @@ export function App() {
       </main>
     </div>
 
-    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels & Watch Page) */}
-      {!isReelsActive && !activeWatchEpisode && (
+    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels, Watch Page & Anime Details) */}
+      {!isReelsActive && !activeWatchEpisode && !isDetailModalOpen && (
         <div className={`fixed bottom-16 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <button
             onClick={() => setIsShortcutsModalOpen(true)}
@@ -1490,8 +1490,8 @@ export function App() {
         </div>
       )}
 
-      {/* Mobile Bottom Bar (Hidden on Watch Page) */}
-      {!activeWatchEpisode && (
+      {/* Mobile Bottom Bar (Hidden on Watch Page & Anime Details) */}
+      {!activeWatchEpisode && !isDetailModalOpen && (
         <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <MobileBottomNav
             currentTab={currentTab}
