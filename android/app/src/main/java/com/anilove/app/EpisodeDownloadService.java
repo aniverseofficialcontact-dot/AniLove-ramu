@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -44,6 +45,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * High-performance Android Foreground Service for multi-episode background downloading.
@@ -858,43 +861,81 @@ public class EpisodeDownloadService extends Service {
             }
         }
 
+        // Multi-threaded 10-worker parallel segment downloader for 5G full speed
+        int workerCount = Math.min(10, Math.max(4, Runtime.getRuntime().availableProcessors() * 2));
+        ExecutorService segmentPool = Executors.newFixedThreadPool(workerCount);
+
+        AtomicInteger completedCount = new AtomicInteger(0);
+        AtomicLong bytesCounter = new AtomicLong(item.bytesDownloaded);
+        AtomicLong deltaBytesCounter = new AtomicLong(0);
+
         long lastSpeedTime = System.currentTimeMillis();
-        long chunkBytesDownloaded = 0;
 
         for (int i = 0; i < totalSegments; i++) {
+            final int index = i;
+            final String segUrl = segmentUrls.get(i);
+            final File segFile = new File(partsDir, "seg_" + index + ".ts");
+
+            segmentPool.submit(() -> {
+                if (item.isPaused || item.isCancelled) return;
+                try {
+                    if (!segFile.exists() || segFile.length() == 0) {
+                        downloadFileDirect(segUrl, segFile, referer);
+                    }
+                    long len = segFile.length();
+                    bytesCounter.addAndGet(len);
+                    deltaBytesCounter.addAndGet(len);
+                    completedCount.incrementAndGet();
+                } catch (Exception e) {
+                    Log.w(TAG, "Segment " + index + " download error: " + e.getMessage());
+                }
+            });
+        }
+
+        segmentPool.shutdown();
+
+        while (!segmentPool.isTerminated()) {
             if (item.isPaused || item.isCancelled) {
+                segmentPool.shutdownNow();
                 break;
             }
-
-            File segFile = new File(partsDir, "seg_" + i + ".ts");
-            if (!segFile.exists() || segFile.length() == 0) {
-                downloadFileDirect(segmentUrls.get(i), segFile, referer);
-            }
-
-            // Append chunk to destination video
-            FileInputStream segIn = new FileInputStream(segFile);
-            byte[] buf = new byte[32 * 1024];
-            int r;
-            while ((r = segIn.read(buf)) != -1) {
-                mergedOut.write(buf, 0, r);
-                item.bytesDownloaded += r;
-                chunkBytesDownloaded += r;
-            }
-            segIn.close();
+            try {
+                Thread.sleep(600);
+            } catch (InterruptedException ignored) {}
 
             long now = System.currentTimeMillis();
-            if (now - lastSpeedTime > 800) {
-                double seconds = (now - lastSpeedTime) / 1000.0;
-                double speedKBps = (chunkBytesDownloaded / 1024.0) / Math.max(0.1, seconds);
-                String speedStr = speedKBps > 1024 ? String.format("%.1f MB/s", speedKBps / 1024.0) : String.format("%.0f KB/s", speedKBps);
+            long delta = deltaBytesCounter.getAndSet(0);
+            double seconds = (now - lastSpeedTime) / 1000.0;
+            if (seconds > 0.4) {
+                double speedKBps = (delta / 1024.0) / seconds;
+                String speedStr = speedKBps > 1024 
+                        ? String.format(Locale.US, "%.1f MB/s", speedKBps / 1024.0) 
+                        : String.format(Locale.US, "%.0f KB/s", speedKBps);
                 item.speed = speedStr;
-
-                item.progress = (int) (((i + 1) * 100.0) / totalSegments);
+                item.bytesDownloaded = bytesCounter.get();
+                item.progress = Math.min(95, (int) (((double) completedCount.get() / totalSegments) * 95.0));
                 notifyProgress(item, speedStr);
                 lastSpeedTime = now;
-                chunkBytesDownloaded = 0;
-            } else {
-                item.progress = (int) (((i + 1) * 100.0) / totalSegments);
+            }
+        }
+
+        if (item.isPaused || item.isCancelled) {
+            mergedOut.close();
+            return;
+        }
+
+        // Merge all segments sequentially into final MP4 file
+        notifyProgress(item, "Merging episode...");
+        for (int i = 0; i < totalSegments; i++) {
+            File segFile = new File(partsDir, "seg_" + i + ".ts");
+            if (segFile.exists() && segFile.length() > 0) {
+                FileInputStream segIn = new FileInputStream(segFile);
+                byte[] buf = new byte[64 * 1024];
+                int r;
+                while ((r = segIn.read(buf)) != -1) {
+                    mergedOut.write(buf, 0, r);
+                }
+                segIn.close();
             }
         }
 

@@ -146,7 +146,7 @@ export async function queueBatchEpisodeDownloads(
         STREAM_PROVIDERS[0];
 
       let subtitleUrl = '';
-      // 1. Quick probe to see if backend returns a direct URL
+      // 1. Quick probe to see if backend returns a direct URL and check language support
       try {
         const res = await resolveEpisodeSource({
           anime,
@@ -155,7 +155,17 @@ export async function queueBatchEpisodeDownloads(
           language: audio,
           serverName,
         });
+
         if (res && res.status === 'available' && res.source?.url) {
+          // Check if requested language is available in the episode stream
+          if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
+            if (!res.source.availableLanguages.includes(audio)) {
+              const langLabel = SUPPORTED_LANGUAGES.find(l => l.code === audio)?.label || audio;
+              errors.push(`EP ${ep.number}: ${langLabel} is not available on ${serverName}. Download skipped.`);
+              continue; // Skip this episode
+            }
+          }
+
           streamUrl = res.source.url;
           selectedServerName = res.source.selectedServerName || serverName;
           if (res.source.subtitles && res.source.subtitles.length > 0) {

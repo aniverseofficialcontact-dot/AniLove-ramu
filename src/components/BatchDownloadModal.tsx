@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Download, Check, X, Film, CheckSquare, Square, HardDrive, AlertCircle } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES } from '../services/streamingProviders';
+import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSource } from '../services/streamingProviders';
 import { queueBatchEpisodeDownloads, isEpisodeDownloaded } from '../services/downloadManager';
+import { NativePlayer } from '../services/nativePlayer';
 
 interface BatchDownloadModalProps {
   anime: Anime;
@@ -26,11 +28,56 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
   const [selectedServer, setSelectedServer] = useState<string>(initialServer);
   const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
+  const [availableLanguages, setAvailableLanguages] = useState<StreamLanguage[]>(SUPPORTED_LANGUAGES.map(l => l.code));
+  const [isProbingStream, setIsProbingStream] = useState(false);
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
     return new Set([currentEpisodeNumber]);
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  // Hide floating Native Player overlay while modal is open so UI is fully visible
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      NativePlayer.updatePosition({ y: -9999 }).catch(() => {});
+    }
+    return () => {
+      if (Capacitor.isNativePlatform()) {
+        NativePlayer.updatePosition({ y: 0 }).catch(() => {});
+      }
+    };
+  }, []);
+
+  // Sync available languages dynamically from stream API
+  useEffect(() => {
+    let isMounted = true;
+    async function probeStream() {
+      setIsProbingStream(true);
+      try {
+        const res = await resolveEpisodeSource({
+          anime,
+          episodeNumber: currentEpisodeNumber,
+          serverName: selectedServer,
+        });
+        if (isMounted && res && res.source?.availableLanguages && res.source.availableLanguages.length > 0) {
+          setAvailableLanguages(res.source.availableLanguages);
+          if (!res.source.availableLanguages.includes(selectedAudio)) {
+            setSelectedAudio(res.source.availableLanguages[0]);
+          }
+        }
+      } catch {
+        // Keep defaults
+      } finally {
+        if (isMounted) setIsProbingStream(false);
+      }
+    }
+    probeStream();
+    return () => { isMounted = false; };
+  }, [anime.id, currentEpisodeNumber, selectedServer]);
+
+  const filteredLanguages = useMemo(() => {
+    return SUPPORTED_LANGUAGES.filter(lang => availableLanguages.includes(lang.code));
+  }, [availableLanguages]);
 
   const displayTitle =
     anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
@@ -80,7 +127,21 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
 
     setIsSubmitting(false);
 
-    if (res.queuedCount > 0) {
+    if (res.errors && res.errors.length > 0) {
+      if (res.queuedCount > 0) {
+        setResultMessage(
+          `Queued ${res.queuedCount} episode(s). Note: ${res.errors.join(' ')}`
+        );
+      } else {
+        setResultMessage(`Download skipped: ${res.errors.join(' ')}`);
+      }
+      setTimeout(() => {
+        if (res.queuedCount > 0) {
+          onClose();
+          if (onOpenDownloadsView) onOpenDownloadsView();
+        }
+      }, 3500);
+    } else if (res.queuedCount > 0) {
       setResultMessage(
         `Successfully queued ${res.queuedCount} episode(s) for background download!`
       );
@@ -93,14 +154,23 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     }
   };
 
-  // Estimated storage (approx 220MB per 1080p episode)
-  const estimatedMB = selectedEpNumbers.size * 220;
+  const getEpSizeMB = (quality: string) => {
+    const q = quality.toLowerCase();
+    if (q.includes('1080')) return 380;
+    if (q.includes('720')) return 220;
+    if (q.includes('480')) return 130;
+    if (q.includes('360')) return 80;
+    return 220;
+  };
+
+  const epSizeMB = getEpSizeMB(selectedQuality);
+  const estimatedMB = selectedEpNumbers.size * epSizeMB;
   const estimatedStr =
     estimatedMB >= 1024 ? `${(estimatedMB / 1024).toFixed(1)} GB` : `${estimatedMB} MB`;
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-[#0d1017] border border-neutral-800 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 pt-12 sm:pt-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-lg bg-[#0d1017] border border-neutral-800 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-neutral-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -125,9 +195,16 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
         {/* Audio & Server Selectors */}
         <div className="p-4 bg-[#121622] border-b border-neutral-800/60 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-neutral-300">Audio Language</span>
+            <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+              <span>Audio Language</span>
+              {isProbingStream && (
+                <span className="text-[10px] text-indigo-400 font-mono animate-pulse">
+                  Syncing...
+                </span>
+              )}
+            </span>
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {SUPPORTED_LANGUAGES.map(lang => (
+              {filteredLanguages.map(lang => (
                 <button
                   key={lang.code}
                   type="button"
@@ -249,7 +326,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
                   </div>
                 </div>
 
-                <span className="text-[11px] text-neutral-500 font-mono shrink-0">~220 MB</span>
+                <span className="text-[11px] text-neutral-500 font-mono shrink-0">~{epSizeMB} MB</span>
               </div>
             );
           })}

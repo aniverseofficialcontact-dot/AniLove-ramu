@@ -149,6 +149,117 @@ export function createDirectStreamSource(
   };
 }
 
+export function extractAvailableLanguagesFromStreamData(rawServers: any[]): StreamLanguage[] {
+  const detected = new Set<StreamLanguage>();
+
+  for (const s of rawServers || []) {
+    if (s && s.url && (s.url.includes('multi.php?data=') || s.url.includes('data='))) {
+      try {
+        const match = s.url.match(/[?&]data=([^&]+)/);
+        if (match && match[1]) {
+          const decoded = atob(decodeURIComponent(match[1]));
+          const list = JSON.parse(decoded);
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              const l = (item.language || '').toLowerCase();
+              if (l.includes('hin') || l.includes('hindi')) detected.add('HIN');
+              else if (l.includes('tam') || l.includes('tamil')) detected.add('TAM');
+              else if (l.includes('tel') || l.includes('telugu')) detected.add('TEL');
+              else if (l.includes('mal') || l.includes('malayalam')) detected.add('MAL');
+              else if (l.includes('kan') || l.includes('kannada')) detected.add('KAN');
+              else if (l.includes('ben') || l.includes('bengali')) detected.add('BEN');
+              else if (l.includes('eng') || l.includes('dub')) detected.add('DUB');
+              else if (l.includes('jap') || l.includes('sub') || l.includes('japanese')) detected.add('SUB');
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (detected.size === 0) {
+    return ['SUB', 'DUB'];
+  }
+
+  return Array.from(detected);
+}
+
+export function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): string {
+  if (!rawUrl) return rawUrl;
+  if (rawUrl.includes('short.icu/')) {
+    return rawUrl.replace('short.icu/', 'abyssplayer.com/');
+  }
+  if (rawUrl.includes('/public/player/') && rawUrl.includes('id=')) {
+    try {
+      const match = rawUrl.match(/[?&]id=([^&]+)/);
+      if (match && match[1]) {
+        return `https://pro.iqsmartgames.com/embed/${match[1]}`;
+      }
+    } catch {
+      // fallback
+    }
+  }
+  if (rawUrl.includes('multi.php?data=') || rawUrl.includes('data=')) {
+    try {
+      const match = rawUrl.match(/[?&]data=([^&]+)/);
+      if (match && match[1]) {
+        const decoded = atob(decodeURIComponent(match[1]));
+        const list = JSON.parse(decoded);
+        if (Array.isArray(list) && list.length > 0) {
+          const reqLang = (language || '').toLowerCase();
+          let target = list[0];
+
+          const found = list.find((item: any) => {
+            const l = (item.language || '').toLowerCase();
+            if (reqLang === 'hin' || reqLang.includes('hin') || reqLang.includes('hindi')) {
+              return l.includes('hin') || l.includes('hindi');
+            }
+            if (reqLang === 'tam' || reqLang.includes('tam') || reqLang.includes('tamil')) {
+              return l.includes('tam') || l.includes('tamil');
+            }
+            if (reqLang === 'tel' || reqLang.includes('tel') || reqLang.includes('telugu')) {
+              return l.includes('tel') || l.includes('telugu');
+            }
+            if (reqLang === 'mal' || reqLang.includes('mal') || reqLang.includes('malayalam')) {
+              return l.includes('mal') || l.includes('malayalam');
+            }
+            if (reqLang === 'kan' || reqLang.includes('kan') || reqLang.includes('kannada')) {
+              return l.includes('kan') || l.includes('kannada');
+            }
+            if (reqLang === 'ben' || reqLang.includes('ben') || reqLang.includes('bengali')) {
+              return l.includes('ben') || l.includes('bengali');
+            }
+            if (reqLang === 'dub' || reqLang.includes('eng') || reqLang.includes('dub')) {
+              return l.includes('eng') || l.includes('dub') || l.includes('english');
+            }
+            if (reqLang === 'sub' || reqLang.includes('jap') || reqLang.includes('sub')) {
+              return l.includes('jap') || l.includes('sub') || l.includes('japanese');
+            }
+            return false;
+          });
+
+          if (found) {
+            target = found;
+          }
+
+          if (target && target.link) {
+            const slug = target.link.split('/').filter(Boolean).pop();
+            if (slug) {
+              return `https://abyssplayer.com/${slug}`;
+            }
+            return target.link.replace('short.icu', 'abyssplayer.com');
+          }
+        }
+      }
+    } catch {
+      // fallback to rawUrl
+    }
+  }
+  return rawUrl;
+}
+
 /**
  * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter.
  * Fetches exclusively Server 1, Server 2, and Server 3.
@@ -190,7 +301,6 @@ export async function resolveEpisodeSource({
 
   let data: any = null;
 
-  // On native Android/iOS Capacitor app, use native CapacitorHttp to bypass webview CORS checks completely
   if (Capacitor.isNativePlatform()) {
     try {
       const httpRes = await CapacitorHttp.get({
@@ -228,60 +338,6 @@ export async function resolveEpisodeSource({
     const streamInfo = data.stream;
     const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): string {
-  if (!rawUrl) return rawUrl;
-  if (rawUrl.includes('short.icu/')) {
-    return rawUrl.replace('short.icu/', 'abyssplayer.com/');
-  }
-  if (rawUrl.includes('/public/player/') && rawUrl.includes('id=')) {
-    try {
-      const match = rawUrl.match(/[?&]id=([^&]+)/);
-      if (match && match[1]) {
-        return `https://pro.iqsmartgames.com/embed/${match[1]}`;
-      }
-    } catch {
-      // fallback
-    }
-  }
-  if (rawUrl.includes('multi.php?data=') || rawUrl.includes('data=')) {
-    try {
-      const match = rawUrl.match(/[?&]data=([^&]+)/);
-      if (match && match[1]) {
-        const decoded = atob(decodeURIComponent(match[1]));
-        const list = JSON.parse(decoded);
-        if (Array.isArray(list) && list.length > 0) {
-          const isDub = language === 'DUB';
-          let target = list[0];
-          if (isDub) {
-            const dubItem = list.find((i: any) => {
-              const l = (i.language || '').toLowerCase();
-              return l.includes('hin') || l.includes('eng') || l.includes('dub');
-            });
-            if (dubItem) target = dubItem;
-          } else {
-            const subItem = list.find((i: any) => {
-              const l = (i.language || '').toLowerCase();
-              return l.includes('jap') || l.includes('sub');
-            });
-            if (subItem) target = subItem;
-          }
-          if (target && target.link) {
-            const slug = target.link.split('/').filter(Boolean).pop();
-            if (slug) {
-              return `https://abyssplayer.com/${slug}`;
-            }
-            return target.link.replace('short.icu', 'abyssplayer.com');
-          }
-        }
-      }
-    } catch {
-      // fallback to rawUrl
-    }
-  }
-  return rawUrl;
-}
-
-    // Flexible server mapping: Extract up to 3 working servers from API response
     let targetServers: Array<{ name: string; url: string }> = [];
 
     const explicitNamed = rawServers.filter(s =>
@@ -291,7 +347,6 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
     if (explicitNamed.length > 0) {
       targetServers = explicitNamed;
     } else if (rawServers.length > 0) {
-      // If servers have custom names (e.g. "Hindi - HD-1", "HD-2", etc.), map first 3
       targetServers = rawServers.slice(0, 3).map((s, idx) => ({
         name: `Server ${idx + 1}`,
         url: s.url,
@@ -300,7 +355,8 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
       targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
     }
 
-    // Unpack direct player URLs (e.g. Server 3 abyssplayer / short.icu extraction)
+    const availableLangs = extractAvailableLanguagesFromStreamData(rawServers);
+
     targetServers = targetServers.map(s => ({
       name: s.name,
       url: unpackServerUrl(s.url, language),
@@ -312,7 +368,6 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
       linkId: srv.url,
     }));
 
-    // Try to find requested server in API response
     let selectedServer = targetServers[0];
     if (serverName) {
       const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
@@ -335,7 +390,7 @@ function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'): stri
           external: false,
           skipData: { intro: [0, 0], outro: [0, 0] },
           availableServers,
-          availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
+          availableLanguages: availableLangs,
           selectedServerName: selectedServer?.name || 'Server 1',
           isDubAvailable: true,
           isFallback: false,
