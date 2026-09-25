@@ -2362,35 +2362,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
 
-                // Never block essential video/audio segment chunks or manifests
-                boolean isMediaResource = lower.contains(".m3u8") || lower.contains(".ts") ||
-                                          lower.contains(".m4s") || lower.contains(".mp4") ||
-                                          lower.contains(".key") || lower.contains(".vtt") || lower.contains(".srt");
-
-                // Block known ad networks, trackers, popup scripts, and verification captchas
-                if (!isMediaResource && (
-                    lower.contains("probationthimbledespite") || lower.contains("googletagmanager") ||
-                    lower.contains("decafeligiblyhad") || lower.contains("morphify.net") || 
-                    lower.contains("doubleclick") || lower.contains("google-analytics") ||
-                    lower.contains("adservice") || lower.contains("fuckadblock") ||
-                    lower.contains("popads") || lower.contains("adsterra") ||
-                    lower.contains("alwingulla") || lower.contains("monetag") ||
-                    lower.contains("challenge-platform") || lower.contains("turnstile") ||
-                    lower.contains("cloudflareinsights") || lower.contains("googlesyndication") ||
-                    lower.contains("pagead") || lower.contains("adsystem") ||
-                    lower.contains("propeller") || lower.contains("adnxs") ||
-                    lower.contains("adform") || lower.contains("outbrain") ||
-                    lower.contains("taboola") || lower.contains("trafficjunky") ||
-                    lower.contains("exozoic") || lower.contains("zergnet") ||
-                    lower.contains("vignette") || lower.contains("yadro.ru") ||
-                    lower.contains("histats") || lower.contains("popunder") ||
-                    lower.contains("endlesshandbaglinked.com") ||
-                    lower.contains("technocosmos.surf") ||
-                    lower.contains("pixel.morphify") ||
-                    lower.contains("pagead2.googlesyndication"))) {
-                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                }
-
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
                 String audio = getIntent().getStringExtra("audio");
