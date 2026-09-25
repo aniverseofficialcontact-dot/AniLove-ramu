@@ -654,13 +654,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
-            if (MainActivity.instance != null && MainActivity.instance.getBridge() != null && MainActivity.instance.getBridge().getWebView() != null) {
-                WebView wv = MainActivity.instance.getBridge().getWebView();
-                wv.post(() -> {
-                    wv.requestFocus();
-                    wv.requestFocusFromTouch();
-                });
-            }
             return false;
         }
         return super.onTouchEvent(event);
@@ -753,27 +746,20 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public void updatePosition(int y) {
         if (isFullscreenMode || isOfflineMode) return;
-        if (Math.abs(currentY - y) < 2) return;
-        currentY = y;
+        int targetY = Math.max(0, y);
+        if (Math.abs(currentY - targetY) < 4) return;
+        currentY = targetY;
         runOnUiThread(() -> {
             try {
                 Window window = getWindow();
                 if (window != null) {
                     View decorView = window.getDecorView();
-                    if (y <= -9000) {
-                        // Sentinel: player element is fully off-screen — hide native window
-                        if (decorView.getVisibility() != View.GONE) {
-                            decorView.setVisibility(View.GONE);
-                        }
-                        return;
-                    } else {
-                        if (decorView.getVisibility() != View.VISIBLE) {
-                            decorView.setVisibility(View.VISIBLE);
-                        }
+                    if (decorView.getVisibility() != View.VISIBLE) {
+                        decorView.setVisibility(View.VISIBLE);
                     }
                     WindowManager.LayoutParams params = window.getAttributes();
-                    if (params.y != y) {
-                        params.y = y;
+                    if (params.y != targetY) {
+                        params.y = targetY;
                         window.setAttributes(params);
                     }
                 }

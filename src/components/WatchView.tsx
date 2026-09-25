@@ -151,7 +151,15 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
   // Scroll to top on mount / episode change — skip on native Android (player is an overlay)
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) return;
+    if (Capacitor.isNativePlatform()) {
+      // Lock overscroll so the WebView never rubber-band jumps to top
+      document.documentElement.style.overscrollBehavior = 'none';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        document.documentElement.style.overscrollBehavior = '';
+        document.body.style.overscrollBehavior = '';
+      };
+    }
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [anime.id, episodeNumber]);
 
