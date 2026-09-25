@@ -2338,12 +2338,14 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                 // Allow streaming video hosts and same-origin embeds
                 if (lower.contains("blakiteapi") || lower.contains("abyssplayer") || lower.contains("piratexplay") ||
-                    lower.contains("rubystm") || lower.contains("short.icu") || lower.contains("emturbovid") ||
+                    lower.contains("rubystm") || lower.contains("short.icu") || lower.contains("iqsmart") ||
+                    lower.contains("pro.iqsmartgames.com") || lower.contains("svid") || lower.contains("emturbovid") ||
                     lower.contains("vidmoly") || lower.contains("cloudy.upns") || lower.contains("strmup.to") ||
                     lower.contains("gdmirrorbot") || lower.contains("megaplay") || lower.contains("nexabloom") ||
                     lower.contains("justanime") || lower.contains("watchanimeworld") || lower.contains("anikototv") ||
                     lower.contains("zephyrix") || lower.contains("vidsrc") || lower.contains("vidlink") ||
-                    lower.contains("autoembed") || lower.contains(".m3u8") || lower.contains(".mp4")) {
+                    lower.contains("autoembed") || lower.contains(".m3u8") || lower.contains(".mp4") ||
+                    lower.contains(".ts") || lower.contains(".m4s")) {
                     return false;
                 }
 
@@ -2557,44 +2559,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
 
             playerWebView.loadDataWithBaseURL(baseUrl, hlsHtml, "text/html", "UTF-8", null);
-            return;
-        }
-
-        // Wrap embed players in a clean 100vw/100vh iframe container
-        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
-            url.contains("iqsmart") || url.contains("rubystm") || url.contains("vidsrc") ||
-            url.contains("vidlink") || url.contains("autoembed") || url.contains("blakite") ||
-            url.contains("turbovid") || url.contains("vidmoly") || url.contains("cloudy") ||
-            url.contains("strmup") || url.contains("gdmirrorbot") || url.contains("megaplay") ||
-            url.contains("embed") || url.contains("public")) {
-            isDirectHls = false;
-            String iframeHtml = "<!DOCTYPE html>" +
-                    "<html><head>" +
-                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
-                    "<style>" +
-                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
-                    "  html, body { width: 100vw; height: 100vh; background: #000; overflow: hidden; }" +
-                    "  iframe { width: 100vw; height: 100vh; border: none; position: fixed; top: 0; left: 0; }" +
-                    "</style>" +
-                    "</head><body>" +
-                    "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
-                    "</body></html>";
-
-            String baseUrl = "https://piratexplay.cc/";
-            if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
-            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
-            else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
-            else if (url.contains("rubystm")) baseUrl = "https://rubystm.com/";
-            else if (url.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
-            else if (url.contains("blakite")) baseUrl = "https://blakiteapi.xyz/";
-            else {
-                try {
-                    URL u = new URL(url);
-                    baseUrl = u.getProtocol() + "://" + u.getHost() + "/";
-                } catch (Exception ignored) {}
-            }
-
-            playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
             return;
         }
 

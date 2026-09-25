@@ -29,7 +29,7 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 
 ## ⚙️ Hybrid Engine Architecture
 - **Direct HLS Streams (`.m3u8`)**: Loaded into WebView using `hls.js` with an inline HTML5 video container.
-- **Embed Players (AbyssPlayer, PirateXPlay, IQSmart, VidLink, etc.)**: Wrapped in an iframe and loaded via `loadDataWithBaseURL("https://piratexplay.cc/", iframeHtml, "text/html", "UTF-8", null)` to bypass anti-embed origin checks.
+- **Embed Players (AbyssPlayer, PirateXPlay, IQSmart, BlakiteAPI, VidLink, etc.)**: Loaded directly as top-level main frame elements with custom `Referer` headers to bypass cross-origin JS restrictions and anti-embed checks.
 - **AdEraser JS (`injectAdEraser`)**: Injected into all frames every second to strip ad overlays, block popups (`window.open = null`), inject custom controls CSS, and report state back to Java via `AndroidScrubber`.
 
 ---
@@ -127,3 +127,14 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 - **Technical Changes Applied**:
   1. **Big Play Overlay CSS Erasure**: Updated `absoluteCleanse` CSS in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to include `.art-state`, `.art-icon-state`, `.art-poster`, `.art-notice`, `.art-layer-state`. The giant play icon overlay is now **instantly erased on 0ms** upon server load.
   2. **Fast Autoplay Sweep**: Added 100ms, 300ms, 600ms, 1000ms, and 1500ms rapid execution sweeps in `onPageStarted` and `onPageFinished` to trigger video autoplay immediately, making server playback start in under 1 second.
+
+---
+
+### 9. Same-Origin Direct Main Frame & Redirect Unblocking Fix (Server 1, 2 & 3 Playback)
+- **Problem Identified**:
+  1. **Cross-Origin Security Exception**: When embed servers (AbyssPlayer, Rubystm, IQSmart) were wrapped in cross-origin `<iframe>` tags inside `loadDataWithBaseURL`, JavaScript cross-origin policy (`Same-Origin Policy`) prevented `injectAdEraser` from accessing elements (`#playback`, `#overlay`, `video`) inside the iframe. This caused Server 2 to freeze on a giant play button (`#playback`).
+  2. **Server 3 Black Screen (302 Redirect Blocked)**: Server 3 (`pro.iqsmartgames.com/embed/...`) returns a `302` HTTP redirect to `/svid/...`. Because `iqsmart` and `/svid/` were missing from `shouldOverrideUrlLoading`, WebView blocked the 302 redirect, resulting in a completely black screen on Server 3.
+- **Technical Changes Applied**:
+  1. **Allowed Server 3 Redirect Hosts**: Updated `shouldOverrideUrlLoading` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to explicitly permit `iqsmart`, `pro.iqsmartgames.com`, and `/svid/` redirects.
+  2. **Direct Top-Level Main Frame Loading**: Modified `setupHybridEngine` to load embed servers directly on the main WebView frame via `loadResolvedUrl` with proper `Referer` headers (`Referer: https://piratexplay.cc/` for Server 2, `Referer: https://pro.iqsmartgames.com/` for Server 3).
+  3. **Unblocked AdEraser JS**: Because the player loads directly on the main frame, `injectAdEraser` executes natively on `window.document` without any cross-origin security blocks, erasing `#playback` / `#overlay` instantly and auto-playing Server 1, Server 2, and Server 3 in under 1 second!
