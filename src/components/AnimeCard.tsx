@@ -291,13 +291,14 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           e.preventDefault();
           e.stopPropagation();
         }}
-        className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-white/5 border border-white/10 shadow-lg group-hover:shadow-2xl group-hover:border-white/30 transition-all duration-300 backdrop-blur-md select-none pointer-events-auto [transform-style:preserve-3d]"
+        className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-[#0d101f] border border-white/10 shadow-lg group-hover:shadow-2xl group-hover:border-white/30 transition-all duration-300 transform-gpu select-none pointer-events-auto"
       >
         {coverUrl ? (
           <img
             src={coverUrl}
             alt={title}
             loading="lazy"
+            decoding="async"
             draggable={false}
             referrerPolicy="no-referrer"
             onContextMenu={e => {
@@ -309,7 +310,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             }`}
           />
         ) : (
-          <div className="h-full w-full flex items-center justify-center bg-white/5 text-slate-400 font-bold text-sm p-4 text-center select-none">
+          <div className="h-full w-full flex items-center justify-center bg-[#0d101f] text-slate-400 font-bold text-sm p-4 text-center select-none">
             {title}
           </div>
         )}

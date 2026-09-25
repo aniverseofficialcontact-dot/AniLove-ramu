@@ -33,7 +33,7 @@ export const HorizontalAnimeRow: React.FC<HorizontalAnimeRowProps> = ({
   const rowRef = useRef<HTMLDivElement>(null);
 
   return (
-    <section className="space-y-3.5">
+    <section className="space-y-3.5" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 320px' }}>
       {/* Category Row Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
@@ -44,7 +44,7 @@ export const HorizontalAnimeRow: React.FC<HorizontalAnimeRowProps> = ({
       {/* Horizontal Swipeable Row */}
       <div
         ref={rowRef}
-        className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-4 -mt-2 px-1 scrollbar-none snap-x select-none"
+        className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-4 -mt-2 px-1 scrollbar-none snap-x select-none transform-gpu"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {isLoading
