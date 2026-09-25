@@ -27,7 +27,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     <div
       id="mobile-bottom-navigation"
       style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-2xl border-t border-white/10 px-2 pt-2 flex items-center justify-around shadow-2xl"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-2xl border-t border-white/10 px-2 pt-2 flex items-center justify-around shadow-2xl"
     >
       <button
         onClick={() => onSelectTab('home')}
