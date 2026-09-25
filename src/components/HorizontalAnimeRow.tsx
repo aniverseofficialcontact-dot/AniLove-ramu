@@ -17,7 +17,7 @@ interface HorizontalAnimeRowProps {
   onInspect3DCard?: (anime: Anime) => void;
 }
 
-export const HorizontalAnimeRow: React.FC<HorizontalAnimeRowProps> = ({
+const HorizontalAnimeRowComponent: React.FC<HorizontalAnimeRowProps> = ({
   title,
   animeList,
   userLibrary,
@@ -57,7 +57,7 @@ export const HorizontalAnimeRow: React.FC<HorizontalAnimeRowProps> = ({
           : animeList.map(anime => (
               <div
                 key={anime.id}
-                className="w-[145px] sm:w-[165px] md:w-[180px] lg:w-[192px] xl:w-[200px] shrink-0 snap-start transition-transform duration-200"
+                className="w-[145px] sm:w-[165px] md:w-[180px] lg:w-[192px] xl:w-[200px] shrink-0 snap-start"
               >
                 <AnimeCard
                   anime={anime}
@@ -77,3 +77,4 @@ export const HorizontalAnimeRow: React.FC<HorizontalAnimeRowProps> = ({
   );
 };
 
+export const HorizontalAnimeRow = React.memo(HorizontalAnimeRowComponent);
