@@ -48,7 +48,9 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     };
   }, []);
 
-  // Sync available languages dynamically from stream API
+  const [availableQualities, setAvailableQualities] = useState<string[]>(['1080p', '720p', '480p']);
+
+  // Sync available languages and qualities dynamically from stream API
   useEffect(() => {
     let isMounted = true;
     async function probeStream() {
@@ -59,10 +61,18 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
           episodeNumber: currentEpisodeNumber,
           serverName: selectedServer,
         });
-        if (isMounted && res && res.source?.availableLanguages && res.source.availableLanguages.length > 0) {
-          setAvailableLanguages(res.source.availableLanguages);
-          if (!res.source.availableLanguages.includes(selectedAudio)) {
-            setSelectedAudio(res.source.availableLanguages[0]);
+        if (isMounted && res && res.source) {
+          if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
+            setAvailableLanguages(res.source.availableLanguages);
+            if (!res.source.availableLanguages.includes(selectedAudio)) {
+              setSelectedAudio(res.source.availableLanguages[0]);
+            }
+          }
+          if (res.source.availableResolutions && res.source.availableResolutions.length > 0) {
+            setAvailableQualities(res.source.availableResolutions);
+            if (!res.source.availableResolutions.includes(selectedQuality as any)) {
+              setSelectedQuality(res.source.availableResolutions[0]);
+            }
           }
         }
       } catch {
@@ -242,9 +252,11 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedQuality(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
             >
-              <option value="1080p">1080p Full HD</option>
-              <option value="720p">720p HD</option>
-              <option value="480p">480p SD</option>
+              {availableQualities.map(q => (
+                <option key={q} value={q}>
+                  {q === '1080p' ? '1080p Full HD' : q === '720p' ? '720p HD' : q === '480p' ? '480p SD' : q}
+                </option>
+              ))}
             </select>
           </div>
         </div>

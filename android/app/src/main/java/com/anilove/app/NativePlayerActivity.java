@@ -810,17 +810,20 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public void updatePosition(int y) {
         if (isFullscreenMode || isOfflineMode) return;
-        int targetY = Math.max(0, y);
-        if (Math.abs(currentY - targetY) < 4) return;
-        currentY = targetY;
         runOnUiThread(() -> {
             try {
                 Window window = getWindow();
                 if (window != null) {
                     View decorView = window.getDecorView();
+                    if (y <= -9000) {
+                        decorView.setVisibility(View.GONE);
+                        return;
+                    }
                     if (decorView.getVisibility() != View.VISIBLE) {
                         decorView.setVisibility(View.VISIBLE);
                     }
+                    int targetY = Math.max(0, y);
+                    currentY = targetY;
                     WindowManager.LayoutParams params = window.getAttributes();
                     if (params.y != targetY) {
                         params.y = targetY;

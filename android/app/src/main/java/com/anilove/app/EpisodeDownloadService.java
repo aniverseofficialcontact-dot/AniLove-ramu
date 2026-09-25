@@ -279,33 +279,39 @@ public class EpisodeDownloadService extends Service {
                 item.subtitleUrl = cachedSub;
             }
         } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")) {
-            // ALWAYS extract true stream from backend first
-            Log.i(TAG, "Resolving stream via backend for: " + item.animeTitle + " EP" + item.episodeNumber + " [" + item.audio + "]");
-            String[] serverResult = tryServerSideExtractFull(item);
+            // Check if streamUrl is an embed link already unpacked for the target audio language
+            boolean isAlreadyUnpackedEmbed = item.streamUrl.contains("abyssplayer.com") ||
+                                              item.streamUrl.contains("iqsmart") ||
+                                              item.streamUrl.contains("rubystm") ||
+                                              item.streamUrl.contains("vidsrc") ||
+                                              item.streamUrl.contains("vidlink") ||
+                                              item.streamUrl.contains("autoembed");
 
-            if (serverResult != null && serverResult[0] != null && !serverResult[0].isEmpty()) {
-                String resolvedUrl = serverResult[0];
-                Log.i(TAG, "Backend returned URL: " + resolvedUrl);
-                item.pageUrl = item.streamUrl;
-                item.streamUrl = resolvedUrl;
-                if (serverResult[1] != null && !serverResult[1].isEmpty()
-                        && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
-                    item.subtitleUrl = serverResult[1];
+            if (!isAlreadyUnpackedEmbed) {
+                Log.i(TAG, "Resolving stream via backend for: " + item.animeTitle + " EP" + item.episodeNumber + " [" + item.audio + "]");
+                String[] serverResult = tryServerSideExtractFull(item);
+
+                if (serverResult != null && serverResult[0] != null && !serverResult[0].isEmpty()) {
+                    String resolvedUrl = serverResult[0];
+                    Log.i(TAG, "Backend returned URL: " + resolvedUrl);
+                    item.pageUrl = item.streamUrl;
+                    item.streamUrl = resolvedUrl;
+                    if (serverResult[1] != null && !serverResult[1].isEmpty()
+                            && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
+                        item.subtitleUrl = serverResult[1];
+                    }
                 }
-                boolean isDirect = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".mp4")
-                        || resolvedUrl.contains(".m4s") || resolvedUrl.contains(".m3u")
-                        || resolvedUrl.contains(".txt");
-                if (isDirect) {
-                    item.isHls = resolvedUrl.contains(".m3u8") || resolvedUrl.contains(".m3u") || resolvedUrl.contains(".txt");
-                    Log.i(TAG, "Direct stream from backend — skipping VideoSniffer");
-                } else {
-                    // Embed URL — run VideoSniffer on device
-                    Log.i(TAG, "Running on-device VideoSniffer for resolved embed: " + item.streamUrl);
-                    sniffVideoStream(item);
-                }
+            }
+
+            boolean isDirect = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".mp4")
+                    || item.streamUrl.contains(".m4s") || item.streamUrl.contains(".m3u")
+                    || item.streamUrl.contains(".txt");
+            if (isDirect) {
+                item.isHls = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".m3u") || item.streamUrl.contains(".txt");
+                Log.i(TAG, "Direct stream URL — skipping VideoSniffer");
             } else {
-                // Fall back to VideoSniffer on original URL
-                Log.i(TAG, "Running on-device VideoSniffer for: " + item.streamUrl);
+                // Embed URL — run VideoSniffer on device to capture .m3u8 / .mp4 for the exact audio language
+                Log.i(TAG, "Running on-device VideoSniffer for embed URL [" + item.audio + "]: " + item.streamUrl);
                 sniffVideoStream(item);
             }
         }

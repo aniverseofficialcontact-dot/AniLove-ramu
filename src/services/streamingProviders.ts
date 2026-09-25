@@ -57,6 +57,7 @@ export interface StreamSource {
   skipData?: SkipData;
   availableServers?: AvailableServerOption[];
   availableLanguages?: StreamLanguage[];
+  availableResolutions?: StreamResolution[];
   selectedServerName?: string;
   isDubAvailable?: boolean;
   isFallback?: boolean;

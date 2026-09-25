@@ -94,14 +94,14 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 
 ### 6. Dynamic Language Sync, Quality Matching, 10-Worker 5G Speed & Modal Layout Fix
 - **Problem Identified**:
-  1. Selecting Hindi downloaded English because `unpackServerUrl` evaluated `isDub = (language === 'DUB')` as false for `'HIN'` and defaulted to English `list[0]`.
+  1. Selecting Hindi downloaded English because `unpackServerUrl` evaluated `isDub = (language === 'DUB')` as false for `'HIN'` and defaulted to English `list[0]`. Furthermore, `tryServerSideExtractFull` in `EpisodeDownloadService.java` was re-querying the API and overwriting unpacked embed links back to Server 1 English.
   2. Download modal displayed hardcoded language/quality lists instead of matching the episode's actual stream sources.
-  3. The top of the Download Modal was covered under `NativePlayerActivity`'s floating overlay in portrait mode.
+  3. The top of the Download Modal was covered under `NativePlayerActivity`'s floating overlay in portrait mode because `updatePosition(y)` forced `Math.max(0, y)` and never set `decorView.GONE` when `y <= -9000`.
   4. HLS segment downloading ran on 1 single thread sequentially (~200kbps), creating massive TCP connection latency on 5G/Wi-Fi.
 - **Technical Changes Applied**:
-  1. **Dynamic Language & Quality Sync**: Added `extractAvailableLanguagesFromStreamData` in `streamingProviders.ts` and dynamic stream probing in `BatchDownloadModal.tsx`. The modal now displays ONLY the audio languages and video qualities supported by the stream source.
-  2. **Batch Language & Quality Validation**: In `queueBatchEpisodeDownloads` ([downloadManager.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/downloadManager.ts)), if an episode in a batch selection lacks the chosen language, download for that episode is skipped and a detailed alert is shown (`EP 7: Hindi Dub is not available on Server 1. Download skipped.`).
-  3. **Exact Multi-Audio Unpacking**: Updated `unpackServerUrl` and `unpackServerUrlInJava` to match `'HIN'` / `'Hindi'`, `'DUB'` / `'English'`, `'SUB'` / `'Japanese'`, `'TAM'`, `'TEL'`, `'MAL'`, `'KAN'`, `'BEN'` cleanly.
+  1. **Fixed Embed URL Preservation & Language Matching**: Prevented `EpisodeDownloadService.java` from overwriting pre-unpacked embed URLs (`isAlreadyUnpackedEmbed`). Corrected `unpackServerUrl` and `unpackServerUrlInJava` to match `'HIN'` / `'Hindi'`, `'DUB'` / `'English'`, `'SUB'` / `'Japanese'`, `'TAM'`, `'TEL'`, `'MAL'`, `'KAN'`, `'BEN'` cleanly.
+  2. **Dynamic Language & Quality Syncing**: Added stream probing in `BatchDownloadModal.tsx` and `streamingProviders.ts` to dynamically render ONLY supported audio languages and video qualities (`availableResolutions`).
+  3. **Batch Language & Quality Validation**: In `queueBatchEpisodeDownloads` ([downloadManager.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/downloadManager.ts)), if an episode in a batch selection lacks the chosen language, download for that episode is skipped and a detailed alert is shown (`EP 7: Hindi Dub is not available on Server 1. Download skipped.`).
   4. **Multi-Threaded 10-Worker Parallel Downloader**: Refactored `downloadHlsStream` in `EpisodeDownloadService.java` to use an `ExecutorService` thread pool with 10 parallel workers downloading HLS `.ts` segments concurrently. Boosts download speeds to **10MB/s - 30MB/s+ (5G full speed)**.
-  5. **Modal UI Visibility Fix**: Added `NativePlayer.updatePosition({ y: -9999 })` when `BatchDownloadModal` mounts, hiding the native player overlay so the modal is 100% visible, and restoring position on close.
+  5. **Window Hide Fix (`y <= -9000`)**: Updated `updatePosition(y)` in `NativePlayerActivity.java` so that `y <= -9000` sets `decorView.setVisibility(View.GONE)`. Calling `NativePlayer.updatePosition({ y: -9999 })` in `BatchDownloadModal.tsx` now completely hides the native overlay while the modal is open.
   6. **Dynamic Size Calculation**: Added quality-wise file size calculations (`1080p`: ~380 MB, `720p`: ~220 MB, `480p`: ~130 MB, `360p`: ~80 MB) for each episode and in total estimated storage space.
