@@ -267,22 +267,8 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         e.preventDefault();
         e.stopPropagation();
       }}
-      style={{ perspective: '1000px' }}
-      className={`anime-card group relative flex flex-col transition-all duration-300 ease-out select-none cursor-pointer will-change-transform no-callout ${
-        isHeld
-          ? '-translate-y-2 scale-[1.025] [transform:perspective(1000px)_rotateX(-2.5deg)_translateY(-4px)] shadow-2xl z-30'
-          : 'hover:-translate-y-2 hover:scale-[1.025] hover:[transform:perspective(1000px)_rotateX(-2.5deg)_translateY(-4px)] z-10 hover:z-30 hover:shadow-2xl'
-      }`}
+      className="anime-card group relative flex flex-col transition-transform duration-200 ease-out select-none cursor-pointer no-callout hover:-translate-y-1.5"
       onClick={handleCardClick}
-      onMouseEnter={() => {
-        window.dispatchEvent(new CustomEvent('anilove:active_preview_card', { detail: { cardId: anime.id } }));
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchCancel}
     >
       {/* Poster Image Container */}
       <div

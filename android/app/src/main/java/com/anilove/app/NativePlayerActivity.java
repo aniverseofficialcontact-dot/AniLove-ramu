@@ -2560,10 +2560,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        // Wrap embed players (abyssplayer, short.icu, piratexplay, iqsmart, rubystm, vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
+        // Wrap embed players in a clean 100vw/100vh iframe container
         if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
             url.contains("iqsmart") || url.contains("rubystm") || url.contains("vidsrc") ||
-            url.contains("vidlink") || url.contains("autoembed")) {
+            url.contains("vidlink") || url.contains("autoembed") || url.contains("blakite") ||
+            url.contains("turbovid") || url.contains("vidmoly") || url.contains("cloudy") ||
+            url.contains("strmup") || url.contains("gdmirrorbot") || url.contains("megaplay") ||
+            url.contains("embed") || url.contains("public")) {
             isDirectHls = false;
             String iframeHtml = "<!DOCTYPE html>" +
                     "<html><head>" +
@@ -2582,6 +2585,14 @@ public class NativePlayerActivity extends AppCompatActivity {
             else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
             else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
             else if (url.contains("rubystm")) baseUrl = "https://rubystm.com/";
+            else if (url.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
+            else if (url.contains("blakite")) baseUrl = "https://blakiteapi.xyz/";
+            else {
+                try {
+                    URL u = new URL(url);
+                    baseUrl = u.getProtocol() + "://" + u.getHost() + "/";
+                } catch (Exception ignored) {}
+            }
 
             playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
             return;
