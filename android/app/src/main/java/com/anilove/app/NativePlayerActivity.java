@@ -2833,9 +2833,12 @@ public class NativePlayerActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (exoPlayer != null && !isInPictureInPictureMode()) {
-            exoPlayer.pause();
+            try {
+                exoPlayer.setPlayWhenReady(false);
+                exoPlayer.pause();
+            } catch (Exception ignored) {}
         }
-        // Mute any background WebView audio immediately
+        // Mute and pause any background WebView audio immediately
         if (playerWebView != null) {
             playerWebView.evaluateJavascript(
                 "(function(){" +
@@ -2853,7 +2856,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
         if (exoPlayer != null && !isInPictureInPictureMode()) {
-            exoPlayer.stop();
+            try {
+                exoPlayer.setPlayWhenReady(false);
+                exoPlayer.pause();
+                exoPlayer.stop();
+            } catch (Exception ignored) {}
         }
     }
 
@@ -2917,6 +2924,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (exoPlayer != null) {
             try {
+                exoPlayer.setPlayWhenReady(false);
                 exoPlayer.stop();
                 exoPlayer.clearMediaItems();
                 exoPlayer.release();
@@ -2927,7 +2935,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             try {
                 playerWebView.evaluateJavascript(
                     "(function(){var e=document.querySelectorAll('video,audio');" +
-                    "for(var i=0;i<e.length;i++){e[i].src='';e[i].load();}})();", null);
+                    "for(var i=0;i<e.length;i++){e[i].pause();e[i].src='';e[i].load();}})();", null);
                 playerWebView.stopLoading();
                 playerWebView.loadUrl("about:blank");
                 playerWebView.destroy(); 

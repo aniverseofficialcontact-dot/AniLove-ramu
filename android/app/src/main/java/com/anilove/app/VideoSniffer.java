@@ -184,8 +184,8 @@ public class VideoSniffer {
             "      try { deepScan(win.frames[k]); } catch(e){}" +
             "    }" +
             "  }" +
-            "  setInterval(function() { deepAutoClick(window); }, 1500);" +
-            "  setInterval(function() { deepScan(window); }, 800);" +
+            "  deepAutoClick(window); setTimeout(function(){ deepAutoClick(window); }, 1200);" +
+            "  deepScan(window); setTimeout(function(){ deepScan(window); }, 800); setTimeout(function(){ deepScan(window); }, 2000);" +
             "})();";
         view.evaluateJavascript(script, null);
     }
@@ -321,6 +321,15 @@ public class VideoSniffer {
         new Handler(Looper.getMainLooper()).post(() -> {
             if (webView != null) {
                 try {
+                    webView.evaluateJavascript(
+                        "(function(){" +
+                        "  var e=document.querySelectorAll('video,audio');" +
+                        "  for(var i=0;i<e.length;i++){try{e[i].pause();e[i].src='';}catch(err){}}" +
+                        "  if(window.frames){for(var j=0;j<window.frames.length;j++){" +
+                        "    try{var fe=window.frames[j].document.querySelectorAll('video,audio');" +
+                        "    for(var k=0;k<fe.length;k++){fe[k].pause();fe[k].src='';}}catch(err){}" +
+                        "  }}" +
+                        "})();", null);
                     webView.stopLoading();
                     webView.loadUrl("about:blank");
                     webView.onPause();

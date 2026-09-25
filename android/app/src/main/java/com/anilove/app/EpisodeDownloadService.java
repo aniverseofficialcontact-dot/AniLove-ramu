@@ -44,6 +44,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -102,8 +103,20 @@ public class EpisodeDownloadService extends Service {
     }
 
     private static final Map<String, DownloadItem> allDownloads = new ConcurrentHashMap<>();
+    private static final Semaphore snifferSemaphore = new Semaphore(1, true);
     private final ExecutorService threadPool = Executors.newFixedThreadPool(2); // 2 simultaneous downloads
     private NotificationManager notificationManager;
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.i(TAG, "onTaskRemoved: App removed from recent tasks - cleaning up player instances");
+        try {
+            if (NativePlayerActivity.currentInstance != null) {
+                NativePlayerActivity.currentInstance.finish();
+            }
+        } catch (Exception ignored) {}
+    }
 
     @Override
     public void onCreate() {
@@ -357,51 +370,66 @@ public class EpisodeDownloadService extends Service {
     private void sniffVideoStream(DownloadItem item) throws Exception {
         notifyProgress(item, "Finding stream...");
 
-        final String[] foundStream = new String[2]; // [0] = videoUrl, [1] = subtitleUrl
-        final CountDownLatch latch = new CountDownLatch(1);
+        boolean acquired = false;
+        try {
+            acquired = snifferSemaphore.tryAcquire(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new Exception("Sniffer queue interrupted for " + item.id);
+        }
 
-        new Handler(Looper.getMainLooper()).post(() -> {
-            try {
-                VideoSniffer sniffer = new VideoSniffer(getApplicationContext());
-                sniffer.sniff(item.streamUrl, new VideoSniffer.OnVideoFoundListener() {
-                    @Override
-                    public void onVideoFound(String videoUrl, String subtitleUrl) {
-                        foundStream[0] = videoUrl;
-                        foundStream[1] = subtitleUrl;
-                        latch.countDown();
-                    }
+        if (!acquired) {
+            throw new Exception("Sniffer busy. Skipping " + item.id);
+        }
 
-                    @Override
-                    public void onVideoFound(String url) {
-                        foundStream[0] = url;
-                        latch.countDown();
-                    }
+        try {
+            final String[] foundStream = new String[2]; // [0] = videoUrl, [1] = subtitleUrl
+            final CountDownLatch latch = new CountDownLatch(1);
 
-                    @Override
-                    public void onError(String message) {
-                        Log.w(TAG, "Sniffer message for " + item.id + ": " + message);
-                        latch.countDown();
-                    }
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "Error launching VideoSniffer", e);
-                latch.countDown();
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    VideoSniffer sniffer = new VideoSniffer(getApplicationContext());
+                    sniffer.sniff(item.streamUrl, new VideoSniffer.OnVideoFoundListener() {
+                        @Override
+                        public void onVideoFound(String videoUrl, String subtitleUrl) {
+                            foundStream[0] = videoUrl;
+                            foundStream[1] = subtitleUrl;
+                            latch.countDown();
+                        }
+
+                        @Override
+                        public void onVideoFound(String url) {
+                            foundStream[0] = url;
+                            latch.countDown();
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            Log.w(TAG, "Sniffer message for " + item.id + ": " + message);
+                            latch.countDown();
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "Error launching VideoSniffer", e);
+                    latch.countDown();
+                }
+            });
+
+            // Wait up to 25 seconds for stream capture
+            latch.await(25, TimeUnit.SECONDS);
+
+            if (foundStream[0] != null && !foundStream[0].isEmpty()) {
+                item.pageUrl = item.streamUrl;
+                item.streamUrl = foundStream[0];
+                if (foundStream[1] != null && !foundStream[1].isEmpty() && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
+                    item.subtitleUrl = foundStream[1];
+                }
+                item.isHls = item.streamUrl.contains(".m3u8") || item.streamUrl.contains("hls") || item.streamUrl.contains(".m3u");
+                Log.i(TAG, "Captured stream for EP " + item.episodeNumber + ": " + item.streamUrl);
+            } else {
+                throw new Exception("Could not extract stream from " + item.serverName + ". Try selecting another server.");
             }
-        });
-
-        // Wait up to 25 seconds for stream capture
-        latch.await(25, TimeUnit.SECONDS);
-
-        if (foundStream[0] != null && !foundStream[0].isEmpty()) {
-            item.pageUrl = item.streamUrl;
-            item.streamUrl = foundStream[0];
-            if (foundStream[1] != null && !foundStream[1].isEmpty() && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
-                item.subtitleUrl = foundStream[1];
-            }
-            item.isHls = item.streamUrl.contains(".m3u8") || item.streamUrl.contains("hls") || item.streamUrl.contains(".m3u");
-            Log.i(TAG, "Captured stream for EP " + item.episodeNumber + ": " + item.streamUrl);
-        } else {
-            throw new Exception("Could not extract stream from " + item.serverName + ". Try selecting another server.");
+        } finally {
+            snifferSemaphore.release();
         }
     }
 

@@ -106,3 +106,15 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   5. **Multi-Threaded 10-Worker Parallel Downloader**: Refactored `downloadHlsStream` in `EpisodeDownloadService.java` to use an `ExecutorService` thread pool with 10 parallel workers downloading HLS `.ts` segments concurrently. Boosts download speeds to **10MB/s - 30MB/s+ (5G full speed)**.
   6. **Window Hide Fix (`y <= -9000`)**: Updated `updatePosition(y)` in `NativePlayerActivity.java` so that `y <= -9000` sets `decorView.setVisibility(View.GONE)`. Calling `NativePlayer.updatePosition({ y: -9999 })` in `BatchDownloadModal.tsx` now completely hides the native overlay while the modal is open.
   7. **Dynamic Size Calculation**: Added quality-wise file size calculations (`1080p`: ~380 MB, `720p`: ~220 MB, `480p`: ~130 MB, `360p`: ~80 MB) for each episode and in total estimated storage space.
+
+---
+
+### 7. Main UI Thread Protection & ExoPlayer Ghost Audio Release Fix
+- **Problem Identified**:
+  1. Queueing 12 episode downloads launched multiple `VideoSniffer` WebViews on the Main UI thread simultaneously, flooding the Main UI Looper and causing screen freezing / unresponsiveness.
+  2. Swiping away the app from recent tasks did not release ExoPlayer's AudioTrack, leaving ghost audio playing continuously in the background until the app was forced stopped.
+- **Technical Changes Applied**:
+  1. **Main Thread Sniffer Semaphore**: Added `Semaphore snifferSemaphore = new Semaphore(1, true)` in `EpisodeDownloadService.java`. Ensures only 1 background `VideoSniffer` WebView runs on the Main Thread at a time, keeping the UI completely smooth and responsive during batch downloads.
+  2. **ExoPlayer Release & Task Removal**:
+     - Updated `onPause()`, `onStop()`, and `onDestroy()` in `NativePlayerActivity.java` to call `exoPlayer.setPlayWhenReady(false)`, `exoPlayer.pause()`, `exoPlayer.stop()`, and `exoPlayer.release()`.
+     - Added `onTaskRemoved(Intent rootIntent)` in `EpisodeDownloadService.java` to finish `NativePlayerActivity` and release media instances when the app is swiped away from recent tasks.
