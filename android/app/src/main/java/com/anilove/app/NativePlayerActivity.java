@@ -2527,6 +2527,37 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
+        // Wrap embed players in clean 100vw/100vh iframe container with same-origin referrer context
+        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
+            url.contains("iqsmart") || url.contains("rubystm") || url.contains("vidsrc") ||
+            url.contains("vidlink") || url.contains("autoembed") || url.contains("blakite") ||
+            url.contains("turbovid") || url.contains("vidmoly") || url.contains("cloudy") ||
+            url.contains("strmup") || url.contains("gdmirrorbot") || url.contains("megaplay")) {
+            isDirectHls = false;
+            String iframeHtml = "<!DOCTYPE html>" +
+                    "<html><head>" +
+                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
+                    "<style>" +
+                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
+                    "  html, body { width: 100vw; height: 100vh; background: #000; overflow: hidden; }" +
+                    "  iframe { width: 100vw; height: 100vh; border: none; position: fixed; top: 0; left: 0; }" +
+                    "</style>" +
+                    "</head><body>" +
+                    "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer-when-downgrade'></iframe>" +
+                    "</body></html>";
+
+            String baseUrl = "https://piratexplay.cc/";
+            if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
+            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
+            else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
+            else if (url.contains("rubystm")) baseUrl = "https://rubystm.com/";
+            else if (url.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
+            else if (url.contains("blakite")) baseUrl = "https://blakiteapi.xyz/";
+
+            playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
+            return;
+        }
+
         final String rawUrl = url;
         loadResolvedUrl(rawUrl);
     }
@@ -2571,6 +2602,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var dOpen = function() { return null; }; " +
                 "    dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
                 "    window.open = dOpen; " +
+                "    try { " +
+                "      Object.defineProperty(window, 'top', { " +
+                "        get: function() { return {}; }, " +
+                "        configurable: true " +
+                "      }); " +
+                "    } catch(err){} " +
                 "    try { " +
                 "      Object.defineProperty(document, 'referrer', { " +
                 "        get: function() { return 'https://piratexplay.cc/'; }, " +
@@ -2642,18 +2679,27 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var v = doc.querySelector('video'); " +
                 "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
                 "      if (v) { " +
-                "        if (v.muted) v.muted = false; " +
-                "        if (v.volume < 1.0) v.volume = 1.0; " +
                 "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
-                "          v.play().catch(function(){}); " +
+                "          try { v.muted = true; } catch(e){} " +
+                "          var p = v.play(); " +
+                "          if (p && typeof p.then === 'function') { " +
+                "            p.then(function() { setTimeout(function() { try { v.muted = false; if (v.volume < 1.0) v.volume = 1.0; } catch(e){} }, 150); }).catch(function(){}); " +
+                "          } else { " +
+                "            setTimeout(function() { try { v.muted = false; if (v.volume < 1.0) v.volume = 1.0; } catch(e){} }, 150); " +
+                "          } " +
+                "        } else if (!v.paused) { " +
+                "          if (v.muted) v.muted = false; " +
+                "          if (v.volume < 1.0) v.volume = 1.0; " +
                 "        } " +
                 "      } " +
                 "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
                 "      if (art && typeof art.play === 'function' && !globalPause && !isVideoActive) { " +
                 "        try { " +
-                "          if (art.muted) art.muted = false; " +
-                "          if (art.volume !== undefined && art.volume < 1) art.volume = 1; " +
-                "          if (art.playing === false || art.isPause) art.play(); " +
+                "          if (art.playing === false || art.isPause) { " +
+                "            art.muted = true; " +
+                "            art.play(); " +
+                "            setTimeout(function() { try { art.muted = false; } catch(e){} }, 200); " +
+                "          } " +
                 "        } catch(e){} " +
                 "      } " +
                 "      if (!isVideoActive) { " +
@@ -2666,32 +2712,35 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        }); " +
                 "      } " +
                 "      if (!globalPause && !isVideoActive) { " +
-                "        var playBtns = doc.querySelectorAll('#playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
+                "        var playBtns = doc.querySelectorAll('#playback, #overlay, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
                 "        playBtns.forEach(function(btn) { " +
-                "          try { btn.click(); btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
+                "          try { " +
+                "            btn.click(); " +
+                "            btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); " +
+                "            btn.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, cancelable: true})); " +
+                "            btn.dispatchEvent(new TouchEvent('touchend', {bubbles: true, cancelable: true})); " +
+                "          } catch(e){} " +
                 "        }); " +
                 "      } " +
                 "      if (typeof win.jwplayer === 'function') { " +
                 "        try { " +
                 "          var jp = win.jwplayer(); " +
                 "          if (jp) { " +
-                "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
-                "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
                 "            var jwOver = doc.querySelectorAll('.jw-nextup-container, .jw-nextup, .jw-overlay, .jw-dialog'); " +
                 "            jwOver.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
                 "            if (!win._jwAniLoveListenerAdded) { " +
                 "              win._jwAniLoveListenerAdded = true; " +
-                "              try { jp.on('ready', function() { jp.setMute(false); jp.setVolume(100); }); } catch(e){} " +
+                "              try { jp.on('ready', function() { try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); jp.setVolume(100); }, 200); } catch(e){} }); } catch(e){} " +
                 "              try { jp.on('pause', function() { " +
                 "                if (!win._aniloveManualPause) { " +
                 "                  setTimeout(function() { " +
-                "                    if (!win._aniloveManualPause && jp.getState && (jp.getState() === 'paused' || jp.getState() === 'idle')) { jp.play(); } " +
+                "                    if (!win._aniloveManualPause && jp.getState && (jp.getState() === 'paused' || jp.getState() === 'idle')) { try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); }, 200); } catch(e){} } " +
                 "                  }, 350); " +
                 "                } " +
                 "              }); } catch(e){} " +
                 "            } " +
                 "            if (!globalPause && jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) { " +
-                "              jp.play(); " +
+                "              try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); jp.setVolume(100); }, 200); } catch(e){} " +
                 "            } " +
                 "          } " +
                 "        } catch(e) {} " +
