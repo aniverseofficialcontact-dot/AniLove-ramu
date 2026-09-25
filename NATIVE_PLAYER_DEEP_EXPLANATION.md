@@ -121,10 +121,9 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 
 ---
 
-### 8. Low-Latency Instant Playback & Quality Probing Default
+### 8. Instant Server Autoplay & Big Play Overlay Removal
+- **Problem Identified**:
+  - Tapping a server displayed a giant black/grey play button overlay (`.art-state`) in the center of the video screen for 5 to 10 seconds before video started playing.
 - **Technical Changes Applied**:
-  1. **Low-Latency & Fragment Pre-Fetch in `hlsHtml`**:
-     - Configured `hls.js` with `lowLatencyMode: true`, `startFragPrefetch: true`, and `maxBufferSize: 120MB`.
-     - Pre-fetches video fragments during manifest parsing for instant playback startup with zero buffering delay.
-  2. **Stream Quality Fallback Probing**:
-     - Updated `probeHlsResolutions` in [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts) to fallback to `['720p', '480p']` when a stream does not contain a 1080p master variant, hiding `1080p` on non-1080p episodes.
+  1. **Big Play Overlay CSS Erasure**: Updated `absoluteCleanse` CSS in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to include `.art-state`, `.art-icon-state`, `.art-poster`, `.art-notice`, `.art-layer-state`. The giant play icon overlay is now **instantly erased on 0ms** upon server load.
+  2. **Fast Autoplay Sweep**: Added 100ms, 300ms, 600ms, 1000ms, and 1500ms rapid execution sweeps in `onPageStarted` and `onPageFinished` to trigger video autoplay immediately, making server playback start in under 1 second.

@@ -2415,6 +2415,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 super.onPageStarted(view, url, favicon); 
                 if (!isDirectHls) {
                     injectAdEraser(); 
+                    for (int delay : new int[]{100, 300, 600, 1000, 1500, 2200}) {
+                        updateHandler.postDelayed(() -> injectAdEraser(), delay);
+                    }
                 }
             } 
             @Override public void onPageFinished(WebView view, String url) { 
@@ -2422,6 +2425,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 loadingProgress.setVisibility(View.GONE); 
                 if (!isDirectHls) {
                     injectAdEraser(); 
+                    for (int delay : new int[]{150, 400, 800, 1500}) {
+                        updateHandler.postDelayed(() -> injectAdEraser(), delay);
+                    }
 
                     if (startTime > 0) {
                         String resumeScript = "(function() {" +
