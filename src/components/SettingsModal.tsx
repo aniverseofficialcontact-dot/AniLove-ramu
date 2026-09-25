@@ -778,36 +778,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
 
-              {/* 2. 3D Pop-Up Card Preview Toggle */}
-              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-700/80 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-pink-500/10 text-pink-400">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-white">3D Pop-up Card Option</h5>
-                    <p className="text-[11px] text-slate-400">
-                      Show interactive 360° 3D card popup modal when clicking anime posters before opening full details
-                    </p>
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextVal = settings.enable3DCardPreview === false ? true : false;
-                    onSaveSettings({ ...settings, enable3DCardPreview: nextVal });
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-pink-400 hover:text-pink-300 cursor-pointer shrink-0"
-                >
-                  {settings.enable3DCardPreview !== false ? (
-                    <ToggleRight className="w-6 h-6 text-pink-400" />
-                  ) : (
-                    <ToggleLeft className="w-6 h-6 text-slate-500" />
-                  )}
-                  <span>{settings.enable3DCardPreview !== false ? 'Enabled' : 'Disabled'}</span>
-                </button>
-              </div>
             </div>
 
             {/* DATA BACKUP & RESTORE */}

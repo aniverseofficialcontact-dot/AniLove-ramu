@@ -100,7 +100,10 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
     3. Server 2 returns base64 `multi.php?data=` payloads containing multi-language streams, and Server 3 returns `index11.php?id=` URLs. `EpisodeDownloadService` was failing to decode these URLs in Java for the specified audio language.
     4. `VideoSniffer` loaded embed pages directly via `loadUrl` without iframe origin context (`loadDataWithBaseURL`), causing embed anti-fraud scripts (AbyssPlayer / Rubystm / IQSmart) to halt playback and time out after 35 seconds.
 - **Technical Changes Applied**:
-  1. **UI Server Dropdown**: Updated `BatchDownloadModal.tsx` and `downloadManager.ts` to present **Server 1 (Fast HLS)**, **Server 2 (AbyssPlayer / Multi-Audio)**, and **Server 3 (IQSmart / Embed)**.
+  1. **UI Server & Quality Selectors**: Updated `BatchDownloadModal.tsx` and `downloadManager.ts` to present **Server 1 (Fast HLS)**, **Server 2 (AbyssPlayer / Multi-Audio)**, **Server 3 (IQSmart / Embed)**, and a **Video Quality Selector** (`1080p Full HD`, `720p HD`, `480p SD`).
   2. **API Parameter & Unpacking Fix**: Fixed `tryServerSideExtractFull` in `EpisodeDownloadService.java` to query `stream.php?anilistId=<id>&ep=<ep>&ongoing=true`. Added `unpackServerUrlInJava` to parse base64 `multi.php` payload for the selected audio language (`HIN`, `DUB`, `SUB`, `TAM`, `TEL`, `MAL`, `KAN`, `BEN`).
   3. **Iframe Sniffing Engine**: Updated `VideoSniffer.java` to wrap embed URLs in an iframe container and load via `loadDataWithBaseURL("https://piratexplay.cc/", iframeHtml, ...)`. This satisfies anti-embed origin checks, causing embed players to initialize instantly and yield the underlying `.m3u8` or `.mp4` video stream URL in under 2 seconds.
-  4. **Resilient Download Execution**: Added a 3-retry loop for fetching `.ts` HLS segments in `EpisodeDownloadService.java` so temporary network drops do not interrupt downloads.
+  4. **Quality & Subtitle Extraction**:
+     - Parsed `#EXT-X-STREAM-INF` variants in `downloadHlsStream` to download the exact stream variant matching the selected quality (`1080p`, `720p`, `480p`).
+     - Extracted `#EXT-X-MEDIA:TYPE=SUBTITLES` and intercepted `.vtt` / `.srt` URLs in `VideoSniffer.java` to download subtitle tracks (`ep_X.vtt`) automatically alongside video files.
+  5. **Resilient Download Execution**: Added a 3-retry loop for fetching `.ts` HLS segments in `EpisodeDownloadService.java` so temporary network drops do not interrupt downloads.

@@ -675,6 +675,13 @@ public class EpisodeDownloadService extends Service {
         return conn;
     }
 
+    private static class HlsVariant {
+        String url;
+        int bandwidth;
+        String resolution;
+        int height;
+    }
+
     private void downloadHlsStream(DownloadItem item, File downloadDir, File targetFile) throws Exception {
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
         String currentPlaylistUrl = item.streamUrl;
@@ -689,17 +696,53 @@ public class EpisodeDownloadService extends Service {
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         List<String> segmentUrls = new ArrayList<>();
-        List<String> variantStreams = new ArrayList<>();
+        List<HlsVariant> variantObjects = new ArrayList<>();
+        HlsVariant pendingVariant = null;
         String initMapUrl = null;
         String line;
         boolean isMasterPlaylist = false;
 
         while ((line = reader.readLine()) != null) {
             line = line.trim();
-            if (line.contains("#EXT-X-STREAM-INF")) {
+            if (line.contains("#EXT-X-MEDIA:TYPE=SUBTITLES") && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
+                int uriIdx = line.indexOf("URI=\"");
+                if (uriIdx != -1) {
+                    int endIdx = line.indexOf("\"", uriIdx + 5);
+                    if (endIdx != -1) {
+                        item.subtitleUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                        Log.i(TAG, "Extracted subtitle URL from HLS master playlist: " + item.subtitleUrl);
+                    }
+                }
+            } else if (line.contains("#EXT-X-STREAM-INF")) {
                 isMasterPlaylist = true;
+                pendingVariant = new HlsVariant();
+                int bwIdx = line.indexOf("BANDWIDTH=");
+                if (bwIdx != -1) {
+                    try {
+                        String bwStr = line.substring(bwIdx + 10).split("[,\\s]")[0];
+                        pendingVariant.bandwidth = Integer.parseInt(bwStr);
+                    } catch (Exception ignored) {}
+                }
+                int resIdx = line.indexOf("RESOLUTION=");
+                if (resIdx != -1) {
+                    try {
+                        String resStr = line.substring(resIdx + 11).split("[,\\s]")[0];
+                        pendingVariant.resolution = resStr;
+                        if (resStr.contains("x")) {
+                            pendingVariant.height = Integer.parseInt(resStr.split("x")[1]);
+                        }
+                    } catch (Exception ignored) {}
+                }
             } else if (isMasterPlaylist && !line.startsWith("#") && !line.isEmpty()) {
-                variantStreams.add(resolveHlsUrl(currentPlaylistUrl, line));
+                if (pendingVariant != null) {
+                    pendingVariant.url = resolveHlsUrl(currentPlaylistUrl, line);
+                    variantObjects.add(pendingVariant);
+                    pendingVariant = null;
+                } else {
+                    HlsVariant v = new HlsVariant();
+                    v.url = resolveHlsUrl(currentPlaylistUrl, line);
+                    variantObjects.add(v);
+                }
             } else if (!isMasterPlaylist) {
                 if (line.contains("#EXT-X-MAP:")) {
                     int uriIdx = line.indexOf("URI=\"");
@@ -717,43 +760,68 @@ public class EpisodeDownloadService extends Service {
         reader.close();
         conn.disconnect();
 
-        // If it was a master playlist, try variant streams in descending order until segments are found
-        if (isMasterPlaylist && !variantStreams.isEmpty()) {
-            for (int v = variantStreams.size() - 1; v >= 0; v--) {
-                String subPlaylistUrl = variantStreams.get(v);
-                Log.i(TAG, "Resolving master playlist to variant: " + subPlaylistUrl);
-                try {
-                    conn = openHlsConnectionWithRedirects(subPlaylistUrl, referer);
-                    if (conn.getResponseCode() == 200) {
-                        currentPlaylistUrl = subPlaylistUrl;
-                        reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                        segmentUrls.clear();
-                        initMapUrl = null;
+        // If it was a master playlist, select variant matching requested quality or highest available
+        if (isMasterPlaylist && !variantObjects.isEmpty()) {
+            Collections.sort(variantObjects, (a, b) -> {
+                if (a.height != b.height) return Integer.compare(a.height, b.height);
+                return Integer.compare(a.bandwidth, b.bandwidth);
+            });
 
-                        while ((line = reader.readLine()) != null) {
-                            line = line.trim();
-                            if (line.contains("#EXT-X-MAP:")) {
-                                int uriIdx = line.indexOf("URI=\"");
-                                if (uriIdx != -1) {
-                                    int endIdx = line.indexOf("\"", uriIdx + 5);
-                                    if (endIdx != -1) {
-                                        initMapUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
-                                    }
-                                }
-                            } else if (!line.startsWith("#") && !line.isEmpty()) {
-                                segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+            HlsVariant selectedVariant = null;
+            String reqQuality = item.quality != null ? item.quality.toLowerCase() : "1080p";
+
+            if (reqQuality.contains("720")) {
+                for (HlsVariant v : variantObjects) {
+                    if (v.height == 720 || (v.resolution != null && v.resolution.contains("720"))) {
+                        selectedVariant = v;
+                        break;
+                    }
+                }
+            } else if (reqQuality.contains("480") || reqQuality.contains("360")) {
+                for (HlsVariant v : variantObjects) {
+                    if (v.height == 480 || v.height == 360 || (v.resolution != null && (v.resolution.contains("480") || v.resolution.contains("360")))) {
+                        selectedVariant = v;
+                        break;
+                    }
+                }
+            } else if (reqQuality.contains("1080")) {
+                for (HlsVariant v : variantObjects) {
+                    if (v.height == 1080 || (v.resolution != null && v.resolution.contains("1080"))) {
+                        selectedVariant = v;
+                        break;
+                    }
+                }
+            }
+
+            if (selectedVariant == null) {
+                selectedVariant = variantObjects.get(variantObjects.size() - 1);
+            }
+
+            Log.i(TAG, "Selected HLS variant for quality [" + reqQuality + "]: " + selectedVariant.url + " (res: " + selectedVariant.resolution + ")");
+
+            conn = openHlsConnectionWithRedirects(selectedVariant.url, referer);
+            if (conn.getResponseCode() == 200) {
+                currentPlaylistUrl = selectedVariant.url;
+                reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                segmentUrls.clear();
+                initMapUrl = null;
+
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.contains("#EXT-X-MAP:")) {
+                        int uriIdx = line.indexOf("URI=\"");
+                        if (uriIdx != -1) {
+                            int endIdx = line.indexOf("\"", uriIdx + 5);
+                            if (endIdx != -1) {
+                                initMapUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
                             }
                         }
-                        reader.close();
-                        conn.disconnect();
-
-                        if (!segmentUrls.isEmpty()) {
-                            break;
-                        }
+                    } else if (!line.startsWith("#") && !line.isEmpty()) {
+                        segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
                     }
-                } catch (Exception varEx) {
-                    Log.w(TAG, "Variant playlist failed: " + varEx.getMessage());
                 }
+                reader.close();
+                conn.disconnect();
             }
         }
 
@@ -839,18 +907,36 @@ public class EpisodeDownloadService extends Service {
     }
 
     private void downloadFileDirect(String urlStr, File destFile, String referer) throws Exception {
-        HttpURLConnection c = openConnectionWithHeaders(urlStr, referer);
-        c.connect();
-        InputStream is = c.getInputStream();
-        FileOutputStream fos = new FileOutputStream(destFile);
-        byte[] buffer = new byte[32 * 1024];
-        int len;
-        while ((len = is.read(buffer)) != -1) {
-            fos.write(buffer, 0, len);
+        Exception lastErr = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            HttpURLConnection c = null;
+            try {
+                c = openConnectionWithHeaders(urlStr, referer);
+                c.connect();
+                int code = c.getResponseCode();
+                if (code != 200 && code != 206) {
+                    throw new Exception("HTTP " + code + " downloading segment: " + urlStr);
+                }
+                InputStream is = c.getInputStream();
+                FileOutputStream fos = new FileOutputStream(destFile);
+                byte[] buffer = new byte[32 * 1024];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                is.close();
+                c.disconnect();
+                return; // Success!
+            } catch (Exception e) {
+                lastErr = e;
+                if (c != null) try { c.disconnect(); } catch (Exception ignored) {}
+                if (attempt < 3) {
+                    try { Thread.sleep(800L * attempt); } catch (InterruptedException ignored) {}
+                }
+            }
         }
-        fos.close();
-        is.close();
-        c.disconnect();
+        throw lastErr != null ? lastErr : new Exception("Failed to download " + urlStr);
     }
 
     private void notifyProgress(DownloadItem item, String speed) {

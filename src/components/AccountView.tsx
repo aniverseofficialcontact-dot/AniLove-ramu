@@ -675,54 +675,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 )}
               </div>
 
-              {/* 3D Anime Card Pop-up Preview (Toggle) */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 text-pink-400 border border-pink-500/30 shadow-sm">
-                    <Sparkles className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>3D Pop-up Card Option</span>
-                      <span className="px-2 py-0.2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 text-white text-[9px] font-black uppercase">
-                        360° 3D
-                      </span>
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Show interactive 360° holographic 3D card modal when clicking anime posters before opening full details.
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
-                      settings.enable3DCardPreview !== false
-                        ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    {settings.enable3DCardPreview !== false ? 'Enabled' : 'Disabled'}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextVal = settings.enable3DCardPreview === false ? true : false;
-                      onSaveSettings({ ...settings, enable3DCardPreview: nextVal });
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      settings.enable3DCardPreview !== false ? 'bg-pink-500 shadow-md shadow-pink-500/30' : 'bg-white/10'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.enable3DCardPreview !== false ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
 
               {/* App Opening Cinematic Logo Intro (AniLove 4s Intro) */}
               <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

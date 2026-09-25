@@ -25,6 +25,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
 }) => {
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
   const [selectedServer, setSelectedServer] = useState<string>(initialServer);
+  const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
     return new Set([currentEpisodeNumber]);
   });
@@ -74,7 +75,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
       targetEpisodes,
       selectedAudio,
       selectedServer,
-      '1080p'
+      selectedQuality
     );
 
     setIsSubmitting(false);
@@ -154,6 +155,19 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               <option value="Server 1">Server 1 (Fast HLS)</option>
               <option value="Server 2">Server 2 (AbyssPlayer / Multi-Audio)</option>
               <option value="Server 3">Server 3 (IQSmart / Embed)</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-neutral-300">Video Quality</span>
+            <select
+              value={selectedQuality}
+              onChange={e => setSelectedQuality(e.target.value)}
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="1080p">1080p Full HD</option>
+              <option value="720p">720p HD</option>
+              <option value="480p">480p SD</option>
             </select>
           </div>
         </div>

@@ -1153,7 +1153,6 @@ export function App() {
                     onOpenDetails={handleOpenDetails}
                     onPlayStream={handlePlayStream}
                     onQuickTrack={handleQuickAdd}
-                    onInspect3DCard={handleInspect3DCard}
                     onPlayThemeSong={handlePlayThemeSong}
                     userLibrary={library}
                   />
@@ -1192,7 +1191,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1210,7 +1208,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1228,7 +1225,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1246,7 +1242,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1264,7 +1259,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1282,7 +1276,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1300,7 +1293,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1318,7 +1310,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
 
@@ -1336,7 +1327,6 @@ export function App() {
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
                         onSelectStudio={handleSelectStudio}
-                        onInspect3DCard={handleInspect3DCard}
                       />
                     )}
                   </div>
@@ -1356,7 +1346,6 @@ export function App() {
                 onUpdateProgress={handleUpdateProgress}
                 onSelectGenre={handleSelectGenre}
                 onSelectStudio={handleSelectStudio}
-                onInspect3DCard={handleInspect3DCard}
               />
             )}
 
