@@ -108,7 +108,7 @@ public class EpisodeDownloadService extends Service {
         loadSavedDownloadsFromDisk();
 
         // Android 14 requirement: Immediately start foreground in onCreate()
-        Notification initialNotification = buildNotification("AniLove Downloader", "Background download service active", -1, false);
+        Notification initialNotification = buildNotification("AniLove Downloader", "Background download service active", -1, false, null);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
@@ -781,7 +781,7 @@ public class EpisodeDownloadService extends Service {
         saveDownloadMetadata(item);
     }
 
-    private Notification buildNotification(String title, String content, int progress, boolean ongoing) {
+    private Notification buildNotification(String title, String content, int progress, boolean ongoing, DownloadItem activeItem) {
         Intent openIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingOpen = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_IMMUTABLE);
 
@@ -797,6 +797,29 @@ public class EpisodeDownloadService extends Service {
             builder.setProgress(100, progress, progress == 0 && ongoing);
         }
 
+        if (activeItem != null && activeItem.id != null) {
+            int notifReqCode = Math.abs(activeItem.id.hashCode() % 10000);
+            if ("DOWNLOADING".equals(activeItem.status)) {
+                Intent pauseIntent = new Intent(this, EpisodeDownloadService.class);
+                pauseIntent.setAction(ACTION_PAUSE);
+                pauseIntent.putExtra("downloadId", activeItem.id);
+                PendingIntent pPause = PendingIntent.getService(this, notifReqCode + 1, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                builder.addAction(android.R.drawable.ic_media_pause, "Pause", pPause);
+            } else if ("PAUSED".equals(activeItem.status)) {
+                Intent resumeIntent = new Intent(this, EpisodeDownloadService.class);
+                resumeIntent.setAction(ACTION_RESUME);
+                resumeIntent.putExtra("downloadId", activeItem.id);
+                PendingIntent pResume = PendingIntent.getService(this, notifReqCode + 2, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                builder.addAction(android.R.drawable.ic_media_play, "Resume", pResume);
+            }
+
+            Intent cancelIntent = new Intent(this, EpisodeDownloadService.class);
+            cancelIntent.setAction(ACTION_CANCEL);
+            cancelIntent.putExtra("downloadId", activeItem.id);
+            PendingIntent pCancel = PendingIntent.getService(this, notifReqCode + 3, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", pCancel);
+        }
+
         return builder.build();
     }
 
@@ -809,7 +832,7 @@ public class EpisodeDownloadService extends Service {
                 String msg = (item.error != null && !item.error.isEmpty())
                         ? item.error
                         : "Download failed. Tap to retry or choose another server.";
-                Notification n = buildNotification(title, msg, -1, false);
+                Notification n = buildNotification(title, msg, -1, false, null);
                 nm.notify(errorNotifId, n);
             }
         } catch (Exception e) {
@@ -850,7 +873,7 @@ public class EpisodeDownloadService extends Service {
             statusText += " (+" + (activeCount - 1) + " more)";
         }
 
-        Notification notification = buildNotification(title, statusText, activeItem.progress, true);
+        Notification notification = buildNotification(title, statusText, activeItem.progress, true, activeItem);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);

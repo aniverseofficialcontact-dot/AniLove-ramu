@@ -387,7 +387,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-indigo-500 selection:text-white">
+    <div className="bg-black text-white selection:bg-indigo-500 selection:text-white pb-6 sm:pb-8">
       {/* Target: Image 2 - Header removed for ultra-clean fixed player view */}
 
       {/* Main Watch Page Container - Positioned at very top */}

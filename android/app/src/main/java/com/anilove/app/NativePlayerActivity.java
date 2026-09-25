@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -21,6 +22,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.net.Uri;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.concurrent.Executors;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -138,20 +145,54 @@ public class NativePlayerActivity extends AppCompatActivity {
     private List<String> detectedSubtitles = new ArrayList<>();
     private String currentSelectedQuality = "Auto";
     private String currentSelectedAudio = "Hindi";
-    private String currentSelectedSubtitle = "Off";
+    private String currentSelectedSubtitle = "English";
     
-    // Caption State
-    private String bgOpacity = "0";
+    // Caption State Defaults
+    private String bgOpacity = "Off";
     private String bgColor = "Black";
-    private int captionFontSize = 100;
-    private String captionWeight = "Regular";
+    private int captionFontSize = 90;
+    private String captionWeight = "Bold";
     private String captionPosition = "Bottom";
     private int bottomMargin = 12;
     private String captionColorName = "White";
     private String captionColorHex = "#FFFFFF";
-    private String edgeStyle = "Outline";
+    private String edgeStyle = "Shadow";
     private String subtitleUrl = null;
     private String subtitleLang = "English";
+
+    private void saveCaptionSettingsToPrefs() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("AniLoveCaptionPrefs", MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString("bgOpacity", bgOpacity);
+            editor.putString("bgColor", bgColor);
+            editor.putInt("captionFontSize", captionFontSize);
+            editor.putString("captionWeight", captionWeight);
+            editor.putString("captionPosition", captionPosition);
+            editor.putInt("bottomMargin", bottomMargin);
+            editor.putString("captionColorName", captionColorName);
+            editor.putString("captionColorHex", captionColorHex);
+            editor.putString("edgeStyle", edgeStyle);
+            editor.putString("currentSelectedSubtitle", currentSelectedSubtitle);
+            editor.apply();
+        } catch (Exception ignored) {}
+    }
+
+    private void loadCaptionSettingsFromPrefs() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("AniLoveCaptionPrefs", MODE_PRIVATE);
+            bgOpacity = prefs.getString("bgOpacity", "Off");
+            bgColor = prefs.getString("bgColor", "Black");
+            captionFontSize = prefs.getInt("captionFontSize", 90);
+            captionWeight = prefs.getString("captionWeight", "Bold");
+            captionPosition = prefs.getString("captionPosition", "Bottom");
+            bottomMargin = prefs.getInt("bottomMargin", 12);
+            captionColorName = prefs.getString("captionColorName", "White");
+            captionColorHex = prefs.getString("captionColorHex", "#FFFFFF");
+            edgeStyle = prefs.getString("edgeStyle", "Shadow");
+            currentSelectedSubtitle = prefs.getString("currentSelectedSubtitle", "English");
+        } catch (Exception ignored) {}
+    }
     
     private Handler updateHandler = new Handler(Looper.getMainLooper());
     private Handler hideHandler = new Handler(Looper.getMainLooper());
@@ -196,11 +237,24 @@ public class NativePlayerActivity extends AppCompatActivity {
             actions.add(playPauseAction);
             actions.add(forwardAction);
 
-            PictureInPictureParams params = new PictureInPictureParams.Builder()
+            PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
                     .setAspectRatio(new Rational(16, 9))
-                    .setActions(actions)
-                    .build();
+                    .setActions(actions);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(isPlaying);
+            }
+
+            PictureInPictureParams params = builder.build();
             setPictureInPictureParams(params);
+        }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (isPlaying && !isInPictureInPictureMode()) {
+            enterPipMode();
         }
     }
 
@@ -304,6 +358,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         final Window window = getWindow();
         final View decorView = window.getDecorView();
         
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         
         decorView.post(() -> {
@@ -485,6 +540,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         currentInstance = this;
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
+        loadCaptionSettingsFromPrefs();
         
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
@@ -858,10 +914,77 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     if (isPlaying && current > 0) {
                         broadcastProgress(current, duration);
+                        if (current >= duration * 0.8) {
+                            triggerNextEpisodePreFetch();
+                        }
                     }
                 }
             });
         }
+    }
+
+    private boolean isNextEpisodePreFetched = false;
+
+    private void triggerNextEpisodePreFetch() {
+        if (isNextEpisodePreFetched) return;
+        
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int currentEp = getIntent().getIntExtra("episodeNumber", 0);
+        boolean hasNext = getIntent().getBooleanExtra("hasNext", false);
+        String audio = getIntent().getStringExtra("audio");
+        String animeTitle = getIntent().getStringExtra("animeTitle");
+        
+        if (!hasNext || anilistId <= 0 || currentEp <= 0) return;
+        
+        int nextEp = currentEp + 1;
+        if (StreamCache.has(anilistId, nextEp, audio)) {
+            isNextEpisodePreFetched = true;
+            return;
+        }
+
+        isNextEpisodePreFetched = true;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String safeSlug = animeTitle != null
+                    ? animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
+                    : "anime";
+                String episodeSlug = safeSlug + "-season-1-" + anilistId + "-1x" + nextEp;
+
+                String apiUrl = "https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?id=" +
+                        URLEncoder.encode(episodeSlug, "UTF-8") + "&ongoing=true";
+
+                Log.i("AniLove_PreFetch", "Pre-fetching next episode stream: " + episodeSlug);
+                URL url = new URL(apiUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(15000);
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+
+                    JSONObject resObj = new JSONObject(sb.toString());
+                    if (resObj.optBoolean("success", false)) {
+                        JSONObject streamObj = resObj.optJSONObject("stream");
+                        if (streamObj != null) {
+                            String mainLink = streamObj.optString("streamLink", streamObj.optString("file", ""));
+                            if (mainLink != null && !mainLink.isEmpty()) {
+                                StreamCache.put(anilistId, nextEp, audio, mainLink);
+                                Log.i("AniLove_PreFetch", "Successfully pre-fetched next episode stream for Ep " + nextEp + ": " + mainLink);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("AniLove_PreFetch", "Pre-fetch next episode failed: " + e.getMessage());
+            }
+        });
     }
 
     private void changeVideoQuality(String quality) {
@@ -1028,9 +1151,36 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void showSeekIndicator(boolean forward) {
-        final View indicator = forward ? indicatorForward : indicatorRewind;
+        final TextView indicator = forward ? indicatorForward : indicatorRewind;
+        if (indicator == null) return;
+        indicator.setText(forward ? "10s ►►" : "◄◄ 10s");
+        indicator.animate().cancel();
+        indicator.setAlpha(0f);
+        indicator.setScaleX(0.7f);
+        indicator.setScaleY(0.7f);
         indicator.setVisibility(View.VISIBLE);
-        new Handler(Looper.getMainLooper()).postDelayed(() -> indicator.setVisibility(View.GONE), 650);
+        indicator.animate()
+                .alpha(1f)
+                .scaleX(1.05f)
+                .scaleY(1.05f)
+                .setDuration(120)
+                .withEndAction(() -> {
+                    indicator.animate()
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .setDuration(80)
+                            .withEndAction(() -> {
+                                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                    indicator.animate()
+                                            .alpha(0f)
+                                            .scaleX(0.7f)
+                                            .scaleY(0.7f)
+                                            .setDuration(180)
+                                            .withEndAction(() -> indicator.setVisibility(View.GONE))
+                                            .start();
+                                }, 450);
+                            }).start();
+                }).start();
     }
 
     private void togglePlayPause() {
@@ -1390,14 +1540,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         captionPreview = view.findViewById(R.id.caption_preview);
-        setupCaptionGroup(view.findViewById(R.id.group_bg_opacity), new String[]{"Off", "25%", "40%", "60%", "80%", "100%"}, bgOpacity, val -> { bgOpacity = val; updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_bg_color), new String[]{"Black", "Gray", "Navy", "White"}, bgColor, val -> { bgColor = val; updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_text_size), new String[]{"50%", "75%", "90%", "100%", "115%", "150%", "200%"}, captionFontSize + "%", val -> { captionFontSize = Integer.parseInt(val.replace("%", "")); updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_text_weight), new String[]{"Regular", "Bold"}, captionWeight, val -> { captionWeight = val; updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_position), new String[]{"Bottom", "Top"}, captionPosition, val -> { captionPosition = val; updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_margin), new String[]{"0%", "4%", "8%", "12%", "16%", "20%", "25%"}, bottomMargin + "%", val -> { bottomMargin = Integer.parseInt(val.replace("%", "")); updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_text_color), new String[]{"White", "Yellow", "Cyan", "Green", "Magenta"}, captionColorName, val -> { captionColorName = val; captionColorHex = getHexForColorName(val); updatePreviewSet(); applyCaptionStyle(); });
-        setupCaptionGroup(view.findViewById(R.id.group_edge_style), new String[]{"None", "Outline", "Shadow"}, edgeStyle, val -> { edgeStyle = val; updatePreviewSet(); applyCaptionStyle(); });
+        setupCaptionGroup(view.findViewById(R.id.group_bg_opacity), new String[]{"Off", "25%", "40%", "60%", "80%", "100%"}, bgOpacity, val -> { bgOpacity = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_bg_color), new String[]{"Black", "Gray", "Navy", "White"}, bgColor, val -> { bgColor = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_text_size), new String[]{"50%", "75%", "90%", "100%", "115%", "150%", "200%"}, captionFontSize + "%", val -> { captionFontSize = Integer.parseInt(val.replace("%", "")); updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_text_weight), new String[]{"Regular", "Bold"}, captionWeight, val -> { captionWeight = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_position), new String[]{"Bottom", "Top"}, captionPosition, val -> { captionPosition = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_margin), new String[]{"0%", "4%", "8%", "12%", "16%", "20%", "25%"}, bottomMargin + "%", val -> { bottomMargin = Integer.parseInt(val.replace("%", "")); updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_text_color), new String[]{"White", "Yellow", "Cyan", "Green", "Magenta"}, captionColorName, val -> { captionColorName = val; captionColorHex = getHexForColorName(val); updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
+        setupCaptionGroup(view.findViewById(R.id.group_edge_style), new String[]{"None", "Outline", "Shadow"}, edgeStyle, val -> { edgeStyle = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
         
         updateVisibility.run();
         updatePreviewSet();
@@ -1405,7 +1555,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         view.findViewById(R.id.btn_close_captions).setOnClickListener(v -> dialog.dismiss());
         view.findViewById(R.id.btn_final_close_captions).setOnClickListener(v -> dialog.dismiss());
         view.findViewById(R.id.btn_reset_captions).setOnClickListener(v -> {
-             bgOpacity = "0"; bgColor = "Black"; captionFontSize = 100; captionWeight = "Regular"; captionPosition = "Bottom"; bottomMargin = 12; captionColorName = "White"; captionColorHex = "#FFFFFF"; edgeStyle = "Outline"; isSubtitlesEnabled = true;
+             bgOpacity = "Off"; bgColor = "Black"; captionFontSize = 90; captionWeight = "Bold"; captionPosition = "Bottom"; bottomMargin = 12; captionColorName = "White"; captionColorHex = "#FFFFFF"; edgeStyle = "Shadow"; isSubtitlesEnabled = true; currentSelectedSubtitle = "English";
+             saveCaptionSettingsToPrefs();
              updatePreviewSet(); applyCaptionStyle(); toggleWebSubtitles(true); dialog.dismiss(); showCaptionMenu();
         });
         dialog.show();
@@ -1660,10 +1811,22 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void setPlaybackSpeed(float speed, boolean permanent) { 
         if (!permanent) { 
             is2xSpeed = true; 
-            if (indicator2x != null) indicator2x.setVisibility(View.VISIBLE); 
+            if (indicator2x != null) {
+                indicator2x.setText("2.0x SPEED ⏩");
+                indicator2x.animate().cancel();
+                indicator2x.setAlpha(0f);
+                indicator2x.setScaleX(0.8f);
+                indicator2x.setScaleY(0.8f);
+                indicator2x.setVisibility(View.VISIBLE);
+                indicator2x.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(120).start();
+            }
         } else { 
             is2xSpeed = false; 
-            if (indicator2x != null) indicator2x.setVisibility(View.GONE); 
+            if (indicator2x != null) {
+                indicator2x.animate().cancel();
+                indicator2x.animate().alpha(0f).scaleX(0.8f).scaleY(0.8f).setDuration(120)
+                        .withEndAction(() -> indicator2x.setVisibility(View.GONE)).start();
+            }
         } 
         if (isOfflineMode && exoPlayer != null) {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
@@ -2200,8 +2363,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
 
+                // Never block essential video/audio segment chunks or manifests
+                boolean isMediaResource = lower.contains(".m3u8") || lower.contains(".ts") ||
+                                          lower.contains(".m4s") || lower.contains(".mp4") ||
+                                          lower.contains(".key") || lower.contains(".vtt") || lower.contains(".srt");
+
                 // Block known ad networks, trackers, popup scripts, and verification captchas
-                if (lower.contains("probationthimbledespite") || lower.contains("googletagmanager") ||
+                if (!isMediaResource && (
+                    lower.contains("probationthimbledespite") || lower.contains("googletagmanager") ||
                     lower.contains("decafeligiblyhad") || lower.contains("morphify.net") || 
                     lower.contains("doubleclick") || lower.contains("google-analytics") ||
                     lower.contains("adservice") || lower.contains("fuckadblock") ||
@@ -2215,14 +2384,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lower.contains("taboola") || lower.contains("trafficjunky") ||
                     lower.contains("exozoic") || lower.contains("zergnet") ||
                     lower.contains("vignette") || lower.contains("yadro.ru") ||
-                    lower.contains("histats") || lower.contains("/ads.") ||
-                    lower.contains("/ads/") || lower.contains("ads.js") ||
-                    lower.contains("popunder") ||
+                    lower.contains("histats") || lower.contains("popunder") ||
                     lower.contains("endlesshandbaglinked.com") ||
-                    lower.contains("openfpcdn.io") ||
                     lower.contains("technocosmos.surf") ||
                     lower.contains("pixel.morphify") ||
-                    lower.contains("pagead2.googlesyndication")) {
+                    lower.contains("pagead2.googlesyndication"))) {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
                 }
 
@@ -2330,7 +2496,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "    return false;" +
                     "  }" +
                     "  if (Hls.isSupported()) {" +
-                    "    var hls = new Hls({ enableWorker: true, lowLatencyMode: false });" +
+                    "    var hls = new Hls({ enableWorker: false, lowLatencyMode: false, maxBufferLength: 60, maxMaxBufferLength: 120, maxBufferSize: 60 * 1000 * 1000, manifestLoadingTimeOut: 20000, levelLoadingTimeOut: 20000 });" +
                     "    hls.loadSource(streamUrl);" +
                     "    hls.attachMedia(v);" +
                     "    function selectAudioTrack() {" +
@@ -2352,6 +2518,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "    });" +
                     "    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function() { selectAudioTrack(); });" +
                     "    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function() { if (hls.subtitleTrack === -1 && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } });" +
+                    "    hls.on(Hls.Events.ERROR, function(event, data) {" +
+                    "      if (data && data.fatal) {" +
+                    "        switch(data.type) {" +
+                    "          case Hls.ErrorTypes.NETWORK_ERROR: try { hls.startLoad(); } catch(e){} break;" +
+                    "          case Hls.ErrorTypes.MEDIA_ERROR: try { hls.recoverMediaError(); } catch(e){} break;" +
+                    "          default: try { hls.destroy(); } catch(e){} break;" +
+                    "        }" +
+                    "      }" +
+                    "    });" +
                     "  } else if (v.canPlayType('application/vnd.apple.mpegurl')) {" +
                     "    v.src = streamUrl;" +
                     "    v.addEventListener('loadedmetadata', function() { v.play().catch(function(){}); });" +
@@ -2514,29 +2689,32 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        } catch(e){} " +
                 "      } " +
                 "      var v = doc.querySelector('video'); " +
+                "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
                 "      if (v) { " +
                 "        if (v.muted) v.muted = false; " +
                 "        if (v.volume < 1.0) v.volume = 1.0; " +
-                "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause')) { " +
+                "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
                 "          v.play().catch(function(){}); " +
                 "        } " +
                 "      } " +
                 "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
-                "      if (art && typeof art.play === 'function' && !globalPause) { " +
+                "      if (art && typeof art.play === 'function' && !globalPause && !isVideoActive) { " +
                 "        try { " +
                 "          if (art.muted) art.muted = false; " +
                 "          if (art.volume !== undefined && art.volume < 1) art.volume = 1; " +
                 "          if (art.playing === false || art.isPause) art.play(); " +
                 "        } catch(e){} " +
                 "      } " +
-                "      var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color, a, input[type=\"button\"], .btn'); " +
-                "      allBtns.forEach(function(b) { " +
-                "        var t = (b.textContent || b.innerText || b.value || '').toLowerCase().trim(); " +
-                "        if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok' || t.indexOf('continue') === 0 || t.indexOf('resume') === 0) { " +
-                "          try { b.click(); } catch(e){} " +
-                "        } " +
-                "      }); " +
-                "      if (!globalPause) { " +
+                "      if (!isVideoActive) { " +
+                "        var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color, a, input[type=\"button\"], .btn'); " +
+                "        allBtns.forEach(function(b) { " +
+                "          var t = (b.textContent || b.innerText || b.value || '').toLowerCase().trim(); " +
+                "          if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok' || t.indexOf('continue') === 0 || t.indexOf('resume') === 0) { " +
+                "            try { b.click(); } catch(e){} " +
+                "          } " +
+                "        }); " +
+                "      } " +
+                "      if (!globalPause && !isVideoActive) { " +
                 "        var playBtns = doc.querySelectorAll('#playback, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
                 "        playBtns.forEach(function(btn) { " +
                 "          try { btn.click(); btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
@@ -2680,18 +2858,21 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (audioManager == null || indicatorVolume == null || initialVolume == -1) return;
         int maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         
-        // Calculate new hardware volume step
-        // We use 1.2f sensitivity for a good drag feel
         int newVol = initialVolume + (int) (percent * maxVol * 1.2f);
         if (newVol < 0) newVol = 0;
         if (newVol > maxVol) newVol = maxVol;
         
-        // Set hardware volume without showing system UI (flag 0)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0);
         
         int displayPercent = (int) (((float)newVol / maxVol) * 100);
-        indicatorVolume.setText("Vol: " + displayPercent + "%");
-        indicatorVolume.setVisibility(View.VISIBLE);
+        indicatorVolume.setText("🔊 " + displayPercent + "%");
+        if (indicatorVolume.getVisibility() != View.VISIBLE) {
+            indicatorVolume.setAlpha(0f);
+            indicatorVolume.setScaleX(0.85f);
+            indicatorVolume.setScaleY(0.85f);
+            indicatorVolume.setVisibility(View.VISIBLE);
+            indicatorVolume.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(100).start();
+        }
         if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
     }
 
@@ -2708,8 +2889,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         window.setAttributes(lp);
         
         int displayPercent = (int) (newBrightness * 100);
-        indicatorBrightness.setText("Bri: " + displayPercent + "%");
-        indicatorBrightness.setVisibility(View.VISIBLE);
+        indicatorBrightness.setText("☀️ " + displayPercent + "%");
+        if (indicatorBrightness.getVisibility() != View.VISIBLE) {
+            indicatorBrightness.setAlpha(0f);
+            indicatorBrightness.setScaleX(0.85f);
+            indicatorBrightness.setScaleY(0.85f);
+            indicatorBrightness.setVisibility(View.VISIBLE);
+            indicatorBrightness.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(100).start();
+        }
         if (indicatorVolume != null) indicatorVolume.setVisibility(View.GONE);
     }
 

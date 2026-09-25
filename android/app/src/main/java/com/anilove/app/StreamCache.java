@@ -39,4 +39,9 @@ public class StreamCache {
         String key = makeKey(anilistId, episodeNumber, audio);
         return subCache.get(key);
     }
+
+    public static boolean has(int anilistId, int episodeNumber, String audio) {
+        String key = makeKey(anilistId, episodeNumber, audio);
+        return videoCache.containsKey(key);
+    }
 }

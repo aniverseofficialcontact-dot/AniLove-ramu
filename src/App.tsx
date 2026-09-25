@@ -1066,19 +1066,19 @@ export function App() {
   const isReelsActive = currentTab === 'reels';
 
   return (
-    <div className={`min-h-screen bg-[#0f172a] text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white ${isReelsActive ? 'pb-0 overflow-hidden' : 'pb-20 md:pb-10 overflow-x-clip'} relative`}>
+    <div className={`min-h-screen bg-black text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white ${isReelsActive || activeWatchEpisode ? 'pb-0 overflow-hidden' : 'pb-20 md:pb-10 overflow-x-clip'} relative`}>
       {/* WRAPPER FOR APP CONTENT (Blurred when locked) */}
       <div className={`flex flex-col flex-1 transition-all duration-1000 ease-in-out ${!isPinUnlocked ? 'blur-3xl grayscale brightness-[0.2] pointer-events-none select-none' : ''}`}>
         {/* Dynamic Ambient Particle Overlay (Snow, Sakura, Fireflies) based on User Settings */}
-        {!isReelsActive && (
+        {!isReelsActive && !activeWatchEpisode && (
           <AmbientParticles
             enabled={Boolean(settings.ambientParticlesEnabled)}
             style={settings.ambientParticleStyle || 'sakura'}
           />
         )}
 
-      {/* Subtle Bottom Ambient Lighting Only (Keeps top header clean without blue tint) */}
-      {!isReelsActive && (
+      {/* Subtle Bottom Ambient Lighting Only (Hidden when watching or in reels) */}
+      {!isReelsActive && !activeWatchEpisode && (
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="absolute bottom-[-10%] right-[5%] w-[40%] h-[40%] bg-purple-900/10 rounded-full blur-[140px]" />
           <div className="absolute bottom-[20%] left-[10%] w-[30%] h-[30%] bg-indigo-900/10 rounded-full blur-[140px]" />
