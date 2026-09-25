@@ -617,7 +617,10 @@ export function App() {
       episodeNumber: epNum,
       startTime: startTime || 0,
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // On native Android the player is an overlay — scrolling the page causes the jump bug
+    if (!Capacitor.isNativePlatform()) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const currentWatchingAnimeRef = React.useRef<Anime | null>(null);
@@ -1462,8 +1465,8 @@ export function App() {
       </main>
     </div>
 
-    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels) */}
-      {!isReelsActive && (
+    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels & Watch Page) */}
+      {!isReelsActive && !activeWatchEpisode && (
         <div className={`fixed bottom-16 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <button
             onClick={() => setIsShortcutsModalOpen(true)}
@@ -1487,20 +1490,22 @@ export function App() {
         </div>
       )}
 
-      {/* Mobile Bottom Bar (Always available on mobile for smooth navigation and tab refresh) */}
-      <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <MobileBottomNav
-          currentTab={currentTab}
-          onSelectTab={handleSelectTab}
-          settings={settings}
-          libraryCount={library.length}
-          isPinLocked={Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked)}
-          onOpenAiSensei={() => {
-            setAiContextAnime(null);
-            setIsAiModalOpen(true);
-          }}
-        />
-      </div>
+      {/* Mobile Bottom Bar (Hidden on Watch Page) */}
+      {!activeWatchEpisode && (
+        <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+          <MobileBottomNav
+            currentTab={currentTab}
+            onSelectTab={handleSelectTab}
+            settings={settings}
+            libraryCount={library.length}
+            isPinLocked={Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked)}
+            onOpenAiSensei={() => {
+              setAiContextAnime(null);
+              setIsAiModalOpen(true);
+            }}
+          />
+        </div>
+      )}
 
       {/* 360° Interactive 3D Holographic Anime Card Showcase Modal */}
       <InteractiveAnime3DCardModal

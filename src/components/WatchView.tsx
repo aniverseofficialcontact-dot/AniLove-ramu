@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -148,8 +149,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const episodesTotal = computeTotalEpisodes(anime, details);
   const score = details?.averageScore || anime.averageScore || details?.meanScore || anime.meanScore;
 
-  // Scroll to top on mount / episode change
+  // Scroll to top on mount / episode change — skip on native Android (player is an overlay)
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [anime.id, episodeNumber]);
 

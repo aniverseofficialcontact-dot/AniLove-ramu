@@ -753,14 +753,15 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public void updatePosition(int y) {
         if (isFullscreenMode || isOfflineMode) return;
-        if (Math.abs(currentY - y) < 4) return;
+        if (Math.abs(currentY - y) < 2) return;
         currentY = y;
         runOnUiThread(() -> {
             try {
                 Window window = getWindow();
                 if (window != null) {
                     View decorView = window.getDecorView();
-                    if (y < -800) {
+                    if (y <= -9000) {
+                        // Sentinel: player element is fully off-screen — hide native window
                         if (decorView.getVisibility() != View.GONE) {
                             decorView.setVisibility(View.GONE);
                         }
@@ -1681,21 +1682,24 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (playerWebView == null) return;
         String js = "(function() { " +
                 "  var spd = " + speed + "; " +
-                "  function setSpd(w) { try { " +
-                "    var v = w.document.querySelectorAll('video'); " +
-                "    v.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
-                "    var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "    if (art) { " +
-                "      try { " +
-                "        if (art.video) art.video.playbackRate = spd; " +
-                "        art.playbackRate = spd; " +
-                "      } catch(e){} " +
-                "    } " +
-                "    if (typeof w.jwplayer === 'function') { " +
-                "      try { var jp = w.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } catch(e){} " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  try { for (var i = 0; i < w.frames.length; i++) { try { setSpd(w.frames[i]); } catch(e){} } } catch(e){} " +
+                "  function setSpd(w) { " +
+                "    try { " +
+                "      var v = w.document.querySelectorAll('video'); " +
+                "      v.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
+                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
+                "      if (art) { " +
+                "        try { " +
+                "          if (art.video) art.video.playbackRate = spd; " +
+                "          art.playbackRate = spd; " +
+                "        } catch(e){} " +
+                "      } " +
+                "      if (typeof w.jwplayer === 'function') { " +
+                "        try { var jp = w.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } catch(e){} " +
+                "      } " +
+                "    } catch(e) {} " +
+                "    try { w.postMessage({ type: 'ANILOVE_CMD', action: 'speed', value: spd }, '*'); } catch(e){} " +
+                "    try { for (var i = 0; i < w.frames.length; i++) { try { setSpd(w.frames[i]); } catch(e){} } } catch(e){} " +
+                "  } " +
                 "  setSpd(window); " +
                 "})();";
         playerWebView.evaluateJavascript(js, null);
@@ -1767,26 +1771,29 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (playerWebView == null) return;
         String js = "(function() { " +
                 "  var delta = " + delta + "; " +
-                "  function seekInWin(w) { try { " +
-                "    var v = w.document.querySelector('video'); " +
-                "    if (v) { try { v.currentTime = Math.max(0, (v.currentTime || 0) + delta); } catch(e){} } " +
-                "    var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "    if (art) { " +
-                "      try { " +
-                "        var cur = art.currentTime || (art.video ? art.video.currentTime : 0) || 0; " +
-                "        var target = Math.max(0, cur + delta); " +
-                "        if (typeof art.seek === 'function') { art.seek(target); } " +
-                "        else { art.currentTime = target; } " +
-                "      } catch(e){} " +
-                "    } " +
-                "    if (typeof w.jwplayer === 'function') { " +
-                "      try { " +
-                "        var jp = w.jwplayer(); " +
-                "        if (jp && typeof jp.seek === 'function') { jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
-                "      } catch(e){} " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  try { for (var i = 0; i < w.frames.length; i++) { try { seekInWin(w.frames[i]); } catch(e) {} } } catch(e){} " +
+                "  function seekInWin(w) { " +
+                "    try { " +
+                "      var v = w.document.querySelector('video'); " +
+                "      if (v) { try { v.currentTime = Math.max(0, (v.currentTime || 0) + delta); } catch(e){} } " +
+                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
+                "      if (art) { " +
+                "        try { " +
+                "          var cur = art.currentTime || (art.video ? art.video.currentTime : 0) || 0; " +
+                "          var target = Math.max(0, cur + delta); " +
+                "          if (typeof art.seek === 'function') { art.seek(target); } " +
+                "          else { art.currentTime = target; } " +
+                "        } catch(e){} " +
+                "      } " +
+                "      if (typeof w.jwplayer === 'function') { " +
+                "        try { " +
+                "          var jp = w.jwplayer(); " +
+                "          if (jp && typeof jp.seek === 'function') { jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
+                "        } catch(e){} " +
+                "      } " +
+                "    } catch(e) {} " +
+                "    try { w.postMessage({ type: 'ANILOVE_CMD', action: 'seek', value: delta }, '*'); } catch(e){} " +
+                "    try { for (var i = 0; i < w.frames.length; i++) { try { seekInWin(w.frames[i]); } catch(e) {} } } catch(e){} " +
+                "  } " +
                 "  seekInWin(window); " +
                 "})();";
         playerWebView.evaluateJavascript(js, null);
@@ -2098,6 +2105,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    " + jwAction + " " +
                 "    " + artAction + " " +
                 "  } catch(e) {} " +
+                "  try { win.postMessage({ type: 'ANILOVE_CMD', action: 'exec', js: \"" + jsAction.replace("\"", "\\\"") + "\" }, '*'); } catch(e){} " +
                 "  for (var i = 0; i < win.frames.length; i++) { " +
                 "    try { findAndExec(win.frames[i]); } catch(e) {} " +
                 "  } " +
@@ -2216,209 +2224,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lower.contains("histats") || lower.contains("/ads.") ||
                     lower.contains("/ads/") || lower.contains("ads.js") ||
                     lower.contains("popunder") ||
-                    lower.contains("endlesshandbaglinked.com") || // IQSmart popup injection script
-                    lower.contains("openfpcdn.io") ||             // Fingerprinting JS (FingerprintJS)
-                    lower.contains("technocosmos.surf") ||        // IQSmart tracker
-                    lower.contains("track_view.php") ||           // IQSmart view tracker
-                    lower.contains("pixel.morphify") ||           // AbyssPlayer tracker pixel
-                    lower.contains("pagead2.googlesyndication")) { // AdSense
+                    lower.contains("endlesshandbaglinked.com") ||
+                    lower.contains("openfpcdn.io") ||
+                    lower.contains("technocosmos.surf") ||
+                    lower.contains("pixel.morphify") ||
+                    lower.contains("pagead2.googlesyndication")) {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                }
-
-                // Intercept abyssplayer.com main HTML to remove anti-embed top.location redirect to abyss.to
-                if ((lower.contains("abyssplayer.com") || lower.contains("play.abyssplayer.com")) &&
-                    !lower.endsWith(".js") && !lower.endsWith(".css") &&
-                    !lower.endsWith(".png") && !lower.endsWith(".jpg") && !lower.endsWith(".m3u8") &&
-                    !lower.endsWith(".mp4") && !lower.endsWith(".ts") && !lower.endsWith(".svg") && !lower.endsWith(".woff2")) {
-                    try {
-                        java.net.URL u = new java.net.URL(reqUrl);
-                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                        conn.setRequestMethod("GET");
-                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                        conn.setRequestProperty("Referer", "https://piratexplay.cc/");
-                        conn.setConnectTimeout(8000);
-                        conn.setReadTimeout(8000);
-                        if (conn.getResponseCode() == 200) {
-                            java.io.InputStream in = conn.getInputStream();
-                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
-                            StringBuilder sb = new StringBuilder();
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                sb.append(line).append("\n");
-                            }
-                            reader.close();
-                            String html = sb.toString();
-                            // 1. Fix top.location check — makes the if-condition false, else-branch fires (player loads)
-                            html = html.replace("top.location == self.location", "false")
-                                       .replace("top.location==self.location", "false")
-                                       .replace("top.location === self.location", "false")
-                                       .replace("top.location===self.location", "false");
-                            // 2. Neutralize popup/tracker domains that increment track.window → jwplayer().remove()
-                            html = html.replace("decafeligiblyhad.com", "127.0.0.1");
-                            html = html.replace("morphify.net", "127.0.0.1");
-                            html = html.replace("pagead2.googlesyndication.com", "127.0.0.1");
-                            // 3. Inject comprehensive patch script immediately before </head>
-                            // This runs BEFORE page scripts so window.open spoof is in place when isUseExtension is evaluated
-                            String patchScript =
-                                "<script>\n" +
-                                "(function(){\n" +
-                                // Spoof window.open so isUseExtension = false
-                                // AbyssPlayer checks: 'functionopen(){[nativecode]}' != window.open.toString().replace(/( |\\n)/g,'')
-                                // After .replace(/( |\\n)/g,'') our 'function open() { [native code] }' becomes 'functionopen(){[nativecode]}' ✓
-                                "  try{\n" +
-                                "    var _noop=function(){return null;};\n" +
-                                "    _noop.toString=function(){return 'function open() { [native code] }';};\n" +
-                                "    window.open=_noop;\n" +
-                                "  }catch(e){}\n" +
-                                // Stub fuckAdBlock BEFORE fuckadblock.min.js is loaded
-                                // so the adBlockDetected callback never fires and jwplayer() is never removed
-                                "  function FuckAdBlock(o){this.options={checkOnLoad:false,resetOnSiteChange:false};}\n" +
-                                "  FuckAdBlock.prototype.onDetected=function(cb){return this;};\n" +
-                                "  FuckAdBlock.prototype.onNotDetected=function(cb){if(typeof cb==='function')setTimeout(cb,0);return this;};\n" +
-                                "  FuckAdBlock.prototype.check=function(force){\n" +
-                                "    if(typeof this._onNotDetected==='function')setTimeout(this._onNotDetected,0);\n" +
-                                "    return this;\n" +
-                                "  };\n" +
-                                "  FuckAdBlock.prototype.emitEvent=function(detected){\n" +
-                                "    if(!detected&&typeof this._onNotDetected==='function')this._onNotDetected();\n" +
-                                "  };\n" +
-                                "  window.FuckAdBlock=FuckAdBlock;\n" +
-                                "  var _fab=new FuckAdBlock();\n" +
-                                "  window.blockAdBlock=_fab;\n" +
-                                "  window.fuckAdBlock=_fab;\n" +
-                                // Empty out popup array so popupWindow loop never fires
-                                "  try{\n" +
-                                "    Object.defineProperty(window,'abyssConfig',{\n" +
-                                "      get:function(){return{popups:[]};},set:function(){},configurable:true\n" +
-                                "    });\n" +
-                                "  }catch(e){}\n" +
-                                "})();\n" +
-                                // After DOMContentLoaded: remove overlays, poll for JWPlayer, force play
-                                "document.addEventListener('DOMContentLoaded',function(){\n" +
-                                "  function sweepOverlays(){\n" +
-                                "    ['overlay','loadingOverlay','moreOptionsBtn','downloadButton'].forEach(function(id){\n" +
-                                "      var el=document.getElementById(id);\n" +
-                                "      if(el){el.style.cssText='display:none!important;pointer-events:none!important';try{el.remove();}catch(_){}}\n" +
-                                "    });\n" +
-                                "    document.querySelectorAll('.video-links-modal,.jw-nextup-container,.jw-dialog,.jw-overlay').forEach(function(el){\n" +
-                                "      try{el.remove();}catch(_){}\n" +
-                                "    });\n" +
-                                "  }\n" +
-                                "  sweepOverlays();\n" +
-                                "  var maxTries=60; var tries=0;\n" +
-                                "  var timer=window._aniloveTimer=setInterval(function(){\n" +
-                                "    tries++;\n" +
-                                "    if(tries>maxTries){clearInterval(timer);return;}\n" +
-                                "    sweepOverlays();\n" +
-                                "    try{\n" +
-                                "      if(typeof jwplayer!=='undefined'){\n" +
-                                "        var jp=jwplayer();\n" +
-                                "        if(jp&&typeof jp.getState==='function'){\n" +
-                                "          var st=jp.getState();\n" +
-                                "          try{jp.setMute(false);}catch(e){}\n" +
-                                "          try{if(jp.getVolume&&jp.getVolume()<100)jp.setVolume(100);}catch(e){}\n" +
-                                "          if(st==='idle'||st==='paused'){try{jp.play();}catch(e){}}\n" +
-                                "          if(st==='playing'){clearInterval(timer);return;}\n" +
-                                "        }\n" +
-                                "      }\n" +
-                                "    }catch(e){}\n" +
-                                "    var v=document.querySelector('video');\n" +
-                                "    if(v){\n" +
-                                "      try{v.muted=false;v.volume=1;}catch(e){}\n" +
-                                "      if(!v.paused&&v.currentTime>0){clearInterval(timer);return;}\n" +
-                                "      if(v.paused&&v.readyState>=2){try{v.play();}catch(e){}}\n" +
-                                "    }\n" +
-                                "  },500);\n" +
-                                "});\n" +
-                                "</script>\n";
-                            html = html.replace("</head>", patchScript + "</head>");
-                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                // Intercept pro.iqsmartgames.com embed pages to defeat adblock detection and auto-load first available video
-                if (lower.contains("iqsmartgames.com") && lower.contains("/embed/") &&
-                    !lower.endsWith(".js") && !lower.endsWith(".css") && !lower.endsWith(".png") &&
-                    !lower.endsWith(".jpg") && !lower.endsWith(".m3u8") && !lower.endsWith(".mp4")) {
-                    try {
-                        java.net.URL u = new java.net.URL(reqUrl);
-                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                        conn.setRequestMethod("GET");
-                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                        conn.setRequestProperty("Referer", "https://piratexplay.cc/");
-                        conn.setConnectTimeout(8000);
-                        conn.setReadTimeout(8000);
-                        if (conn.getResponseCode() == 200) {
-                            java.io.InputStream in = conn.getInputStream();
-                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
-                            StringBuilder sb = new StringBuilder();
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                sb.append(line).append("\n");
-                            }
-                            reader.close();
-                            String html = sb.toString();
-                            // Block tracker/ad domains
-                            html = html.replace("endlesshandbaglinked.com", "127.0.0.1");
-                            html = html.replace("openfpcdn.io", "127.0.0.1");
-                            html = html.replace("technocosmos.surf", "127.0.0.1");
-                            html = html.replace("track_view.php", "track_view_blocked.php");
-                            // Inject early script: stub adblock bait detection + auto-trigger loadFirstAvailableVideo
-                            String iqPatch =
-                                "<script>\n" +
-                                "(function(){\n" +
-                                // Override detectAdblock to always return false (no adblock detected)
-                                "  window.detectAdblock=function(){return Promise.resolve(false);};\n" +
-                                // Override FingerprintJS to avoid fingerprinting
-                                "  window.FingerprintJS={load:function(){return Promise.resolve({get:function(){return Promise.resolve({visitorId:'anilove'});}});}};\n" +
-                                // Make bait div invisible when checked (offsetHeight trick)
-                                "  var _origCreate=document.createElement.bind(document);\n" +
-                                "  document.createElement=function(tag){\n" +
-                                "    var el=_origCreate(tag);\n" +
-                                "    if(tag==='div'){\n" +
-                                "      Object.defineProperty(el,'offsetHeight',{get:function(){return 1;},configurable:true});\n" +
-                                "      Object.defineProperty(el,'offsetWidth',{get:function(){return 1;},configurable:true});\n" +
-                                "      Object.defineProperty(el,'clientHeight',{get:function(){return 1;},configurable:true});\n" +
-                                "      Object.defineProperty(el,'clientWidth',{get:function(){return 1;},configurable:true});\n" +
-                                "    }\n" +
-                                "    return el;\n" +
-                                "  };\n" +
-                                "})();\n" +
-                                "</script>\n";
-                            html = html.replace("<head>", "<head>\n" + iqPatch);
-                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                // Intercept iamcdn.net lite.bundle.js to bypass anti-embed & host checks for AbyssPlayer
-                if (lower.contains("iamcdn.net") && lower.contains("lite.bundle.js")) {
-                    try {
-                        java.net.URL u = new java.net.URL(reqUrl);
-                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                        conn.setRequestMethod("GET");
-                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                        conn.setRequestProperty("Referer", "https://abyssplayer.com/");
-                        conn.setConnectTimeout(8000);
-                        conn.setReadTimeout(8000);
-                        if (conn.getResponseCode() == 200) {
-                            java.io.InputStream in = conn.getInputStream();
-                            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
-                            StringBuilder sb = new StringBuilder();
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                sb.append(line).append("\n");
-                            }
-                            reader.close();
-                            String js = sb.toString();
-                            // Bypass anti-embed check in SoTrym
-                            js = js.replace("!_0x3c817d&&!_0x53cb62", "false");
-                            js = js.replace("_0x3c817d=top[", "_0x3c817d=true;top[");
-                            js = js.replace("_0x53cb62='localhost'==", "_0x53cb62=true;'localhost'==");
-                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(js.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-                        }
-                    } catch (Exception ignored) {}
                 }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
@@ -2448,11 +2259,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 loadingProgress.setVisibility(View.GONE); 
                 if (!isDirectHls) {
                     injectAdEraser(); 
-                    
-                    // Simulate center touch to unlock web player autoplay & click submit/play overlays
-                    view.postDelayed(() -> simulateTouch(view), 500);
-                    view.postDelayed(() -> simulateTouch(view), 1200);
-                    view.postDelayed(() -> simulateTouch(view), 2500);
 
                     if (startTime > 0) {
                         String resumeScript = "(function() {" +
@@ -2576,10 +2382,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        // Wrap embed players (vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
-        // NOTE: abyssplayer/piratexplay/short.icu are NOT wrapped — they load directly so
-        // our JS (injectAdEraser) can reach JWPlayer inside them.
-        if (url.contains("vidsrc") || url.contains("vidlink") || url.contains("autoembed")) {
+        // Wrap embed players (abyssplayer, short.icu, piratexplay, iqsmart, rubystm, vidsrc, vidlink, autoembed) in a clean 100vw/100vh iframe container
+        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
+            url.contains("iqsmart") || url.contains("rubystm") || url.contains("vidsrc") ||
+            url.contains("vidlink") || url.contains("autoembed")) {
             isDirectHls = false;
             String iframeHtml = "<!DOCTYPE html>" +
                     "<html><head>" +
@@ -2593,42 +2399,22 @@ public class NativePlayerActivity extends AppCompatActivity {
                     "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
                     "</body></html>";
 
-            String baseUrl = "https://vidsrc.cc/";
+            String baseUrl = "https://piratexplay.cc/";
             if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
+            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
             else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
+            else if (url.contains("rubystm")) baseUrl = "https://rubystm.com/";
 
             playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
             return;
         }
 
-        if (url.contains("piratexplay.cc/public/player/") && url.contains("id=")) {
-            try {
-                Uri u = Uri.parse(url);
-                String id = u.getQueryParameter("id");
-                if (id != null && !id.trim().isEmpty()) {
-                    url = "https://pro.iqsmartgames.com/embed/" + id.trim();
-                }
-            } catch (Exception ignored) {}
-        } else if (url.contains("multi.php?data=") || url.contains("proxy/multi.php")) {
-            try {
-                Uri u = Uri.parse(url);
-                String data = u.getQueryParameter("data");
-                if (data != null && !data.isEmpty()) {
-                    String decoded = new String(android.util.Base64.decode(data, android.util.Base64.DEFAULT), java.nio.charset.StandardCharsets.UTF_8);
-                    org.json.JSONArray arr = new org.json.JSONArray(decoded);
-                    if (arr.length() > 0) {
-                        String link = arr.getJSONObject(0).optString("link");
-                        if (link != null && !link.isEmpty()) {
-                            String slug = link.substring(link.lastIndexOf('/') + 1);
-                            if (!slug.isEmpty()) {
-                                url = "https://abyssplayer.com/" + slug;
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
+        final String rawUrl = url;
+        loadResolvedUrl(rawUrl);
+    }
 
+    private void loadResolvedUrl(String url) {
+        if (url == null || url.isEmpty() || playerWebView == null) return;
         isDirectHls = false;
         String referer = "https://www.google.com/";
         if (url.contains("watchanimeworld")) {
@@ -2676,6 +2462,33 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        dOpen2.toString = function() { return 'function open() { [native code] }'; }; " +
                 "        win.open = dOpen2; " +
                 "      } catch(e){} " +
+                "      if (!win._aniloveMsgListenerAdded) { " +
+                "        win._aniloveMsgListenerAdded = true; " +
+                "        win.addEventListener('message', function(ev) { " +
+                "          if (ev && ev.data && ev.data.type === 'ANILOVE_CMD') { " +
+                "            try { " +
+                "              if (ev.data.action === 'speed') { " +
+                "                var spd = ev.data.value; " +
+                "                var vs = win.document.querySelectorAll('video'); " +
+                "                vs.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
+                "                var a = win.playerInstance || win.artPlayerInstance || win.art; " +
+                "                if (a) { if (a.video) a.video.playbackRate = spd; a.playbackRate = spd; } " +
+                "                if (typeof win.jwplayer === 'function') { var jp = win.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } " +
+                "              } else if (ev.data.action === 'seek') { " +
+                "                var delta = ev.data.value; " +
+                "                var vs = win.document.querySelectorAll('video'); " +
+                "                vs.forEach(function(el) { try { el.currentTime = Math.max(0, (el.currentTime || 0) + delta); } catch(e){} }); " +
+                "                var a = win.playerInstance || win.artPlayerInstance || win.art; " +
+                "                if (a) { var c = a.currentTime || 0; if (typeof a.seek === 'function') a.seek(Math.max(0, c + delta)); else a.currentTime = Math.max(0, c + delta); } " +
+                "                if (typeof win.jwplayer === 'function') { var jp = win.jwplayer(); if (jp && jp.seek) jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
+                "              } else if (ev.data.action === 'exec') { " +
+                "                var v = win.document.querySelector('video'); " +
+                "                eval(ev.data.js); " +
+                "              } " +
+                "            } catch(e) {} " +
+                "          } " +
+                "        }); " +
+                "      } " +
                 "      var doc = win.document; " +
                 "      var abyssOverlay = doc.getElementById('overlay'); " +
                 "      if (abyssOverlay) { try { abyssOverlay.remove(); } catch(e){} } " +
@@ -2759,6 +2572,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "            } " +
                 "          } " +
                 "        } catch(e) {} " +
+                "      } " +
+                "      if (window.AndroidScrubber && typeof window.AndroidScrubber.onStateUpdate === 'function') { " +
+                "        if (v && (v.duration > 0 || v.currentTime > 0)) { " +
+                "          window.AndroidScrubber.onStateUpdate(v.currentTime || 0, v.duration || 0, v.paused); " +
+                "        } else if (typeof win.jwplayer === 'function') { " +
+                "          var jp2 = win.jwplayer(); " +
+                "          if (jp2 && typeof jp2.getPosition === 'function') { " +
+                "            var st2 = jp2.getState ? jp2.getState() : ''; " +
+                "            window.AndroidScrubber.onStateUpdate(jp2.getPosition() || 0, jp2.getDuration() || 0, st2 === 'paused' || st2 === 'idle'); " +
+                "          } " +
+                "        } else if (art) { " +
+                "          window.AndroidScrubber.onStateUpdate(art.currentTime || 0, art.duration || 0, art.playing === false || art.isPause); " +
+                "        } " +
                 "      } " +
                 "    } catch(e) {} " +
                 "    for (var i = 0; i < win.frames.length; i++) { try { autoTrigger(win.frames[i]); } catch(e) {} } " +

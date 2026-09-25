@@ -565,15 +565,26 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     if (!Capacitor.isNativePlatform() || streamStatus !== 'ready') return;
 
     let ticking = false;
-    let lastY = 0;
+    let lastPhysicalY = -9999;
+    const dpr = window.devicePixelRatio || 1;
 
     const syncPosition = () => {
       if (playerContainerRef.current) {
         const rect = playerContainerRef.current.getBoundingClientRect();
-        const currentY = Math.round(rect.top);
-        if (Math.abs(currentY - lastY) >= 4) {
-          lastY = currentY;
-          NativePlayer.updatePosition({ y: currentY });
+        const viewportH = window.innerHeight;
+
+        let physicalY: number;
+        if (rect.bottom < 0 || rect.top > viewportH) {
+          // Fully off-screen — tell native to hide
+          physicalY = -9999;
+        } else {
+          // Visible (possibly partially) — clamp top to 0 then convert to physical px
+          physicalY = Math.round(Math.max(0, rect.top) * dpr);
+        }
+
+        if (Math.abs(physicalY - lastPhysicalY) >= 2) {
+          lastPhysicalY = physicalY;
+          NativePlayer.updatePosition({ y: physicalY });
         }
       }
       ticking = false;
