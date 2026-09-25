@@ -257,12 +257,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void updateMetadataFromIntent(Intent intent) {
         if (intent == null) return;
         String animeTitle = intent.getStringExtra("animeTitle");
-        if (animeTitle == null || animeTitle.isEmpty()) {
-            animeTitle = intent.getStringExtra("title");
-        }
-        if (animeTitle == null || animeTitle.isEmpty()) {
-            animeTitle = "Now Playing";
-        }
+        String rawTitle = intent.getStringExtra("title");
         int epNum = intent.getIntExtra("episodeNumber", 1);
         startTime = intent.getIntExtra("startTime", 0);
         subtitleUrl = intent.getStringExtra("subtitleUrl");
@@ -271,13 +266,25 @@ public class NativePlayerActivity extends AppCompatActivity {
         String audio = intent.getStringExtra("audio");
         if (audio == null || audio.isEmpty()) audio = "DUB";
 
+        if (rawTitle == null || rawTitle.isEmpty()) {
+            rawTitle = animeTitle != null ? animeTitle : "Now Playing";
+        }
+        
+        // Clean duplicate episode suffix if present (e.g., "Title - Ep 8 - EP 8" -> "Title - Ep 8")
+        String displayTitle = rawTitle;
+        if (displayTitle.matches("(?i).*\\b[-–|]?\\s*(ep|episode)\\s*\\d+.*")) {
+            displayTitle = displayTitle.replaceAll("(?i)\\s*-\\s*(ep|episode)\\s*\\d+\\s*-\\s*(ep|episode)\\s*(\\d+)", " - Ep $3");
+        } else if (epNum > 0) {
+            displayTitle = displayTitle + " - Ep " + epNum;
+        }
+
         TextView videoTitleView = findViewById(R.id.video_title);
         TextView portraitAnimeTitle = findViewById(R.id.portrait_anime_title);
         TextView portraitEpSubtitle = findViewById(R.id.portrait_episode_subtitle);
         TextView portraitBadgeAudio = findViewById(R.id.portrait_badge_audio);
 
-        if (videoTitleView != null) videoTitleView.setText(animeTitle + " - EP " + epNum);
-        if (portraitAnimeTitle != null) portraitAnimeTitle.setText(animeTitle);
+        if (videoTitleView != null) videoTitleView.setText(displayTitle);
+        if (portraitAnimeTitle != null) portraitAnimeTitle.setText(animeTitle != null ? animeTitle : displayTitle);
         if (portraitEpSubtitle != null) portraitEpSubtitle.setText("Episode " + epNum);
         if (portraitBadgeAudio != null) portraitBadgeAudio.setText(audio.toUpperCase());
     }
@@ -359,7 +366,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
                 if (topBar != null) {
                     topBar.setVisibility(View.VISIBLE);
-                    topBar.setPadding(topBar.getPaddingLeft(), 16, topBar.getPaddingRight(), topBar.getPaddingBottom());
+                    int safeTopPadding = (int) (20 * getResources().getDisplayMetrics().density);
+                    topBar.setPadding(topBar.getPaddingLeft(), safeTopPadding, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
         } else if (isOfflineMode) {
