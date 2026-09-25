@@ -161,6 +161,11 @@ public class VideoSniffer {
             "  }" +
             "  function deepScan(win) {" +
             "    try {" +
+            "      if (win.hls && win.hls.url) VideoBridge.onUrlFound(win.hls.url);" +
+            "      if (typeof win.jwplayer === 'function') {" +
+            "        try { var jp = win.jwplayer(); if (jp && jp.getPlaylist) { var pl = jp.getPlaylist(); if (pl && pl[0] && pl[0].file) VideoBridge.onUrlFound(pl[0].file); } } catch(e){}" +
+            "      }" +
+            "      if (win.art && win.art.option && win.art.option.url) VideoBridge.onUrlFound(win.art.option.url);" +
             "      var vids = win.document.querySelectorAll('video');" +
             "      for (var i = 0; i < vids.length; i++) {" +
             "        var src = vids[i].currentSrc || vids[i].src;" +

@@ -261,6 +261,44 @@ export function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'
   return rawUrl;
 }
 
+export async function probeHlsResolutions(playlistUrl: string): Promise<StreamResolution[]> {
+  if (!playlistUrl || !playlistUrl.includes('.m3u8')) {
+    return ['1080p', '720p', '480p'];
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(playlistUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      const detected = new Set<StreamResolution>();
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (line.includes('RESOLUTION=')) {
+          const match = line.match(/RESOLUTION=(\d+)x(\d+)/i);
+          if (match && match[2]) {
+            const h = parseInt(match[2], 10);
+            if (h >= 1000) detected.add('1080p');
+            else if (h >= 700) detected.add('720p');
+            else if (h >= 400) detected.add('480p');
+          }
+        }
+      }
+
+      if (detected.size > 0) {
+        const order: StreamResolution[] = ['1080p', '720p', '480p'];
+        return order.filter(q => detected.has(q));
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return ['720p', '480p'];
+}
+
 /**
  * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter.
  * Fetches exclusively Server 1, Server 2, and Server 3.
@@ -378,6 +416,7 @@ export async function resolveEpisodeSource({
     }
 
     const selectedUrl = unpackServerUrl(selectedServer?.url || streamInfo.streamLink || streamInfo.file, language);
+    const detectedResolutions = await probeHlsResolutions(selectedUrl);
 
     if (selectedUrl) {
       return {
@@ -392,6 +431,7 @@ export async function resolveEpisodeSource({
           skipData: { intro: [0, 0], outro: [0, 0] },
           availableServers,
           availableLanguages: availableLangs,
+          availableResolutions: detectedResolutions,
           selectedServerName: selectedServer?.name || 'Server 1',
           isDubAvailable: true,
           isFallback: false,
