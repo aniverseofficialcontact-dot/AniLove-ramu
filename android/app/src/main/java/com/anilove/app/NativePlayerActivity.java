@@ -2719,6 +2719,22 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          if (v.volume < 1.0) v.volume = 1.0; " +
                 "        } " +
                 "      } " +
+                "      if (!win._aniloveObserverSet) { " +
+                "        win._aniloveObserverSet = true; " +
+                "        try { " +
+                "          var observer = new MutationObserver(function() { " +
+                "            try { " +
+                "              var badEls = doc.querySelectorAll('.top-gradient, .skin-controls, .skin-timeline, .bottom-bar-panel, .skin-menu, .skin-big-play, .art-controls, .art-bottom, .art-mask, .top-left, #btn-server, .btn-server, .server-toggle, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container'); " +
+                "              badEls.forEach(function(el) { try { el.style.setProperty('display', 'none', 'important'); el.style.setProperty('visibility', 'hidden', 'important'); el.remove(); } catch(e){} }); " +
+                "              var vObs = doc.querySelector('video'); " +
+                "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0) { " +
+                "                for (var tt2 = 0; tt2 < vObs.textTracks.length; tt2++) { try { vObs.textTracks[tt2].mode = 'showing'; } catch(e){} } " +
+                "              } " +
+                "            } catch(e){} " +
+                "          }); " +
+                "          if (doc.body) { observer.observe(doc.body, { childList: true, subtree: true }); } " +
+                "        } catch(e){} " +
+                "      } " +
                 "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
                 "      if (art && typeof art.play === 'function' && !globalPause && !isVideoActive) { " +
                 "        try { " +

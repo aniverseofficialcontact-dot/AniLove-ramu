@@ -163,7 +163,7 @@ export async function queueBatchEpisodeDownloads(
 
         if (res && res.status === 'available' && res.source?.url) {
           // Check if requested language is available in the episode stream
-          if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
+          if (!serverName.toLowerCase().includes('server 2') && res.source.availableLanguages && res.source.availableLanguages.length > 0) {
             if (!res.source.availableLanguages.includes(audio)) {
               const langLabel = SUPPORTED_LANGUAGES.find(l => l.code === audio)?.label || audio;
               errors.push(`EP ${ep.number}: ${langLabel} is not available on ${serverName}. Download skipped.`);
