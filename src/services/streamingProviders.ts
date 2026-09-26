@@ -307,6 +307,47 @@ export async function probeHlsResolutions(playlistUrl: string): Promise<StreamRe
 const EPISODE_STREAM_CACHE = new Map<string, any>();
 const HIANIME_EPISODE_CACHE = new Map<string, AvailableServerOption[]>();
 
+export function generateTier1HiAnimeServers(
+  anilistId: number | string | undefined,
+  episodeNumber: number
+): AvailableServerOption[] {
+  const id = anilistId || 1;
+  const ep = episodeNumber || 1;
+
+  return [
+    {
+      name: 'Server 2-A-SUB',
+      type: 'SUB',
+      linkId: `https://vidnest.fun/anime/${id}/${ep}/sub`,
+    },
+    {
+      name: 'Server 2-B-SUB',
+      type: 'SUB',
+      linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/sub`,
+    },
+    {
+      name: 'Server 2-C-SUB',
+      type: 'SUB',
+      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/sub`,
+    },
+    {
+      name: 'Server 2-A-DUB',
+      type: 'DUB',
+      linkId: `https://vidnest.fun/anime/${id}/${ep}/dub`,
+    },
+    {
+      name: 'Server 2-B-DUB',
+      type: 'DUB',
+      linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/dub`,
+    },
+    {
+      name: 'Server 2-C-DUB',
+      type: 'DUB',
+      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/dub`,
+    },
+  ];
+}
+
 export async function fetchHiAnimeApiServers(
   anilistId: number | string | undefined,
   animeTitle: string,
@@ -548,37 +589,33 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
-    // Query HiAnime API for Server 2 options safely (6 servers: 3 SUB, 3 DUB)
-    let hiAnimeServers: AvailableServerOption[] = [];
-    try {
-      hiAnimeServers = await fetchHiAnimeApiServers(
-        anilistId,
-        anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
-        episodeNumber,
-        isOngoing,
-        refresh
-      );
-    } catch {
-      // Non-blocking fallback
-    }
+    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all 6 Server 2 options)
+    const tier1Servers = generateTier1HiAnimeServers(anilistId, episodeNumber);
 
-    const isSubMode = language === 'SUB' || language === 'JAP';
-    const isDubMode = language === 'DUB' || language === 'ENG';
-
-    // Include HiAnime sub/dub servers cleanly according to audio mode or include both if regional
-    let matchedHiAnime = hiAnimeServers.filter(s => {
-      if (isSubMode) return s.type === 'SUB';
-      if (isDubMode) return s.type === 'DUB';
-      return true; // For regional audio (HIN, TAM, TEL, etc.), present all HiAnime options
-    });
-
-    if (matchedHiAnime.length === 0 && hiAnimeServers.length > 0) {
-      matchedHiAnime = hiAnimeServers;
+    // Tier 2: Check if remote API cache or fresh remote fetch overrides Tier 1
+    let hiAnimeServers = tier1Servers;
+    if (HIANIME_EPISODE_CACHE.has(`${anilistId || anime.title}_ep${episodeNumber}`)) {
+      hiAnimeServers = HIANIME_EPISODE_CACHE.get(`${anilistId || anime.title}_ep${episodeNumber}`)!;
+    } else if (refresh && anilistId) {
+      try {
+        const fetched = await fetchHiAnimeApiServers(
+          anilistId,
+          anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
+          episodeNumber,
+          isOngoing,
+          refresh
+        );
+        if (fetched && fetched.length > 0) {
+          hiAnimeServers = fetched;
+        }
+      } catch {
+        // Fallback to Tier 1
+      }
     }
 
     const combinedAvailableServers: AvailableServerOption[] = [
       ...availableServers,
-      ...matchedHiAnime,
+      ...hiAnimeServers,
     ];
 
     // Select requested server URL
@@ -588,12 +625,16 @@ export async function resolveEpisodeSource({
     if (serverName) {
       const norm = serverName.toLowerCase().trim();
 
-      // Check HiAnime servers if requested (e.g., Server 2-A-SUB, Server 2-B-DUB, Server 2-A)
+      // Check HiAnime servers (e.g. Server 2-A-SUB, Server 2-B-SUB, Server 2-C-SUB, Server 2-A-DUB, etc.)
       const matchedHi = hiAnimeServers.find(s => {
-        const sNorm = s.name.toLowerCase();
+        const sNorm = s.name.toLowerCase().trim();
         if (sNorm === norm) return true;
-        if (norm.startsWith('server 2') && sNorm.startsWith(norm)) return true;
-        if (norm.startsWith('server 2') && norm.startsWith(sNorm)) return true;
+
+        const cleanNorm = norm.replace(/[^a-z0-9]/g, '');
+        const cleanSNorm = sNorm.replace(/[^a-z0-9]/g, '');
+        if (cleanNorm === cleanSNorm) return true;
+        if (cleanNorm.length > 5 && (cleanSNorm.includes(cleanNorm) || cleanNorm.includes(cleanSNorm))) return true;
+
         return false;
       });
 

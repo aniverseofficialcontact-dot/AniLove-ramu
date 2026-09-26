@@ -429,19 +429,20 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server options">
-            {/* Server 1, Server 1-B, and HiAnime Server 2-A, 2-B, 2-C Options */}
-            {(selectedAudio === 'SUB' || selectedAudio === 'JAP'
-              ? ['Server 1', 'Server 1-B', 'Server 2-A-SUB', 'Server 2-B-SUB', 'Server 2-C-SUB']
-              : selectedAudio === 'DUB' || selectedAudio === 'ENG'
-              ? ['Server 1', 'Server 1-B', 'Server 2-A-DUB', 'Server 2-B-DUB', 'Server 2-C-DUB']
-              : ['Server 1', 'Server 1-B', 'Server 2-A-SUB', 'Server 2-B-SUB', 'Server 2-C-SUB', 'Server 2-A-DUB', 'Server 2-B-DUB', 'Server 2-C-DUB']
-            ).map((srvName, idx) => {
-              const normSel = (selectedSubServer || 'Server 1').toLowerCase();
-              const normSrv = srvName.toLowerCase();
-              const isSelected =
-                normSel === normSrv ||
-                normSrv.startsWith(normSel) ||
-                normSel.startsWith(normSrv);
+            {/* Server 1, Server 1-B, and HiAnime Server 2-A, 2-B, 2-C SUB/DUB Options */}
+            {[
+              'Server 1',
+              'Server 1-B',
+              'Server 2-A-SUB',
+              'Server 2-B-SUB',
+              'Server 2-C-SUB',
+              'Server 2-A-DUB',
+              'Server 2-B-DUB',
+              'Server 2-C-DUB',
+            ].map((srvName, idx) => {
+              const normSel = (selectedSubServer || 'Server 1').toLowerCase().trim();
+              const normSrv = srvName.toLowerCase().trim();
+              const isSelected = normSel === normSrv;
 
               return (
                 <button
