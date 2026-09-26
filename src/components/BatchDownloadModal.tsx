@@ -48,9 +48,13 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     };
   }, []);
 
-  const [availableQualities, setAvailableQualities] = useState<string[]>(['720p', '480p']);
+  const [availableQualities, setAvailableQualities] = useState<string[]>(['1080p', '720p', '480p']);
+  const [availableServers, setAvailableServers] = useState<{ name: string; linkId: string }[]>([
+    { name: 'Server 1', linkId: '' },
+    { name: 'Server 1-B', linkId: '' },
+  ]);
 
-  // Sync available languages and qualities dynamically from stream API
+  // Sync available languages, qualities, and servers dynamically from stream API
   useEffect(() => {
     let isMounted = true;
     async function probeStream() {
@@ -62,6 +66,15 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
           serverName: selectedServer,
         });
         if (isMounted && res && res.source) {
+          if (res.source.availableServers && res.source.availableServers.length > 0) {
+            setAvailableServers(res.source.availableServers);
+            const exists = res.source.availableServers.some(
+              s => s.name.toLowerCase() === selectedServer.toLowerCase()
+            );
+            if (!exists) {
+              setSelectedServer('Server 1');
+            }
+          }
           if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
             setAvailableLanguages(res.source.availableLanguages);
             if (!res.source.availableLanguages.includes(selectedAudio)) {
@@ -240,8 +253,9 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
             >
               <option value="Server 1">Server 1 (Fast HLS)</option>
-              <option value="Server 2">Server 2 (AbyssPlayer / Multi-Audio)</option>
-              <option value="Server 3">Server 3 (IQSmart / Embed)</option>
+              {availableServers.some(s => s.name === 'Server 1-B') && (
+                <option value="Server 1-B">Server 1-B (RubyStm Multi-Audio)</option>
+              )}
             </select>
           </div>
 

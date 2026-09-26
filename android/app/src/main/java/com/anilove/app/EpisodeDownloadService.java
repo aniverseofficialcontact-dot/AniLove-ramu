@@ -766,7 +766,10 @@ public class EpisodeDownloadService extends Service {
                         String resStr = line.substring(resIdx + 11).split("[,\\s]")[0];
                         pendingVariant.resolution = resStr;
                         if (resStr.contains("x")) {
-                            pendingVariant.height = Integer.parseInt(resStr.split("x")[1]);
+                            String[] dims = resStr.split("x");
+                            int w = Integer.parseInt(dims[0]);
+                            int h = Integer.parseInt(dims[1]);
+                            pendingVariant.height = Math.max(w, h);
                         }
                     } catch (Exception ignored) {}
                 }
@@ -797,7 +800,7 @@ public class EpisodeDownloadService extends Service {
         reader.close();
         conn.disconnect();
 
-        // If it was a master playlist, select variant matching requested quality or highest available
+        // If it was a master playlist, select variant matching requested quality or closest available
         if (isMasterPlaylist && !variantObjects.isEmpty()) {
             Collections.sort(variantObjects, (a, b) -> {
                 if (a.height != b.height) return Integer.compare(a.height, b.height);
@@ -807,23 +810,23 @@ public class EpisodeDownloadService extends Service {
             HlsVariant selectedVariant = null;
             String reqQuality = item.quality != null ? item.quality.toLowerCase() : "1080p";
 
-            if (reqQuality.contains("720")) {
+            if (reqQuality.contains("1080")) {
                 for (HlsVariant v : variantObjects) {
-                    if (v.height == 720 || (v.resolution != null && v.resolution.contains("720"))) {
+                    if (v.height >= 1000 || (v.resolution != null && v.resolution.contains("1080"))) {
+                        selectedVariant = v;
+                        break;
+                    }
+                }
+            } else if (reqQuality.contains("720")) {
+                for (HlsVariant v : variantObjects) {
+                    if ((v.height >= 700 && v.height < 1000) || (v.resolution != null && v.resolution.contains("720"))) {
                         selectedVariant = v;
                         break;
                     }
                 }
             } else if (reqQuality.contains("480") || reqQuality.contains("360")) {
                 for (HlsVariant v : variantObjects) {
-                    if (v.height == 480 || v.height == 360 || (v.resolution != null && (v.resolution.contains("480") || v.resolution.contains("360")))) {
-                        selectedVariant = v;
-                        break;
-                    }
-                }
-            } else if (reqQuality.contains("1080")) {
-                for (HlsVariant v : variantObjects) {
-                    if (v.height == 1080 || (v.resolution != null && v.resolution.contains("1080"))) {
+                    if ((v.height >= 360 && v.height < 700) || (v.resolution != null && (v.resolution.contains("480") || v.resolution.contains("360")))) {
                         selectedVariant = v;
                         break;
                     }
@@ -831,7 +834,17 @@ public class EpisodeDownloadService extends Service {
             }
 
             if (selectedVariant == null) {
-                selectedVariant = variantObjects.get(variantObjects.size() - 1);
+                int targetH = reqQuality.contains("720") ? 720 : reqQuality.contains("480") ? 480 : 1080;
+                HlsVariant closest = variantObjects.get(0);
+                int minDiff = Math.abs(closest.height - targetH);
+                for (HlsVariant v : variantObjects) {
+                    int diff = Math.abs(v.height - targetH);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closest = v;
+                    }
+                }
+                selectedVariant = closest;
             }
 
             Log.i(TAG, "Selected HLS variant for quality [" + reqQuality + "]: " + selectedVariant.url + " (res: " + selectedVariant.resolution + ")");

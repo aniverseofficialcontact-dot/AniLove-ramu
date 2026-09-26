@@ -1,7 +1,9 @@
 package com.anilove.app;
 
 import android.content.Intent;
+import android.media.MediaScannerConnection;
 import android.os.Build;
+import android.os.Environment;
 import android.util.Log;
 
 import com.getcapacitor.JSArray;
@@ -14,6 +16,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.List;
 
 @CapacitorPlugin(name = "DownloadPlugin")
@@ -188,6 +192,67 @@ public class DownloadPlugin extends Plugin {
         } catch (Exception e) {
             Log.e(TAG, "Error in playOffline", e);
             call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void exportToPublicStorage(PluginCall call) {
+        try {
+            String localFilePath = call.getString("localFilePath");
+            String animeTitle = call.getString("animeTitle", "Anime");
+            int episodeNumber = call.getInt("episodeNumber", 1);
+
+            if (localFilePath == null || localFilePath.isEmpty()) {
+                call.reject("Missing localFilePath");
+                return;
+            }
+
+            File srcFile = new File(localFilePath);
+            if (!srcFile.exists()) {
+                call.reject("File does not exist: " + localFilePath);
+                return;
+            }
+
+            File publicDir = new File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "AniLove"
+            );
+            if (!publicDir.exists()) {
+                publicDir.mkdirs();
+            }
+
+            String safeTitle = animeTitle.replaceAll("[^a-zA-Z0-9\\s_-]", "").trim().replaceAll("\\s+", "_");
+            String fileName = safeTitle + "_EP" + episodeNumber + ".mp4";
+            File destFile = new File(publicDir, fileName);
+
+            FileInputStream in = new FileInputStream(srcFile);
+            FileOutputStream out = new FileOutputStream(destFile);
+            byte[] buf = new byte[65536];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+            in.close();
+            out.flush();
+            out.close();
+
+            try {
+                MediaScannerConnection.scanFile(
+                    getContext(),
+                    new String[]{ destFile.getAbsolutePath() },
+                    new String[]{ "video/mp4" },
+                    null
+                );
+            } catch (Exception ignored) {}
+
+            JSObject res = new JSObject();
+            res.put("success", true);
+            res.put("exportPath", destFile.getAbsolutePath());
+            res.put("fileName", fileName);
+            call.resolve(res);
+        } catch (Exception e) {
+            Log.e(TAG, "Error exporting file to public storage", e);
+            call.reject("Export failed: " + e.getMessage());
         }
     }
 }

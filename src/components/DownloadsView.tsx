@@ -25,6 +25,7 @@ import {
   cancelDownload,
   playOfflineEpisode,
   refreshDownloadsList,
+  exportDownloadToPublicStorage,
 } from '../services/downloadManager';
 
 interface DownloadsViewProps {
@@ -37,6 +38,7 @@ export const DownloadsView: React.FC<DownloadsViewProps> = ({ onBack, onOpenAnim
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAnimeTitle, setSelectedAnimeTitle] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     refreshDownloadsList();
@@ -45,6 +47,18 @@ export const DownloadsView: React.FC<DownloadsViewProps> = ({ onBack, onOpenAnim
     });
     return () => unsubscribe();
   }, []);
+
+  const handleExport = async (item: DownloadItemInfo) => {
+    try {
+      setExportMessage(`Exporting EP ${item.episodeNumber} to Downloads/AniLove...`);
+      const res = await exportDownloadToPublicStorage(item);
+      setExportMessage(`Exported to Storage/Downloads/AniLove/${res.fileName}!`);
+      setTimeout(() => setExportMessage(null), 4000);
+    } catch (err: any) {
+      alert(`Export failed: ${err?.message || 'Error exporting file'}`);
+      setExportMessage(null);
+    }
+  };
 
   // Format bytes to human readable format (MB / GB)
   const formatBytes = (bytes: number): string => {
@@ -443,6 +457,12 @@ export const DownloadsView: React.FC<DownloadsViewProps> = ({ onBack, onOpenAnim
       {selectedGroup && (
         <div className="space-y-6 animate-fadeIn">
           {/* Group Header Card */}
+          {exportMessage && (
+            <div className="p-3 rounded-2xl bg-violet-950/80 border border-violet-500/50 text-violet-200 text-xs font-bold text-center animate-fadeIn shadow-lg">
+              {exportMessage}
+            </div>
+          )}
+
           <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4 min-w-0">
               <div className="w-16 h-20 sm:w-20 sm:h-28 rounded-2xl overflow-hidden bg-slate-950 shrink-0 border border-slate-800 shadow-md">
@@ -558,13 +578,23 @@ export const DownloadsView: React.FC<DownloadsViewProps> = ({ onBack, onOpenAnim
                       {/* Actions */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         {isCompleted && (
-                          <button
-                            onClick={() => handlePlay(item)}
-                            className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-white" />
-                            <span>Play</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handlePlay(item)}
+                              className="px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-white" />
+                              <span>Play</span>
+                            </button>
+                            <button
+                              onClick={() => handleExport(item)}
+                              className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700/80"
+                              title="Export to Gallery / Public Downloads folder"
+                            >
+                              <FolderDown className="w-4 h-4 text-violet-400" />
+                              <span className="hidden sm:inline">Export</span>
+                            </button>
+                          </>
                         )}
                         {isDownloading && (
                           <button

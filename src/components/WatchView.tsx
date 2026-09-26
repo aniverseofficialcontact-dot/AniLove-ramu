@@ -425,12 +425,12 @@ export const WatchView: React.FC<WatchViewProps> = ({
               <Radio className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
               <span>Streaming Servers</span>
             </span>
-            <span className="text-[11px] text-neutral-500">3 Active Stream Servers</span>
+            <span className="text-[11px] text-neutral-500">Active Stream Servers</span>
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server options">
-            {/* Server 1, Server 2, Server 3 Buttons */}
-            {['Server 1', 'Server 2', 'Server 3'].map((srvName, idx) => {
+            {/* Server 1 and Server 1-B (RubyStm filter applied) */}
+            {['Server 1', 'Server 1-B'].map((srvName, idx) => {
               const isSelected = (selectedSubServer || 'Server 1').toLowerCase() === srvName.toLowerCase();
               return (
                 <button

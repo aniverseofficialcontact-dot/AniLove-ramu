@@ -36,6 +36,11 @@ export interface DownloadPluginInterface {
     audio?: string;
     quality?: string;
   }): Promise<void>;
+  exportToPublicStorage(options: {
+    localFilePath: string;
+    animeTitle?: string;
+    episodeNumber: number;
+  }): Promise<{ success: boolean; exportPath: string; fileName: string }>;
   addListener(
     eventName: 'onDownloadProgress',
     listenerFunc: (data: {
@@ -304,4 +309,34 @@ export function getEpisodeDownloadItem(
   episodeNumber: number
 ): DownloadItemInfo | undefined {
   return downloadsCache.find(d => d.anilistId === anilistId && d.episodeNumber === episodeNumber);
+}
+
+export async function exportDownloadToPublicStorage(
+  download: DownloadItemInfo
+): Promise<{ success: boolean; exportPath: string; fileName: string }> {
+  let filePath = download.localFilePath;
+
+  if (!filePath && Capacitor.isNativePlatform()) {
+    const latest = await refreshDownloadsList();
+    const matched = latest.find(
+      d => d.id === download.id || (d.anilistId === download.anilistId && d.episodeNumber === download.episodeNumber)
+    );
+    if (matched && matched.localFilePath) {
+      filePath = matched.localFilePath;
+    }
+  }
+
+  if (!filePath) {
+    throw new Error('Local file path is missing or file not found.');
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    return await DownloadPlugin.exportToPublicStorage({
+      localFilePath: filePath,
+      animeTitle: download.animeTitle,
+      episodeNumber: download.episodeNumber,
+    });
+  } else {
+    throw new Error('Exporting to device storage is only supported on Android native devices.');
+  }
 }

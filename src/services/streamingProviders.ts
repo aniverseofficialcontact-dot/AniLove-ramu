@@ -117,8 +117,6 @@ export function createDirectStreamSource(
 
   const availableServers: AvailableServerOption[] = [
     { name: 'Server 1', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
-    { name: 'Server 2', type: isDub ? 'DUB' : 'SUB', linkId: `https://autoembed.co/anime/anilist/${anilistId}/${episodeNumber}?dub=${isDub ? 1 : 0}` },
-    { name: 'Server 3', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidsrc.cc/v2/embed/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
   ];
 
   let selectedUrl = availableServers[0].linkId;
@@ -142,6 +140,7 @@ export function createDirectStreamSource(
     skipData: { intro: [0, 0], outro: [0, 0] },
     availableServers,
     availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
+    availableResolutions: ['1080p', '720p', '480p'],
     selectedServerName,
     isDubAvailable: true,
     isFallback: true,
@@ -263,7 +262,7 @@ export function unpackServerUrl(rawUrl: string, language: StreamLanguage = 'DUB'
 
 export async function probeHlsResolutions(playlistUrl: string): Promise<StreamResolution[]> {
   if (!playlistUrl || !playlistUrl.includes('.m3u8')) {
-    return ['720p', '480p'];
+    return ['1080p', '720p', '480p'];
   }
   try {
     const controller = new AbortController();
@@ -279,11 +278,13 @@ export async function probeHlsResolutions(playlistUrl: string): Promise<StreamRe
       for (const line of lines) {
         if (line.includes('RESOLUTION=')) {
           const match = line.match(/RESOLUTION=(\d+)x(\d+)/i);
-          if (match && match[2]) {
+          if (match && (match[1] || match[2])) {
+            const w = parseInt(match[1], 10);
             const h = parseInt(match[2], 10);
-            if (h >= 1000) detected.add('1080p');
-            else if (h >= 700) detected.add('720p');
-            else if (h >= 400) detected.add('480p');
+            const maxDim = Math.max(w, h);
+            if (maxDim >= 1000) detected.add('1080p');
+            else if (maxDim >= 700) detected.add('720p');
+            else if (maxDim >= 400) detected.add('480p');
           }
         }
       }
@@ -296,7 +297,7 @@ export async function probeHlsResolutions(playlistUrl: string): Promise<StreamRe
   } catch {
     // fallback
   }
-  return ['720p', '480p'];
+  return ['1080p', '720p', '480p'];
 }
 
 const EPISODE_STREAM_CACHE = new Map<string, any>();
@@ -393,37 +394,65 @@ export async function resolveEpisodeSource({
 
     let targetServers: Array<{ name: string; url: string }> = [];
 
-    const explicitNamed = rawServers.filter(s =>
-      s.name === 'Server 1' || s.name === 'Server 2' || s.name === 'Server 3'
-    );
+    // Filter raw servers: Server 3 is completely purged. Server 2 becomes Server 1-B.
+    const filteredRaw = rawServers.filter(s => s.name === 'Server 1' || s.name === 'Server 2');
 
-    if (explicitNamed.length > 0) {
-      targetServers = explicitNamed;
-    } else if (rawServers.length > 0) {
-      targetServers = rawServers.slice(0, 3).map((s, idx) => ({
-        name: `Server ${idx + 1}`,
+    if (filteredRaw.length > 0) {
+      targetServers = filteredRaw.map(s => ({
+        name: s.name === 'Server 2' ? 'Server 1-B' : s.name,
         url: s.url,
       }));
+    } else if (rawServers.length > 0) {
+      targetServers = rawServers
+        .filter(s => s.name !== 'Server 3')
+        .slice(0, 2)
+        .map((s, idx) => ({
+          name: idx === 1 ? 'Server 1-B' : 'Server 1',
+          url: s.url,
+        }));
     } else if (streamInfo.streamLink || streamInfo.file) {
       targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
     }
 
     const availableLangs = extractAvailableLanguagesFromStreamData(rawServers);
 
-    targetServers = targetServers.map(s => ({
-      name: s.name,
-      url: unpackServerUrl(s.url, language),
-    }));
+    // Unpack URLs and apply STRICT RUBYSTM DOMAIN RULE for Server 1-B
+    const processedServers: Array<{ name: string; url: string }> = [];
 
-    const availableServers: AvailableServerOption[] = targetServers.map(srv => ({
+    for (const s of targetServers) {
+      const unpackedUrl = unpackServerUrl(s.url, language);
+
+      if (s.name === 'Server 1-B') {
+        // STRICT RULE: Server 1-B appears ONLY IF its URL originates from rubystm (e.g. rubystm.com)
+        const isRubyStm = unpackedUrl && unpackedUrl.toLowerCase().includes('rubystm');
+        if (isRubyStm) {
+          processedServers.push({ name: 'Server 1-B', url: unpackedUrl });
+        }
+        // If not rubystm (e.g. piratexplay.com), Server 1-B is omitted entirely!
+      } else {
+        processedServers.push({ name: s.name, url: unpackedUrl });
+      }
+    }
+
+    // Ensure at least Server 1 exists
+    if (processedServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
+      processedServers.push({
+        name: 'Server 1',
+        url: unpackServerUrl(streamInfo.streamLink || streamInfo.file, language),
+      });
+    }
+
+    const availableServers: AvailableServerOption[] = processedServers.map(srv => ({
       name: srv.name,
       type: language,
       linkId: srv.url,
     }));
 
-    let selectedServer = targetServers[0];
+    // Select requested server or fallback to Server 1 if requested server (e.g. Server 1-B) is unavailable
+    let selectedServer = processedServers[0];
     if (serverName) {
-      const matched = targetServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
+      const reqNorm = serverName.toLowerCase().replace(/server\s*2/i, 'server 1-b');
+      const matched = processedServers.find(s => s.name.toLowerCase() === reqNorm);
       if (matched) {
         selectedServer = matched;
       }
