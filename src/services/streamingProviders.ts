@@ -336,24 +336,26 @@ export async function fetchHiAnimeApiServers(
   const reqUrl = `https://hianime-api-qqp7.onrender.com/stream.php?${queryParams.toString()}`;
   let data: any = null;
 
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const httpRes = await CapacitorHttp.get({
-        url: reqUrl,
-        headers: { Accept: 'application/json' },
-      });
-      if (httpRes.status === 200 && httpRes.data) {
-        data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
-      }
-    } catch {
-      // fallback
-    }
-  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
 
-  if (!data) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const httpRes = await CapacitorHttp.get({
+          url: reqUrl,
+          headers: { Accept: 'application/json' },
+        });
+        clearTimeout(timeoutId);
+        if (httpRes.status === 200 && httpRes.data) {
+          data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!data) {
       const res = await fetch(reqUrl, {
         headers: { Accept: 'application/json' },
         signal: controller.signal,
@@ -362,9 +364,9 @@ export async function fetchHiAnimeApiServers(
       if (res.ok) {
         data = await res.json();
       }
-    } catch {
-      // failed
     }
+  } catch {
+    // Non-blocking timeout or fetch error
   }
 
   const serverOptions: AvailableServerOption[] = [];
@@ -393,7 +395,9 @@ export async function fetchHiAnimeApiServers(
       });
     });
 
-    HIANIME_EPISODE_CACHE.set(cacheKey, serverOptions);
+    if (serverOptions.length > 0) {
+      HIANIME_EPISODE_CACHE.set(cacheKey, serverOptions);
+    }
   }
 
   return serverOptions;
@@ -544,23 +548,28 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
-    // Query HiAnime API for Server 2 options (6 servers: 3 SUB, 3 DUB)
-    const hiAnimeServers = await fetchHiAnimeApiServers(
-      anilistId,
-      anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
-      episodeNumber,
-      isOngoing,
-      refresh
-    );
+    // Query HiAnime API for Server 2 options safely (6 servers: 3 SUB, 3 DUB)
+    let hiAnimeServers: AvailableServerOption[] = [];
+    try {
+      hiAnimeServers = await fetchHiAnimeApiServers(
+        anilistId,
+        anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
+        episodeNumber,
+        isOngoing,
+        refresh
+      );
+    } catch {
+      // Non-blocking fallback
+    }
 
     const isSubMode = language === 'SUB' || language === 'JAP';
     const isDubMode = language === 'DUB' || language === 'ENG';
 
-    // Filter HiAnime servers according to active audio mode
+    // Include HiAnime sub/dub servers cleanly according to audio mode or include both if regional
     let matchedHiAnime = hiAnimeServers.filter(s => {
       if (isSubMode) return s.type === 'SUB';
       if (isDubMode) return s.type === 'DUB';
-      return s.type === 'DUB';
+      return true; // For regional audio (HIN, TAM, TEL, etc.), present all HiAnime options
     });
 
     if (matchedHiAnime.length === 0 && hiAnimeServers.length > 0) {
@@ -583,7 +592,8 @@ export async function resolveEpisodeSource({
       const matchedHi = hiAnimeServers.find(s => {
         const sNorm = s.name.toLowerCase();
         if (sNorm === norm) return true;
-        if (sNorm.startsWith(norm)) return true;
+        if (norm.startsWith('server 2') && sNorm.startsWith(norm)) return true;
+        if (norm.startsWith('server 2') && norm.startsWith(sNorm)) return true;
         return false;
       });
 
