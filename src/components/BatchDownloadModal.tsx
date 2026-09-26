@@ -54,15 +54,28 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     { name: 'Server 1-B', linkId: '' },
     { name: 'Server 2-A-SUB', linkId: '' },
     { name: 'Server 2-B-SUB', linkId: '' },
-    { name: 'Server 2-C-SUB', linkId: '' },
     { name: 'Server 2-A-DUB', linkId: '' },
     { name: 'Server 2-B-DUB', linkId: '' },
-    { name: 'Server 2-C-DUB', linkId: '' },
   ]);
 
   // Sync available languages, qualities, and servers dynamically from stream API
   useEffect(() => {
     let isMounted = true;
+
+    // Handle Server 2 specific constraints directly
+    const normServer = selectedServer.toLowerCase();
+    if (normServer.includes('server 2')) {
+      setAvailableQualities(['1080p']);
+      setSelectedQuality('1080p');
+      if (normServer.includes('sub')) {
+        setAvailableLanguages(['SUB']);
+        setSelectedAudio('SUB');
+      } else if (normServer.includes('dub')) {
+        setAvailableLanguages(['DUB']);
+        setSelectedAudio('DUB');
+      }
+    }
+
     async function probeStream() {
       setIsProbingStream(true);
       try {
@@ -81,16 +94,18 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               setSelectedServer('Server 1');
             }
           }
-          if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
-            setAvailableLanguages(res.source.availableLanguages);
-            if (!res.source.availableLanguages.includes(selectedAudio)) {
-              setSelectedAudio(res.source.availableLanguages[0]);
+          if (!normServer.includes('server 2')) {
+            if (res.source.availableLanguages && res.source.availableLanguages.length > 0) {
+              setAvailableLanguages(res.source.availableLanguages);
+              if (!res.source.availableLanguages.includes(selectedAudio)) {
+                setSelectedAudio(res.source.availableLanguages[0]);
+              }
             }
-          }
-          if (res.source.availableResolutions && res.source.availableResolutions.length > 0) {
-            setAvailableQualities(res.source.availableResolutions);
-            if (!res.source.availableResolutions.includes(selectedQuality as any)) {
-              setSelectedQuality(res.source.availableResolutions[0]);
+            if (res.source.availableResolutions && res.source.availableResolutions.length > 0) {
+              setAvailableQualities(res.source.availableResolutions);
+              if (!res.source.availableResolutions.includes(selectedQuality as any)) {
+                setSelectedQuality(res.source.availableResolutions[0]);
+              }
             }
           }
         }

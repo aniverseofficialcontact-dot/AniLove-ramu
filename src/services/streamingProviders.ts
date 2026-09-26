@@ -326,11 +326,6 @@ export function generateTier1HiAnimeServers(
       linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/sub`,
     },
     {
-      name: 'Server 2-C-SUB',
-      type: 'SUB',
-      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/sub`,
-    },
-    {
       name: 'Server 2-A-DUB',
       type: 'DUB',
       linkId: `https://vidnest.fun/anime/${id}/${ep}/dub`,
@@ -339,11 +334,6 @@ export function generateTier1HiAnimeServers(
       name: 'Server 2-B-DUB',
       type: 'DUB',
       linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/dub`,
-    },
-    {
-      name: 'Server 2-C-DUB',
-      type: 'DUB',
-      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/dub`,
     },
   ];
 }

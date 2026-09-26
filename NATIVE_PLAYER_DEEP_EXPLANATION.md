@@ -192,17 +192,19 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 
 ### 15. HiAnime Streaming API Integration & Hybrid 2-Tier Strategy
 - **2-Tier Architecture**:
-  1. **Tier 1 (Client-Side Instant URL Generator - 0ms Latency)**: Generates all 6 Server 2 embed links deterministically using `anilistId` and `episodeNumber`:
+  1. **Tier 1 (Client-Side Instant URL Generator - 0ms Latency)**: Generates active Server 2 embed links deterministically using `anilistId` and `episodeNumber`:
      - `Server 2-A-SUB`: `https://vidnest.fun/anime/{anilistId}/{ep}/sub`
      - `Server 2-B-SUB`: `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub`
-     - `Server 2-C-SUB`: `https://vidnest.fun/animepahe/{anilistId}/{ep}/sub`
      - `Server 2-A-DUB`: `https://vidnest.fun/anime/{anilistId}/{ep}/dub`
      - `Server 2-B-DUB`: `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/dub`
-     - `Server 2-C-DUB`: `https://vidnest.fun/animepahe/{anilistId}/{ep}/dub`
   2. **Tier 2 (Remote API Fallback)**:
      - `https://hianime-api-qqp7.onrender.com/stream.php?anilistId={anilistId}&ep={ep}&refresh=true`
      - Used as emergency failover if player refresh is requested.
-- **UI Active Toggle State Fix**:
-  - Replaced prefix matching with strict string equality (`normSel === normSrv`) in `WatchView.tsx` so `Server 1` and `Server 1-B` never highlight as active simultaneously.
-- **Full Server Visibility**:
-  - Displays all 8 server options (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-B-SUB`, `Server 2-C-SUB`, `Server 2-A-DUB`, `Server 2-B-DUB`, `Server 2-C-DUB`) in `WatchView.tsx` and `BatchDownloadModal.tsx`.
+- **Server 2-C Purge**: Completely removed `Server 2-C-SUB` and `Server 2-C-DUB`.
+- **VidNest & TryEmbed Control & Overlay Erasure**:
+  - Added CSS and JS rules in `NativePlayerActivity.java` to erase TryEmbed top-left server toggle buttons (`.top-left`, `#btn-server`, `.btn-server`, `.server-toggle`, `#server-select`) and VidNest web player controls, preserving native gesture controls.
+  - Subtitle track display (`.art-subtitle`, `.jw-captions`, `video::cue`) is given `z-index: 2147483647 !important; visibility: visible !important;` so captions render clearly on top of video.
+- **Cloudflare / Human Verification Ad Overlay Erasure**:
+  - Added CSS and JS rules targeting Cloudflare / Turnstile / Recaptcha / Human verification ad modals (`iframe[src*="challenges.cloudflare.com"]`, `iframe[src*="turnstile"]`, `.cf-turnstile`, `#cf-wrapper`, `#challenge-stage`, `.verification-modal`, `.verify-container`, `.human-verify`) so verification popups are instantly erased on Server 1 and Server 1-B.
+- **Server 2 Settings Constraints & Download Sync**:
+  - In player settings bottom sheet and download options modal, Server 2 SUB options show ONLY `JAP (Sub)` audio and `1080p` quality, while Server 2 DUB options show ONLY `ENG (Dub)` audio and `1080p` quality.
