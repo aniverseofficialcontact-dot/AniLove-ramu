@@ -52,6 +52,12 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [availableServers, setAvailableServers] = useState<{ name: string; linkId: string }[]>([
     { name: 'Server 1', linkId: '' },
     { name: 'Server 1-B', linkId: '' },
+    { name: 'Server 2-A-SUB', linkId: '' },
+    { name: 'Server 2-B-SUB', linkId: '' },
+    { name: 'Server 2-C-SUB', linkId: '' },
+    { name: 'Server 2-A-DUB', linkId: '' },
+    { name: 'Server 2-B-DUB', linkId: '' },
+    { name: 'Server 2-C-DUB', linkId: '' },
   ]);
 
   // Sync available languages, qualities, and servers dynamically from stream API
@@ -252,10 +258,11 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedServer(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
             >
-              <option value="Server 1">Server 1 (Fast HLS)</option>
-              {availableServers.some(s => s.name === 'Server 1-B') && (
-                <option value="Server 1-B">Server 1-B (RubyStm Multi-Audio)</option>
-              )}
+              {availableServers.map(s => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
             </select>
           </div>
 

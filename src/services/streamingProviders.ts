@@ -117,13 +117,17 @@ export function createDirectStreamSource(
 
   const availableServers: AvailableServerOption[] = [
     { name: 'Server 1', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}` },
+    { name: isDub ? 'Server 2-A-DUB' : 'Server 2-A-SUB', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidnest.fun/anime/${anilistId}/${episodeNumber}/${isDub ? 'dub' : 'sub'}` },
+    { name: isDub ? 'Server 2-B-DUB' : 'Server 2-B-SUB', type: isDub ? 'DUB' : 'SUB', linkId: `https://tryembed.us.cc/embed/anime/${anilistId}/${episodeNumber}/${isDub ? 'dub' : 'sub'}` },
+    { name: isDub ? 'Server 2-C-DUB' : 'Server 2-C-SUB', type: isDub ? 'DUB' : 'SUB', linkId: `https://vidnest.fun/animepahe/${anilistId}/${episodeNumber}/${isDub ? 'dub' : 'sub'}` },
   ];
 
   let selectedUrl = availableServers[0].linkId;
   let selectedServerName = availableServers[0].name;
 
   if (serverName) {
-    const matched = availableServers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
+    const norm = serverName.toLowerCase().trim();
+    const matched = availableServers.find(s => s.name.toLowerCase().startsWith(norm));
     if (matched) {
       selectedUrl = matched.linkId;
       selectedServerName = matched.name;
@@ -301,10 +305,102 @@ export async function probeHlsResolutions(playlistUrl: string): Promise<StreamRe
 }
 
 const EPISODE_STREAM_CACHE = new Map<string, any>();
+const HIANIME_EPISODE_CACHE = new Map<string, AvailableServerOption[]>();
+
+export async function fetchHiAnimeApiServers(
+  anilistId: number | string | undefined,
+  animeTitle: string,
+  episodeNumber: number,
+  isOngoing?: boolean,
+  refresh?: boolean
+): Promise<AvailableServerOption[]> {
+  const cacheKey = `${anilistId || animeTitle}_ep${episodeNumber}`;
+
+  if (!refresh && HIANIME_EPISODE_CACHE.has(cacheKey)) {
+    return HIANIME_EPISODE_CACHE.get(cacheKey) || [];
+  }
+
+  const queryParams = new URLSearchParams();
+  if (anilistId) {
+    queryParams.set('anilistId', String(anilistId));
+    queryParams.set('ep', String(episodeNumber));
+  } else {
+    const cleanSlug = animeTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    queryParams.set('animeId', cleanSlug);
+    queryParams.set('ep', String(episodeNumber));
+  }
+
+  if (isOngoing) queryParams.set('ongoing', 'true');
+  if (refresh) queryParams.set('refresh', 'true');
+
+  const reqUrl = `https://hianime-api-qqp7.onrender.com/stream.php?${queryParams.toString()}`;
+  let data: any = null;
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const httpRes = await CapacitorHttp.get({
+        url: reqUrl,
+        headers: { Accept: 'application/json' },
+      });
+      if (httpRes.status === 200 && httpRes.data) {
+        data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (!data) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(reqUrl, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        data = await res.json();
+      }
+    } catch {
+      // failed
+    }
+  }
+
+  const serverOptions: AvailableServerOption[] = [];
+
+  if (data && data.success && data.stream && Array.isArray(data.stream.servers)) {
+    const subServers = data.stream.servers.filter((s: any) => s.type === 'sub');
+    const dubServers = data.stream.servers.filter((s: any) => s.type === 'dub');
+
+    const letters = ['A', 'B', 'C', 'D', 'E'];
+
+    subServers.forEach((s: any, idx: number) => {
+      const code = `Server 2-${letters[idx] || (idx + 1)}-SUB`;
+      serverOptions.push({
+        name: code,
+        type: 'SUB',
+        linkId: unpackServerUrl(s.url, 'SUB'),
+      });
+    });
+
+    dubServers.forEach((s: any, idx: number) => {
+      const code = `Server 2-${letters[idx] || (idx + 1)}-DUB`;
+      serverOptions.push({
+        name: code,
+        type: 'DUB',
+        linkId: unpackServerUrl(s.url, 'DUB'),
+      });
+    });
+
+    HIANIME_EPISODE_CACHE.set(cacheKey, serverOptions);
+  }
+
+  return serverOptions;
+}
 
 /**
- * Stream resolver using AnimeWorld India v1 PHP API with numeric anilistId + ep parameter.
- * Fetches exclusively Server 1, Server 2, and Server 3.
+ * Stream resolver using AnimeWorld India v1 PHP API & HiAnime API with numeric anilistId + ep parameter.
  */
 export async function resolveEpisodeSource({
   anime,
@@ -448,17 +544,63 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
-    // Select requested server or fallback to Server 1 if requested server (e.g. Server 1-B) is unavailable
-    let selectedServer = processedServers[0];
+    // Query HiAnime API for Server 2 options (6 servers: 3 SUB, 3 DUB)
+    const hiAnimeServers = await fetchHiAnimeApiServers(
+      anilistId,
+      anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
+      episodeNumber,
+      isOngoing,
+      refresh
+    );
+
+    const isSubMode = language === 'SUB' || language === 'JAP';
+    const isDubMode = language === 'DUB' || language === 'ENG';
+
+    // Filter HiAnime servers according to active audio mode
+    let matchedHiAnime = hiAnimeServers.filter(s => {
+      if (isSubMode) return s.type === 'SUB';
+      if (isDubMode) return s.type === 'DUB';
+      return s.type === 'DUB';
+    });
+
+    if (matchedHiAnime.length === 0 && hiAnimeServers.length > 0) {
+      matchedHiAnime = hiAnimeServers;
+    }
+
+    const combinedAvailableServers: AvailableServerOption[] = [
+      ...availableServers,
+      ...matchedHiAnime,
+    ];
+
+    // Select requested server URL
+    let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
+    let selectedServerName = processedServers[0]?.name || 'Server 1';
+
     if (serverName) {
-      const reqNorm = serverName.toLowerCase().replace(/server\s*2/i, 'server 1-b');
-      const matched = processedServers.find(s => s.name.toLowerCase() === reqNorm);
-      if (matched) {
-        selectedServer = matched;
+      const norm = serverName.toLowerCase().trim();
+
+      // Check HiAnime servers if requested (e.g., Server 2-A-SUB, Server 2-B-DUB, Server 2-A)
+      const matchedHi = hiAnimeServers.find(s => {
+        const sNorm = s.name.toLowerCase();
+        if (sNorm === norm) return true;
+        if (sNorm.startsWith(norm)) return true;
+        return false;
+      });
+
+      if (matchedHi) {
+        selectedUrl = matchedHi.linkId;
+        selectedServerName = matchedHi.name;
+      } else {
+        const reqNorm = norm.replace(/server\s*2$/i, 'server 1-b');
+        const matchedAw = processedServers.find(s => s.name.toLowerCase() === reqNorm);
+        if (matchedAw) {
+          selectedUrl = matchedAw.url;
+          selectedServerName = matchedAw.name;
+        }
       }
     }
 
-    const selectedUrl = unpackServerUrl(selectedServer?.url || streamInfo.streamLink || streamInfo.file, language);
+    selectedUrl = unpackServerUrl(selectedUrl, language);
     const detectedResolutions = await probeHlsResolutions(selectedUrl);
 
     if (selectedUrl) {
@@ -472,10 +614,10 @@ export async function resolveEpisodeSource({
           isEmbeddable: true,
           external: false,
           skipData: { intro: [0, 0], outro: [0, 0] },
-          availableServers,
+          availableServers: combinedAvailableServers,
           availableLanguages: availableLangs,
           availableResolutions: detectedResolutions,
-          selectedServerName: selectedServer?.name || 'Server 1',
+          selectedServerName,
           isDubAvailable: true,
           isFallback: false,
           requestedLanguage: language,

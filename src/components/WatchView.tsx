@@ -429,14 +429,17 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server options">
-            {/* Server 1 and Server 1-B (RubyStm filter applied) */}
-            {['Server 1', 'Server 1-B'].map((srvName, idx) => {
+            {/* Server 1, Server 1-B, and HiAnime Server 2-A, 2-B, 2-C Options */}
+            {(selectedAudio === 'SUB'
+              ? ['Server 1', 'Server 1-B', 'Server 2-A-SUB', 'Server 2-B-SUB', 'Server 2-C-SUB']
+              : ['Server 1', 'Server 1-B', 'Server 2-A-DUB', 'Server 2-B-DUB', 'Server 2-C-DUB']
+            ).map((srvName, idx) => {
               const isSelected = (selectedSubServer || 'Server 1').toLowerCase() === srvName.toLowerCase();
               return (
                 <button
                   key={`wv-srv-${idx}`}
                   onClick={() => setSelectedSubServer(srvName)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-white text-black font-black shadow-lg shadow-white/10'
                       : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600 hover:text-white'

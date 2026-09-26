@@ -187,3 +187,20 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   5. **Vite Bundle Chunking (`vite.config.ts`)**:
      - Configured `manualChunks` in `vite.config.ts` to separate vendor libraries (`vendor-react`, `vendor-ui`, `gacha-arcade`, `reels`).
      - Reduced initial main bundle size from 2.2MB down to ~700KB for **60% faster app launch speed**.
+
+---
+
+### 15. HiAnime Streaming API Integration & Server 2 Multi-Stream Caching
+- **API Endpoint**: `https://hianime-api-qqp7.onrender.com/stream.php?anilistId={ANILIST_ID}&ep={EPISODE_NUMBER}`
+- **Server 2 Sub & Dub Options**:
+  - `Server 2-A-SUB` (`[sub] VIDNEST`)
+  - `Server 2-B-SUB` (`[sub] TRYEMBED`)
+  - `Server 2-C-SUB` (`[sub] VIDNEST-PAHE`)
+  - `Server 2-A-DUB` (`[dub] VIDNEST`)
+  - `Server 2-B-DUB` (`[dub] TRYEMBED`)
+  - `Server 2-C-DUB` (`[dub] VIDNEST-PAHE`)
+- **Single-Request Parallel Fetching & 0ms Local Caching**:
+  - `fetchHiAnimeApiServers()` in [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts) fetches all 6 server links simultaneously in 1 API call per episode.
+  - Results are stored in `HIANIME_EPISODE_CACHE`. Switching between Server 2 options (`Server 2-A`, `Server 2-B`, `Server 2-C` in SUB or DUB) retrieves URLs **0ms instantly** from memory without redundant network requests.
+- **Download Syncing**:
+  - `queueBatchEpisodeDownloads` in [downloadManager.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/downloadManager.ts) and [BatchDownloadModal.tsx](file:///C:/Users/sanya/StudioProjects/AniLove2/src/components/BatchDownloadModal.tsx) resolve HiAnime server links cleanly for batch episode downloading.
