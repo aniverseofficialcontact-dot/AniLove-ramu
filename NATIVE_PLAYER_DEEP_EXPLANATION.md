@@ -201,10 +201,12 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
      - `https://hianime-api-qqp7.onrender.com/stream.php?anilistId={anilistId}&ep={ep}&refresh=true`
      - Used as emergency failover if player refresh is requested.
 - **Server 2-C Purge**: Completely removed `Server 2-C-SUB` and `Server 2-C-DUB`.
-- **VidNest & TryEmbed Control & Overlay Erasure**:
-  - Added CSS and JS rules in `NativePlayerActivity.java` to erase TryEmbed top-left server toggle buttons (`.top-left`, `#btn-server`, `.btn-server`, `.server-toggle`, `#server-select`) and VidNest web player controls, preserving native gesture controls.
-  - Subtitle track display (`.art-subtitle`, `.jw-captions`, `video::cue`) is given `z-index: 2147483647 !important; visibility: visible !important;` so captions render clearly on top of video.
-- **Cloudflare / Human Verification Ad Overlay Erasure**:
-  - Added CSS and JS rules targeting Cloudflare / Turnstile / Recaptcha / Human verification ad modals (`iframe[src*="challenges.cloudflare.com"]`, `iframe[src*="turnstile"]`, `.cf-turnstile`, `#cf-wrapper`, `#challenge-stage`, `.verification-modal`, `.verify-container`, `.human-verify`) so verification popups are instantly erased on Server 1 and Server 1-B.
+- **Strict Server Matching**:
+  - Implemented exact matching rules in `resolveEpisodeSource()` (`Server 1` -> `Server 1`, `Server 1-B` -> `Server 1-B`, `Server 2-A-SUB` -> `Server 2-A-SUB`, `Server 2-B-SUB` -> `Server 2-B-SUB`) to eliminate cross-server stream URL mismatching.
+- **Network-Level Cloudflare Script Blocking**:
+  - Intercepted and blocked `challenges.cloudflare.com`, `turnstile`, and `challenge-platform` scripts directly in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Completely prevents Cloudflare "Verify you are human" ad popups from rendering on Server 1 and Server 1-B.
+- **VidNest & TryEmbed Web Control & Toggle Erasure**:
+  - Injected dynamic CSS rules into all documents and frames to erase TryEmbed top-left toggle buttons (`.top-left`, `#btn-server`, `.btn-server`, `.server-toggle`, `#server-select`) and VidNest web player control bars.
+  - Activated HTML5 text tracks (`v.textTracks[i].mode = 'showing'`) for synchronized Japanese subtitles on VidNest and TryEmbed sub streams.
 - **Server 2 Settings Constraints & Download Sync**:
   - In player settings bottom sheet and download options modal, Server 2 SUB options show ONLY `JAP (Sub)` audio and `1080p` quality, while Server 2 DUB options show ONLY `ENG (Dub)` audio and `1080p` quality.

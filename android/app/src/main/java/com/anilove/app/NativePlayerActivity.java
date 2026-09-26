@@ -2379,6 +2379,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
 
+                // Block Cloudflare Turnstile / human verification ad scripts at network level
+                if (lower.contains("challenges.cloudflare.com") || lower.contains("turnstile") ||
+                    lower.contains("challenge-platform") || lower.contains("verify-human") ||
+                    lower.contains("check-human") || lower.contains("probationthimbledespite")) {
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                }
+
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
                 String audio = getIntent().getStringExtra("audio");
@@ -2696,6 +2703,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var v = doc.querySelector('video'); " +
                 "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
                 "      if (v) { " +
+                "        if (v.textTracks && v.textTracks.length > 0) { " +
+                "          for (var tt = 0; tt < v.textTracks.length; tt++) { try { v.textTracks[tt].mode = 'showing'; } catch(e){} } " +
+                "        } " +
                 "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
                 "          try { v.muted = true; } catch(e){} " +
                 "          var p = v.play(); " +

@@ -608,35 +608,41 @@ export async function resolveEpisodeSource({
       ...hiAnimeServers,
     ];
 
-    // Select requested server URL
+    // Select requested server URL strictly
     let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
     let selectedServerName = processedServers[0]?.name || 'Server 1';
 
     if (serverName) {
       const norm = serverName.toLowerCase().trim();
 
-      // Check HiAnime servers (e.g. Server 2-A-SUB, Server 2-B-SUB, Server 2-C-SUB, Server 2-A-DUB, etc.)
-      const matchedHi = hiAnimeServers.find(s => {
-        const sNorm = s.name.toLowerCase().trim();
-        if (sNorm === norm) return true;
+      if (norm === 'server 1') {
+        const s1 = processedServers.find(s => s.name.toLowerCase() === 'server 1');
+        if (s1) {
+          selectedUrl = s1.url;
+          selectedServerName = s1.name;
+        }
+      } else if (norm === 'server 1-b' || norm === 'server 1b') {
+        const s1b = processedServers.find(s => s.name.toLowerCase() === 'server 1-b');
+        if (s1b) {
+          selectedUrl = s1b.url;
+          selectedServerName = s1b.name;
+        }
+      } else if (norm.includes('server 2')) {
+        const matchedHi = hiAnimeServers.find(s => {
+          const sNorm = s.name.toLowerCase().trim();
+          return sNorm === norm || sNorm.replace(/[^a-z0-9]/g, '') === norm.replace(/[^a-z0-9]/g, '');
+        });
 
-        const cleanNorm = norm.replace(/[^a-z0-9]/g, '');
-        const cleanSNorm = sNorm.replace(/[^a-z0-9]/g, '');
-        if (cleanNorm === cleanSNorm) return true;
-        if (cleanNorm.length > 5 && (cleanSNorm.includes(cleanNorm) || cleanNorm.includes(cleanSNorm))) return true;
-
-        return false;
-      });
-
-      if (matchedHi) {
-        selectedUrl = matchedHi.linkId;
-        selectedServerName = matchedHi.name;
-      } else {
-        const reqNorm = norm.replace(/server\s*2$/i, 'server 1-b');
-        const matchedAw = processedServers.find(s => s.name.toLowerCase() === reqNorm);
-        if (matchedAw) {
-          selectedUrl = matchedAw.url;
-          selectedServerName = matchedAw.name;
+        if (matchedHi) {
+          selectedUrl = matchedHi.linkId;
+          selectedServerName = matchedHi.name;
+        } else {
+          // Fallback to Server 2-A sub/dub if short server name supplied
+          const fallbackHi = hiAnimeServers.find(s => s.name.toLowerCase().includes(norm.replace('server 2-', '')));
+          if (fallbackHi) {
+            selectedUrl = fallbackHi.linkId;
+            selectedServerName = fallbackHi.name;
+          }
         }
       }
     }
