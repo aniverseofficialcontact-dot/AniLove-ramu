@@ -28,6 +28,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
