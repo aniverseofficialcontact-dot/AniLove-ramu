@@ -2426,9 +2426,127 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
     private boolean isDirectHls = false;
+    private WebView subSnifferWebView = null;
+
+    private void startBackgroundSubtitleSniffer(int anilistId, int episodeNumber) {
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+        final String audio = getIntent().getStringExtra("audio") != null ? getIntent().getStringExtra("audio") : "DUB";
+
+        String cachedVtt = StreamCache.getSubtitle(anilistId, episodeNumber, audio);
+        if (cachedVtt != null && cachedVtt.contains(".vtt")) {
+            attachCapturedVttTrack(cachedVtt);
+            return;
+        }
+
+        runOnUiThread(() -> {
+            try {
+                if (subSnifferWebView != null) {
+                    try { subSnifferWebView.stopLoading(); subSnifferWebView.destroy(); } catch (Exception ignored) {}
+                    subSnifferWebView = null;
+                }
+
+                subSnifferWebView = new WebView(this);
+                WebSettings s = subSnifferWebView.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setMediaPlaybackRequiresUserGesture(true);
+                s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+                subSnifferWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                        String reqUrl = request.getUrl().toString();
+                        String lower = reqUrl.toLowerCase();
+
+                        if (lower.contains(".ts") || lower.contains(".m4s") || lower.contains(".mp4") ||
+                            lower.contains(".png") || lower.contains(".jpg") || lower.contains(".jpeg") ||
+                            lower.contains(".woff") || lower.contains(".ttf") || lower.contains("analytics") ||
+                            lower.contains("doubleclick") || lower.contains("googlesyndication")) {
+                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                        }
+
+                        if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
+                            StreamCache.putSubtitle(anilistId, episodeNumber, audio, reqUrl);
+                            runOnUiThread(() -> {
+                                attachCapturedVttTrack(reqUrl);
+                                try {
+                                    if (subSnifferWebView != null) {
+                                        subSnifferWebView.stopLoading();
+                                        subSnifferWebView.destroy();
+                                        subSnifferWebView = null;
+                                    }
+                                } catch (Exception ignored) {}
+                            });
+                        }
+                        return super.shouldInterceptRequest(view, request);
+                    }
+                });
+
+                String snifferUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", "https://tryembed.us.cc/");
+                subSnifferWebView.loadUrl(snifferUrl, headers);
+
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        if (subSnifferWebView != null) {
+                            subSnifferWebView.stopLoading();
+                            subSnifferWebView.destroy();
+                            subSnifferWebView = null;
+                        }
+                    } catch (Exception ignored) {}
+                }, 3500);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void attachCapturedVttTrack(String vttUrl) {
+        if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
+        subtitleUrl = vttUrl;
+        String js = "(function() { " +
+                "  var vttUrl = '" + vttUrl.replace("'", "\\'") + "'; " +
+                "  function attach(win) { try { " +
+                "    var doc = win.document; " +
+                "    var videos = doc.querySelectorAll('video'); " +
+                "    videos.forEach(function(v) { " +
+                "      var oldTrack = doc.getElementById('anilove-universal-sub-track'); " +
+                "      if (!oldTrack) { " +
+                "        var t = doc.createElement('track'); " +
+                "        t.id = 'anilove-universal-sub-track'; " +
+                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = 'English (Server 2-B)'; t.srclang = 'en'; t.default = true; " +
+                "        v.appendChild(t); " +
+                "      } else if (oldTrack.src !== vttUrl) { " +
+                "        oldTrack.src = vttUrl; " +
+                "      } " +
+                "      if (v.textTracks && v.textTracks.length > 0) { " +
+                "        for (var i = 0; i < v.textTracks.length; i++) { " +
+                "          var tr = v.textTracks[i]; " +
+                "          if (tr.src === vttUrl || tr.id === 'anilove-universal-sub-track' || tr.label === 'English (Server 2-B)') { " +
+                "            tr.mode = 'showing'; " +
+                "          } else { " +
+                "            tr.mode = 'disabled'; " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "    }); " +
+                "  } catch(e) {} " +
+                "  for (var f = 0; f < win.frames.length; f++) { try { attach(win.frames[f]); } catch(e){} } } " +
+                "  attach(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+        applyCaptionStyle();
+        applySubtitleTimingOffsetInWeb();
+    }
 
     private void setupHybridEngine(String url) {
         if (url == null || url.isEmpty() || playerWebView == null) return;
+        
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int epNum = getIntent().getIntExtra("episodeNumber", 0);
+        if (anilistId > 0 && epNum > 0) {
+            startBackgroundSubtitleSniffer(anilistId, epNum);
+        }
         
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
