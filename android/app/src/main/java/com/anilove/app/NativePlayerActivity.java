@@ -1810,7 +1810,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    if(!style.parentNode) doc.head.appendChild(style); " +
                 "    var videos = doc.querySelectorAll('video'); " +
                 "    videos.forEach(function(v) { " +
-                "      if (remoteSubUrl && remoteSubUrl.length > 5 && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
+                "      if (remoteSubUrl && (remoteSubUrl.indexOf('.vtt') !== -1 || remoteSubUrl.indexOf('.srt') !== -1) && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
                 "        var t = doc.createElement('track'); " +
                 "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
@@ -2510,13 +2510,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
-
-                // Block Cloudflare Turnstile / human verification ad scripts at network level
-                if (lower.contains("challenges.cloudflare.com") || lower.contains("turnstile") ||
-                    lower.contains("challenge-platform") || lower.contains("verify-human") ||
-                    lower.contains("check-human") || lower.contains("probationthimbledespite")) {
-                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
-                }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);

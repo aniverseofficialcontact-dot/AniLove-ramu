@@ -203,8 +203,10 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 - **Server 2-C Purge**: Completely removed `Server 2-C-SUB` and `Server 2-C-DUB`.
 - **Strict Server Matching**:
   - Implemented exact matching rules in `resolveEpisodeSource()` (`Server 1` -> `Server 1`, `Server 1-B` -> `Server 1-B`, `Server 2-A-SUB` -> `Server 2-A-SUB`, `Server 2-B-SUB` -> `Server 2-B-SUB`) to eliminate cross-server stream URL mismatching.
-- **Network-Level Cloudflare Script Blocking**:
-  - Intercepted and blocked `challenges.cloudflare.com`, `turnstile`, and `challenge-platform` scripts directly in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Completely prevents Cloudflare "Verify you are human" ad popups from rendering on Server 1 and Server 1-B.
+- **Ad Redirect Elimination on Server 1 & Server 1-B**:
+  - Removed blank `WebResourceResponse` overrides for script interception in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Prevents script errors on embed servers from triggering fallback ad redirects, keeping Server 1 and Server 1-B clean on video playback.
+- **Valid VTT Track Append Verification**:
+  - In `toggleWebSubtitles()`, ensured track elements are appended ONLY IF `remoteSubUrl` ends with `.vtt` or `.srt`. Prevents browsers from attempting to parse HTML embed webpages as WebVTT tracks.
 - **Single Subtitle Track Enforcement**:
   - Prevented duplicate subtitle track injection in `toggleWebSubtitles()` in `NativePlayerActivity.java`. VidNest and TryEmbed subtitle tracks render ONCE cleanly on screen without double text overlays.
 - **Next.js Client-Side Exception Fix (`vidnest.fun`)**:
