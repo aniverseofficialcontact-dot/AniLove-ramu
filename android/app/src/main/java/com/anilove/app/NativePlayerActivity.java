@@ -2428,22 +2428,53 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isDirectHls = false;
     private WebView subSnifferWebView = null;
 
+    private Map<String, String> multiLanguageSubtitles = new ConcurrentHashMap<>();
+
+    private String detectLanguageFromVttUrl(String url) {
+        if (url == null) return "English";
+        String lower = url.toLowerCase();
+        if (lower.contains("_spa") || lower.contains("spanish") || lower.contains("lang=es")) return "Spanish";
+        if (lower.contains("_fre") || lower.contains("_fra") || lower.contains("french") || lower.contains("lang=fr")) return "French";
+        if (lower.contains("_por") || lower.contains("portuguese") || lower.contains("lang=pt")) return "Portuguese";
+        if (lower.contains("_ger") || lower.contains("_deu") || lower.contains("german") || lower.contains("lang=de")) return "German";
+        if (lower.contains("_ita") || lower.contains("italian") || lower.contains("lang=it")) return "Italian";
+        if (lower.contains("_hin") || lower.contains("hindi") || lower.contains("lang=hi")) return "Hindi";
+        if (lower.contains("_ara") || lower.contains("arabic") || lower.contains("lang=ar")) return "Arabic";
+        if (lower.contains("_rus") || lower.contains("russian") || lower.contains("lang=ru")) return "Russian";
+        if (lower.contains("_ind") || lower.contains("indonesian") || lower.contains("lang=id")) return "Indonesian";
+        return "English";
+    }
+
+    private void cleanupSnifferWebView() {
+        if (subSnifferWebView == null) return;
+        final WebView wv = subSnifferWebView;
+        subSnifferWebView = null;
+        wv.post(() -> {
+            try {
+                wv.stopLoading();
+                wv.setWebViewClient(null);
+                wv.setWebChromeClient(null);
+                wv.destroy();
+            } catch (Exception ignored) {}
+        });
+    }
+
     private void startBackgroundSubtitleSniffer(int anilistId, int episodeNumber) {
         if (anilistId <= 0 || episodeNumber <= 0) return;
         final String audio = getIntent().getStringExtra("audio") != null ? getIntent().getStringExtra("audio") : "DUB";
 
         String cachedVtt = StreamCache.getSubtitle(anilistId, episodeNumber, audio);
         if (cachedVtt != null && cachedVtt.contains(".vtt")) {
-            attachCapturedVttTrack(cachedVtt);
+            String langName = detectLanguageFromVttUrl(cachedVtt);
+            multiLanguageSubtitles.put(langName, cachedVtt);
+            if (!detectedSubtitles.contains(langName)) detectedSubtitles.add(langName);
+            attachCapturedVttTrack(cachedVtt, langName);
             return;
         }
 
         runOnUiThread(() -> {
             try {
-                if (subSnifferWebView != null) {
-                    try { subSnifferWebView.stopLoading(); subSnifferWebView.destroy(); } catch (Exception ignored) {}
-                    subSnifferWebView = null;
-                }
+                cleanupSnifferWebView();
 
                 subSnifferWebView = new WebView(this);
                 WebSettings s = subSnifferWebView.getSettings();
@@ -2468,15 +2499,15 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                         if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
                             StreamCache.putSubtitle(anilistId, episodeNumber, audio, reqUrl);
+                            String langName = detectLanguageFromVttUrl(reqUrl);
+                            multiLanguageSubtitles.put(langName, reqUrl);
+                            if (!detectedSubtitles.contains(langName)) {
+                                detectedSubtitles.add(langName);
+                            }
+                            final String capturedUrl = reqUrl;
+                            final String capturedLang = langName;
                             runOnUiThread(() -> {
-                                attachCapturedVttTrack(reqUrl);
-                                try {
-                                    if (subSnifferWebView != null) {
-                                        subSnifferWebView.stopLoading();
-                                        subSnifferWebView.destroy();
-                                        subSnifferWebView = null;
-                                    }
-                                } catch (Exception ignored) {}
+                                attachCapturedVttTrack(capturedUrl, capturedLang);
                             });
                         }
                         return super.shouldInterceptRequest(view, request);
@@ -2488,24 +2519,24 @@ public class NativePlayerActivity extends AppCompatActivity {
                 headers.put("Referer", "https://tryembed.us.cc/");
                 subSnifferWebView.loadUrl(snifferUrl, headers);
 
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    try {
-                        if (subSnifferWebView != null) {
-                            subSnifferWebView.stopLoading();
-                            subSnifferWebView.destroy();
-                            subSnifferWebView = null;
-                        }
-                    } catch (Exception ignored) {}
-                }, 3500);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> cleanupSnifferWebView(), 3500);
             } catch (Exception ignored) {}
         });
     }
 
     private void attachCapturedVttTrack(String vttUrl) {
+        attachCapturedVttTrack(vttUrl, detectLanguageFromVttUrl(vttUrl));
+    }
+
+    private void attachCapturedVttTrack(String vttUrl, String langName) {
         if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
         subtitleUrl = vttUrl;
+        if (langName != null) subtitleLang = langName;
+        final String label = (subtitleLang != null ? subtitleLang : "English") + " (Server 2-B)";
+
         String js = "(function() { " +
                 "  var vttUrl = '" + vttUrl.replace("'", "\\'") + "'; " +
+                "  var labelStr = '" + label.replace("'", "\\'") + "'; " +
                 "  function attach(win) { try { " +
                 "    var doc = win.document; " +
                 "    var videos = doc.querySelectorAll('video'); " +
@@ -2514,15 +2545,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      if (!oldTrack) { " +
                 "        var t = doc.createElement('track'); " +
                 "        t.id = 'anilove-universal-sub-track'; " +
-                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = 'English (Server 2-B)'; t.srclang = 'en'; t.default = true; " +
+                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = labelStr; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
-                "      } else if (oldTrack.src !== vttUrl) { " +
+                "      } else { " +
                 "        oldTrack.src = vttUrl; " +
+                "        oldTrack.label = labelStr; " +
                 "      } " +
                 "      if (v.textTracks && v.textTracks.length > 0) { " +
                 "        for (var i = 0; i < v.textTracks.length; i++) { " +
                 "          var tr = v.textTracks[i]; " +
-                "          if (tr.src === vttUrl || tr.id === 'anilove-universal-sub-track' || tr.label === 'English (Server 2-B)') { " +
+                "          if (tr.src === vttUrl || tr.id === 'anilove-universal-sub-track' || tr.label === labelStr) { " +
                 "            tr.mode = 'showing'; " +
                 "          } else { " +
                 "            tr.mode = 'disabled'; " +
