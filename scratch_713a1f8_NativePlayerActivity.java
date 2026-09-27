@@ -14,12 +14,9 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.graphics.PixelFormat;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
@@ -30,11 +27,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -52,8 +45,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.net.http.SslError;
-import android.webkit.SslErrorHandler;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -93,8 +84,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -102,7 +91,6 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
-import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -160,7 +148,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String currentSelectedSubtitle = "English";
     
     // Caption State Defaults
-    private double subtitleTimingOffset = 0.0;
     private String bgOpacity = "Off";
     private String bgColor = "Black";
     private int captionFontSize = 90;
@@ -172,93 +159,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String edgeStyle = "Shadow";
     private String subtitleUrl = null;
     private String subtitleLang = "English";
-
-    private void loadEpisodeSubOffset() {
-        int anilistId = getIntent().getIntExtra("anilistId", 0);
-        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-
-        try {
-            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
-            String key = anilistId + "_ep" + episodeNumber;
-            String valStr = prefs.getString(key, null);
-
-            if (valStr != null) {
-                JSONObject obj = new JSONObject(valStr);
-                long timestamp = obj.optLong("timestamp", 0);
-                long ageDays = (System.currentTimeMillis() - timestamp) / (24 * 60 * 60 * 1000L);
-                if (ageDays < 7) {
-                    subtitleTimingOffset = obj.optDouble("offset", 0.0);
-                } else {
-                    prefs.edit().remove(key).apply();
-                    subtitleTimingOffset = 0.0;
-                }
-            }
-        } catch (Exception ignored) {
-            subtitleTimingOffset = 0.0;
-        }
-    }
-
-    private void saveEpisodeSubOffset(double offset) {
-        int anilistId = getIntent().getIntExtra("anilistId", 0);
-        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-
-        try {
-            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
-            String key = anilistId + "_ep" + episodeNumber;
-            subtitleTimingOffset = Math.round(offset * 10.0) / 10.0;
-
-            JSONObject obj = new JSONObject();
-            obj.put("offset", subtitleTimingOffset);
-            obj.put("timestamp", System.currentTimeMillis());
-            prefs.edit().putString(key, obj.toString()).apply();
-        } catch (Exception ignored) {}
-
-        applySubtitleTimingOffsetInWeb();
-    }
-
-    private void deleteEpisodeSubOffset() {
-        int anilistId = getIntent().getIntExtra("anilistId", 0);
-        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-
-        try {
-            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
-            String key = anilistId + "_ep" + episodeNumber;
-            prefs.edit().remove(key).apply();
-            subtitleTimingOffset = 0.0;
-        } catch (Exception ignored) {}
-    }
-
-    private void applySubtitleTimingOffsetInWeb() {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var offset = " + subtitleTimingOffset + "; " +
-                "  function shift(win) { try { " +
-                "    var v = win.document.querySelector('video'); " +
-                "    if (v && v.textTracks) { " +
-                "      for (var i = 0; i < v.textTracks.length; i++) { " +
-                "        var tr = v.textTracks[i]; " +
-                "        if (tr && tr.cues) { " +
-                "          for (var j = 0; j < tr.cues.length; j++) { " +
-                "            var c = tr.cues[j]; " +
-                "            if (typeof c._origStart === 'undefined') { " +
-                "              c._origStart = c.startTime; " +
-                "              c._origEnd = c.endTime; " +
-                "            } " +
-                "            c.startTime = Math.max(0, c._origStart + offset); " +
-                "            c.endTime = Math.max(0, c._origEnd + offset); " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e){} " +
-                "  for (var f = 0; f < win.frames.length; f++) { try { shift(win.frames[f]); } catch(e){} } } " +
-                "  shift(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
-    }
 
     private void saveCaptionSettingsToPrefs() {
         try {
@@ -292,61 +192,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             edgeStyle = prefs.getString("edgeStyle", "Shadow");
             currentSelectedSubtitle = prefs.getString("currentSelectedSubtitle", "English");
         } catch (Exception ignored) {}
-    }
-
-    private double videoDuration = 0;
-    private double currentVideoTime = 0;
-    private OpEdSeekBarDrawable opEdSeekBarDrawable = null;
-    private Map<String, String> capturedServer2BSubtitles = new ConcurrentHashMap<>();
-
-    private class OpEdSeekBarDrawable extends Drawable {
-        private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint opEdPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        public OpEdSeekBarDrawable() {
-            bgPaint.setColor(Color.parseColor("#44FFFFFF"));
-            opEdPaint.setColor(Color.parseColor("#FFD700")); // Vibrant Yellow for Intro/Outro gaps
-            progressPaint.setColor(Color.WHITE);
-        }
-
-        @Override
-        public void draw(Canvas canvas) {
-            Rect bounds = getBounds();
-            float centerY = bounds.centerY();
-            float trackHeight = 10f;
-
-            float top = centerY - (trackHeight / 2f);
-            float bottom = centerY + (trackHeight / 2f);
-            float width = bounds.width();
-
-            // 1. Base track background
-            canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
-
-            if (videoDuration > 0) {
-                // 2. Current progress bar (Drawn BEFORE OP/ED so yellow OP/ED stays on top permanently)
-                float progressRight = (float) ((currentVideoTime / videoDuration) * width);
-                canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
-
-                // 3. Permanent yellow highlight for Intro (OP)
-                if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart) {
-                    float opLeft = (float) ((aniSkipOpStart / videoDuration) * width);
-                    float opRight = (float) ((aniSkipOpEnd / videoDuration) * width);
-                    canvas.drawRoundRect(opLeft, top, opRight, bottom, 3f, 3f, opEdPaint);
-                }
-
-                // 4. Permanent yellow highlight for Outro (ED)
-                if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart) {
-                    float edLeft = (float) ((aniSkipEdStart / videoDuration) * width);
-                    float edRight = (float) ((aniSkipEdEnd / videoDuration) * width);
-                    canvas.drawRoundRect(edLeft, top, edRight, bottom, 3f, 3f, opEdPaint);
-                }
-            }
-        }
-
-        @Override public void setAlpha(int alpha) { bgPaint.setAlpha(alpha); }
-        @Override public void setColorFilter(ColorFilter colorFilter) {}
-        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
     
     private Handler updateHandler = new Handler(Looper.getMainLooper());
@@ -416,7 +261,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isFullscreenMode = false;
     public static NativePlayerActivity currentInstance;
 
-    @UnstableApi
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -691,14 +535,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    @UnstableApi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         currentInstance = this;
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         loadCaptionSettingsFromPrefs();
-        loadEpisodeSubOffset();
         
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
@@ -727,8 +569,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         btnPlayPause = findViewById(R.id.btn_play_pause);
         seekBar = findViewById(R.id.video_seekbar);
-        opEdSeekBarDrawable = new OpEdSeekBarDrawable();
-        seekBar.setProgressDrawable(opEdSeekBarDrawable);
         textCurrentTime = findViewById(R.id.text_current_time);
         textTotalTime = findViewById(R.id.text_total_time);
         textTimeLeft = findViewById(R.id.text_time_left);
@@ -772,23 +612,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         btnNextEpisode.setVisibility(View.VISIBLE);
         btnPrevEpisode.setVisibility(View.VISIBLE);
 
-        TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
-        if (btnSkipIntro != null) {
-            btnSkipIntro.setOnClickListener(v -> {
-                Object tag = btnSkipIntro.getTag();
-                if (tag instanceof Double) {
-                    seekVideoToAbsolute(((Double) tag).intValue());
-                } else {
-                    seekVideo(85);
-                }
-            });
-
-            GradientDrawable border = new GradientDrawable();
-            border.setColor(Color.parseColor("#CC000000"));
-            border.setStroke(2, Color.parseColor("#88FFFFFF"));
-            border.setCornerRadius(16);
-            btnSkipIntro.setBackground(border);
-        }
+        View btnSkipIntro = findViewById(R.id.btn_skip_intro);
+        btnSkipIntro.setOnClickListener(v -> seekVideo(85));
+        
+        GradientDrawable border = new GradientDrawable();
+        border.setColor(Color.TRANSPARENT);
+        border.setStroke(2, Color.parseColor("#666666")); 
+        border.setCornerRadius(8);
+        btnSkipIntro.setBackground(border);
 
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onSingleTapConfirmed(MotionEvent e) { toggleControlsVisibility(); return true; }
@@ -892,7 +723,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         return super.onTouchEvent(event);
     }
 
-    @UnstableApi
     private void setupExoPlayer(String videoPath, String subPath) {
         if (videoPath == null || videoPath.isEmpty()) return;
         try {
@@ -1015,23 +845,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         public void processFrame(String base64) {}
 
         @JavascriptInterface
-        public void onTrackFound(String label, String url) {
-            if (label == null || url == null || label.trim().isEmpty() || url.trim().isEmpty()) return;
-            if (label.equalsIgnoreCase("Off") || label.equalsIgnoreCase("ID3 Metadata")) return;
-            String cleanLabel = label.trim();
-            capturedServer2BSubtitles.put(cleanLabel, url);
-            if (!detectedSubtitles.contains(cleanLabel)) {
-                detectedSubtitles.add(cleanLabel);
-            }
-            if (parsedVttCues.isEmpty() || cleanLabel.equalsIgnoreCase("English")) {
-                subtitleUrl = url;
-                subtitleLang = cleanLabel;
-                downloadAndParseVttFile(url);
-            }
-            Log.i("SubTrackFound", "Discovered real subtitle track: " + cleanLabel + " -> " + url);
-        }
-
-        @JavascriptInterface
         public void onMediaOptions(String json) {
             if (json == null || json.isEmpty()) return;
             try {
@@ -1078,12 +891,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         @JavascriptInterface
         public void onStateUpdate(double current, double duration, boolean pausedInWeb) {
             runOnUiThread(() -> {
-                currentVideoTime = current;
-                videoDuration = duration;
-                updateNativeSubtitleOverlay(current);
-                if (opEdSeekBarDrawable != null) {
-                    opEdSeekBarDrawable.invalidateSelf();
-                }
                 if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
                     loadingProgress.setVisibility(View.GONE);
                 }
@@ -1104,28 +911,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     if (isPlaying && current > 0) {
                         broadcastProgress(current, duration);
-                        if (duration > 0 && (duration - current <= 120 || current >= duration * 0.85)) {
+                        if (current >= duration * 0.8) {
                             triggerNextEpisodePreFetch();
-                        }
-                    }
-
-                    TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
-                    if (btnSkipIntro != null) {
-                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
-                            btnSkipIntro.setText("⏭️ Skip Intro");
-                            btnSkipIntro.setVisibility(View.VISIBLE);
-                            btnSkipIntro.setTag(aniSkipOpEnd);
-                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
-                            btnSkipIntro.setText("⏭️ Skip Ending");
-                            btnSkipIntro.setVisibility(View.VISIBLE);
-                            btnSkipIntro.setTag(aniSkipEdEnd);
-                        } else {
-                            if (!isControlsVisible) {
-                                btnSkipIntro.setVisibility(View.GONE);
-                            } else {
-                                btnSkipIntro.setText("+85s Skip");
-                                btnSkipIntro.setTag(null);
-                            }
                         }
                     }
                 }
@@ -1291,20 +1078,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void changeSubtitleTrack(String subTrack) {
-        if (subTrack == null || subTrack.equalsIgnoreCase("Off")) {
-            parsedVttCues.clear();
-            TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
-            if (textOverlay != null) textOverlay.setVisibility(View.GONE);
-            return;
-        }
-
-        String targetVttUrl = capturedServer2BSubtitles.get(subTrack);
-        if (targetVttUrl != null && !targetVttUrl.isEmpty()) {
-            subtitleUrl = targetVttUrl;
-            subtitleLang = subTrack;
-            downloadAndParseVttFile(targetVttUrl);
-            Log.i("CaptionSwitch", "Switched native subtitle track to: " + subTrack + " (" + targetVttUrl + ")");
-        }
+        if (playerWebView == null) return;
         String js = "(function() { " +
                 "  var target = '" + subTrack.replace("'", "\\'").toLowerCase() + "'; " +
                 "  function setS(w) { try { " +
@@ -1584,19 +1358,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         BottomSheetBehavior behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 
-        String curSrv = getIntent().getStringExtra("serverName");
-        if (curSrv == null) curSrv = "";
-        boolean isServer2 = curSrv.toLowerCase().contains("server 2");
-
         // 1. Dynamic Video Quality Buttons
         LinearLayout qualityContainer = view.findViewById(R.id.quality_container);
         if (qualityContainer != null) {
             qualityContainer.removeAllViews();
             List<String> qList = new ArrayList<>(detectedQualities);
-            if (isServer2) {
-                qList.clear();
-                qList.add("1080p");
-            } else if (qList.isEmpty()) {
+            if (qList.isEmpty()) {
                 qList.add("Auto");
                 qList.add("1080p");
                 qList.add("720p");
@@ -1632,17 +1399,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (audioContainer != null) {
             audioContainer.removeAllViews();
             List<String> aList = new ArrayList<>(detectedAudios);
-            if (isServer2) {
-                aList.clear();
-                if (curSrv.toLowerCase().contains("sub")) {
-                    aList.add("JAP (Sub)");
-                } else if (curSrv.toLowerCase().contains("dub")) {
-                    aList.add("ENG (Dub)");
-                } else {
-                    aList.add("JAP (Sub)");
-                    aList.add("ENG (Dub)");
-                }
-            } else if (aList.isEmpty()) {
+            if (aList.isEmpty()) {
                 aList.add("Hindi");
                 aList.add("ENG (Dub)");
                 aList.add("JAP (Sub)");
@@ -1759,22 +1516,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         View scrollTrack = view.findViewById(R.id.scroll_caption_track);
 
         if (groupTrack != null && labelTrack != null && scrollTrack != null) {
-            Set<String> subSet = new LinkedHashSet<>();
-            subSet.add("Off");
-
-            for (String lang : capturedServer2BSubtitles.keySet()) {
-                if (lang != null && !lang.trim().isEmpty()) {
-                    subSet.add(lang);
-                }
-            }
-
-            for (String s : detectedSubtitles) {
-                if (s != null && !s.equalsIgnoreCase("ID3 Metadata") && !s.equalsIgnoreCase("Off") && !s.trim().isEmpty()) {
-                    subSet.add(s);
-                }
-            }
-
-            List<String> subList = new ArrayList<>(subSet);
+            List<String> subList = new ArrayList<>(detectedSubtitles);
+            if (!subList.contains("Off")) subList.add(0, "Off");
             if (subList.size() > 1) {
                 labelTrack.setVisibility(View.VISIBLE);
                 scrollTrack.setVisibility(View.VISIBLE);
@@ -1791,48 +1534,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 labelTrack.setVisibility(View.GONE);
                 scrollTrack.setVisibility(View.GONE);
             }
-        }
-
-        // Setup Subtitle Appearance Timing Stepper Control
-        TextView textSubTimingCenter = view.findViewById(R.id.text_sub_timing_center);
-        TextView btnSubMinus1 = view.findViewById(R.id.btn_sub_minus_1);
-        TextView btnSubMinus01 = view.findViewById(R.id.btn_sub_minus_01);
-        TextView btnSubPlus01 = view.findViewById(R.id.btn_sub_plus_01);
-        TextView btnSubPlus1 = view.findViewById(R.id.btn_sub_plus_1);
-
-        Runnable updateTimingBadge = () -> {
-            if (textSubTimingCenter != null) {
-                String str = (subtitleTimingOffset >= 0 ? "+" : "") + String.format(Locale.US, "%.1fs", subtitleTimingOffset);
-                if (Math.abs(subtitleTimingOffset) < 0.05) str = "0.0s";
-                textSubTimingCenter.setText(str);
-            }
-        };
-
-        updateTimingBadge.run();
-
-        if (btnSubMinus1 != null) {
-            btnSubMinus1.setOnClickListener(v -> {
-                saveEpisodeSubOffset(subtitleTimingOffset - 1.0);
-                updateTimingBadge.run();
-            });
-        }
-        if (btnSubMinus01 != null) {
-            btnSubMinus01.setOnClickListener(v -> {
-                saveEpisodeSubOffset(subtitleTimingOffset - 0.1);
-                updateTimingBadge.run();
-            });
-        }
-        if (btnSubPlus01 != null) {
-            btnSubPlus01.setOnClickListener(v -> {
-                saveEpisodeSubOffset(subtitleTimingOffset + 0.1);
-                updateTimingBadge.run();
-            });
-        }
-        if (btnSubPlus1 != null) {
-            btnSubPlus1.setOnClickListener(v -> {
-                saveEpisodeSubOffset(subtitleTimingOffset + 1.0);
-                updateTimingBadge.run();
-            });
         }
 
         captionPreview = view.findViewById(R.id.caption_preview);
@@ -1958,27 +1659,22 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var style = doc.getElementById('anilove-caption-toggle-style') || doc.createElement('style'); " +
                 "    style.id = 'anilove-caption-toggle-style'; " +
                 "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode && doc.head) doc.head.appendChild(style); " +
+                "    if(!style.parentNode) doc.head.appendChild(style); " +
                 "    var videos = doc.querySelectorAll('video'); " +
                 "    videos.forEach(function(v) { " +
-                "      var isVtt = remoteSubUrl && (remoteSubUrl.indexOf('.vtt') !== -1 || remoteSubUrl.indexOf('.srt') !== -1); " +
-                "      if (isVtt && !doc.querySelector('#anilove-universal-sub-track')) { " +
+                "      if (remoteSubUrl && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
                 "        var t = doc.createElement('track'); " +
-                "        t.id = 'anilove-universal-sub-track'; " +
                 "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
                 "      } " +
-                "      if (v.textTracks && v.textTracks.length > 0) { " +
+                "      if (v.textTracks) { " +
+                "        var hasCustom = doc.querySelector('" + selectors + "'); " +
+                "        var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
                 "        for (var i = 0; i < v.textTracks.length; i++) { " +
                 "          var tr = v.textTracks[i]; " +
                 "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
-                "          else if (isVtt) { " +
-                "            if (tr.label === remoteSubLang || tr.src === remoteSubUrl || tr.id === 'anilove-universal-sub-track') { tr.mode = 'showing'; } " +
-                "            else { tr.mode = 'disabled'; } " +
-                "          } else { " +
-                "            if (i === 0) { tr.mode = 'showing'; } " +
-                "            else { tr.mode = 'disabled'; } " +
-                "          } " +
+                "          else if (tr.label === remoteSubLang) { tr.mode = 'showing'; } " +
+                "          else { tr.mode = customVisible ? 'hidden' : 'showing'; } " +
                 "        } " +
                 "      } " +
                 "    }); " +
@@ -2505,9 +2201,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void broadcastProgress(double current, double duration) {
-        if (duration > 0 && current >= duration * 0.85) {
-            deleteEpisodeSubOffset();
-        }
         if (MainActivity.instance == null || MainActivity.instance.getBridge() == null) return;
         
         final int anilistId = getIntent().getIntExtra("anilistId", 0);
@@ -2577,412 +2270,10 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
     private boolean isDirectHls = false;
-    private Map<String, String> multiLanguageSubtitles = new ConcurrentHashMap<>();
-
-    private double aniSkipOpStart = -1, aniSkipOpEnd = -1;
-    private double aniSkipEdStart = -1, aniSkipEdEnd = -1;
-
-    private void seekVideoToAbsolute(int targetSeconds) {
-        if (isOfflineMode && exoPlayer != null) {
-            exoPlayer.seekTo(targetSeconds * 1000L);
-            return;
-        }
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var target = " + targetSeconds + "; " +
-                "  function seekInWin(w) { " +
-                "    try { " +
-                "      var v = w.document.querySelector('video'); " +
-                "      if (v) { try { v.currentTime = target; } catch(e){} } " +
-                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "      if (art) { " +
-                "        try { " +
-                "          if (typeof art.seek === 'function') art.seek(target); " +
-                "          else art.currentTime = target; " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (typeof w.jwplayer === 'function') { " +
-                "        try { " +
-                "          var jp = w.jwplayer(); " +
-                "          if (jp && typeof jp.seek === 'function') jp.seek(target); " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (w.frames && w.frames.length) { " +
-                "        for (var i = 0; i < w.frames.length; i++) { seekInWin(w.frames[i]); } " +
-                "      } " +
-                "    } catch(e) {} " +
-                "  } " +
-                "  seekInWin(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
-    }
-
-    private void fetchAniSkipIntervals(int idMal, int episodeNumber) {
-        if (idMal <= 0 || episodeNumber <= 0) return;
-        aniSkipOpStart = -1; aniSkipOpEnd = -1;
-        aniSkipEdStart = -1; aniSkipEdEnd = -1;
-
-        Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                int length = videoDuration > 0 ? (int) videoDuration : 1440;
-                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + idMal + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=" + length;
-                URL url = new URL(reqUrl);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-
-                if (conn.getResponseCode() == 200) {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    StringBuilder content = new StringBuilder();
-                    String line;
-                    while ((line = in.readLine()) != null) content.append(line);
-                    in.close();
-
-                    JSONObject json = new JSONObject(content.toString());
-                    if (json.optBoolean("found", false)) {
-                        JSONArray results = json.optJSONArray("results");
-                        if (results != null) {
-                            for (int i = 0; i < results.length(); i++) {
-                                JSONObject item = results.optJSONObject(i);
-                                if (item == null) continue;
-                                String skipType = item.optString("skipType", "");
-                                JSONObject interval = item.optJSONObject("interval");
-                                if (interval != null) {
-                                    double start = interval.optDouble("startTime", -1);
-                                    double end = interval.optDouble("endTime", -1);
-                                    if (start >= 0 && end > start) {
-                                        if ("op".equalsIgnoreCase(skipType) || "mixed-op".equalsIgnoreCase(skipType)) {
-                                            aniSkipOpStart = start;
-                                            aniSkipOpEnd = end;
-                                        } else if ("ed".equalsIgnoreCase(skipType) || "mixed-ed".equalsIgnoreCase(skipType)) {
-                                            aniSkipEdStart = start;
-                                            aniSkipEdEnd = end;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                Log.d("AniSkip", "AniSkip skip times fetch failed or non-existent: " + e.getMessage());
-            }
-        });
-    }
-
-    private String fetchUrlContentWithRedirects(String urlStr, int maxRedirects) {
-        if (maxRedirects <= 0 || urlStr == null || urlStr.isEmpty()) return "";
-        try {
-            URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
-            conn.setInstanceFollowRedirects(true);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            conn.setRequestProperty("Referer", "https://tryembed.us.cc/");
-            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-
-            int status = conn.getResponseCode();
-            if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                String newUrl = conn.getHeaderField("Location");
-                if (newUrl != null && !newUrl.isEmpty()) {
-                    if (newUrl.startsWith("/")) {
-                        newUrl = url.getProtocol() + "://" + url.getHost() + newUrl;
-                    }
-                    return fetchUrlContentWithRedirects(newUrl, maxRedirects - 1);
-                }
-            }
-
-            if (status == 200) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder content = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) {
-                    content.append(line).append("\n");
-                }
-                in.close();
-                return content.toString();
-            }
-        } catch (Exception e) {
-            Log.d("SubSniffer", "Error fetching redirect content: " + e.getMessage());
-        }
-        return "";
-    }
-
-    private void parseAndAttachVttFromHtml(String html) {
-        if (html == null || html.isEmpty()) return;
-        Pattern pattern1 = Pattern.compile("<track[^>]+src=[\"']([^\"']+\\.vtt[^\"']*)[\"'][^>]*label=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-        Matcher matcher1 = pattern1.matcher(html);
-        boolean foundAny = false;
-        while (matcher1.find()) {
-            String vttUrl = matcher1.group(1);
-            String label = matcher1.group(2);
-            if (vttUrl != null && !vttUrl.isEmpty()) {
-                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                final String finalVtt = vttUrl;
-                final String finalLabel = label != null ? label : "English";
-                foundAny = true;
-                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-            }
-        }
-
-        Pattern patternJson = Pattern.compile("[\"']?(?:file|url|src)[\"']?\\s*:\\s*[\"']([^\"']+\\.vtt[^\"']*)[\"'][^}]*[\"']?(?:label|lang|language)[\"']?\\s*:\\s*[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-        Matcher matcherJson = patternJson.matcher(html);
-        while (matcherJson.find()) {
-            String vttUrl = matcherJson.group(1);
-            String label = matcherJson.group(2);
-            if (vttUrl != null && !vttUrl.isEmpty()) {
-                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                final String finalVtt = vttUrl;
-                final String finalLabel = label != null ? label : "English";
-                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-            }
-        }
-    }
-
-    private void startServer2BSubSniffer(int anilistId, int episodeNumber) {
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-
-        Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                String tryEmbedUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                String html = fetchUrlContentWithRedirects(tryEmbedUrl, 5);
-                if (html != null && !html.isEmpty()) {
-                    parseAndAttachVttFromHtml(html);
-                }
-                if (parsedVttCues.isEmpty()) {
-                    String vidnestUrl = "https://vidnest.fun/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                    String vHtml = fetchUrlContentWithRedirects(vidnestUrl, 5);
-                    if (vHtml != null && !vHtml.isEmpty()) {
-                        parseAndAttachVttFromHtml(vHtml);
-                    }
-                }
-            } catch (Exception e) {
-                Log.d("SubSniffer", "HTTP redirect fetch exception: " + e.getMessage());
-            }
-        });
-    }
-
-    public static class VttCue {
-        public long startMs;
-        public long endMs;
-        public String text;
-
-        public VttCue(long startMs, long endMs, String text) {
-            this.startMs = startMs;
-            this.endMs = endMs;
-            this.text = text;
-        }
-    }
-
-    private List<VttCue> parsedVttCues = new CopyOnWriteArrayList<>();
-
-    private long parseVttTimestampToMs(String timeStr) {
-        if (timeStr == null) return 0;
-        timeStr = timeStr.trim().replace(',', '.');
-        try {
-            String[] parts = timeStr.split(":");
-            if (parts.length == 3) {
-                long hours = Long.parseLong(parts[0]);
-                long minutes = Long.parseLong(parts[1]);
-                double seconds = Double.parseDouble(parts[2]);
-                return (hours * 3600000L) + (minutes * 60000L) + (long) (seconds * 1000L);
-            } else if (parts.length == 2) {
-                long minutes = Long.parseLong(parts[0]);
-                double seconds = Double.parseDouble(parts[1]);
-                return (minutes * 60000L) + (long) (seconds * 1000L);
-            }
-        } catch (Exception ignored) {}
-        return 0;
-    }
-
-    private void parseVttContent(String vttContent) {
-        if (vttContent == null || vttContent.isEmpty()) return;
-        List<VttCue> newCues = new ArrayList<>();
-        String[] lines = vttContent.split("\n");
-        long currentStart = -1;
-        long currentEnd = -1;
-        StringBuilder currentText = new StringBuilder();
-
-        for (String rawLine : lines) {
-            String line = rawLine.trim();
-            if (line.contains("-->")) {
-                if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
-                    String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
-                    if (!cleanText.isEmpty()) {
-                        newCues.add(new VttCue(currentStart, currentEnd, cleanText));
-                    }
-                }
-                currentText.setLength(0);
-                String[] times = line.split("-->");
-                if (times.length == 2) {
-                    String startStr = times[0].trim().split("\\s+")[0];
-                    String endStr = times[1].trim().split("\\s+")[0];
-                    currentStart = parseVttTimestampToMs(startStr);
-                    currentEnd = parseVttTimestampToMs(endStr);
-                }
-            } else if (currentStart >= 0 && !line.isEmpty() && !line.startsWith("WEBVTT") && !line.startsWith("NOTE") && !line.startsWith("STYLE")) {
-                if (currentText.length() > 0) currentText.append("\n");
-                currentText.append(line);
-            }
-        }
-
-        if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
-            String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
-            if (!cleanText.isEmpty()) {
-                newCues.add(new VttCue(currentStart, currentEnd, cleanText));
-            }
-        }
-
-        if (!newCues.isEmpty()) {
-            parsedVttCues.clear();
-            parsedVttCues.addAll(newCues);
-            Log.i("VttParser", "Successfully parsed " + newCues.size() + " WebVTT cues!");
-        }
-    }
-
-    private void downloadAndParseVttFile(String vttUrl) {
-        if (vttUrl == null || vttUrl.isEmpty()) return;
-        Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                String content = fetchUrlContentWithRedirects(vttUrl, 5);
-                if (content != null && !content.isEmpty()) {
-                    parseVttContent(content);
-                }
-            } catch (Exception e) {
-                Log.e("VttParser", "Failed to download VTT file: " + e.getMessage());
-            }
-        });
-    }
-
-    private void updateNativeSubtitleOverlay(double currentSec) {
-        TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
-        if (textOverlay == null) return;
-
-        if (!isSubtitlesEnabled || parsedVttCues.isEmpty()) {
-            textOverlay.setVisibility(View.GONE);
-            return;
-        }
-
-        long currentMs = (long) ((currentSec + subtitleTimingOffset) * 1000L);
-        VttCue activeCue = null;
-        for (VttCue cue : parsedVttCues) {
-            if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
-                activeCue = cue;
-                break;
-            }
-        }
-
-        if (activeCue != null && activeCue.text != null && !activeCue.text.isEmpty()) {
-            textOverlay.setText(activeCue.text);
-            textOverlay.setVisibility(View.VISIBLE);
-        } else {
-            textOverlay.setVisibility(View.GONE);
-        }
-    }
-
-    private String detectLanguageFromVttUrl(String url) {
-        if (url == null) return "English";
-        String lower = url.toLowerCase();
-        if (lower.contains("_spa") || lower.contains("spanish") || lower.contains("lang=es")) return "Spanish";
-        if (lower.contains("_fre") || lower.contains("_fra") || lower.contains("french") || lower.contains("lang=fr")) return "French";
-        if (lower.contains("_por") || lower.contains("portuguese") || lower.contains("lang=pt")) return "Portuguese";
-        if (lower.contains("_ger") || lower.contains("_deu") || lower.contains("german") || lower.contains("lang=de")) return "German";
-        if (lower.contains("_ita") || lower.contains("italian") || lower.contains("lang=it")) return "Italian";
-        if (lower.contains("_hin") || lower.contains("hindi") || lower.contains("lang=hi")) return "Hindi";
-        if (lower.contains("_ara") || lower.contains("arabic") || lower.contains("lang=ar")) return "Arabic";
-        if (lower.contains("_rus") || lower.contains("russian") || lower.contains("lang=ru")) return "Russian";
-        if (lower.contains("_ind") || lower.contains("indonesian") || lower.contains("lang=id")) return "Indonesian";
-        return "English";
-    }
-
-    private void attachCapturedVttTrack(String vttUrl) {
-        attachCapturedVttTrack(vttUrl, detectLanguageFromVttUrl(vttUrl));
-    }
-
-    private void attachCapturedVttTrack(String vttUrl, String langName) {
-        if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
-        subtitleUrl = vttUrl;
-        if (langName != null && !langName.isEmpty()) {
-            subtitleLang = langName;
-            capturedServer2BSubtitles.put(langName, vttUrl);
-            if (!detectedSubtitles.contains(langName)) {
-                detectedSubtitles.add(langName);
-            }
-        }
-        downloadAndParseVttFile(vttUrl);
-        final String label = (subtitleLang != null ? subtitleLang : "English");
-
-        String js = "(function() { " +
-                "  var vttUrl = '" + vttUrl.replace("'", "\\'") + "'; " +
-                "  var labelStr = '" + label.replace("'", "\\'") + "'; " +
-                "  function attach(win) { try { " +
-                "    var doc = win.document; " +
-                "    var videos = doc.querySelectorAll('video'); " +
-                "    videos.forEach(function(v) { " +
-                "      var trackId = 'anilove-sub-' + labelStr.toLowerCase().replace(/[^a-z0-9]/g, ''); " +
-                "      var oldTrack = doc.getElementById(trackId); " +
-                "      if (!oldTrack) { " +
-                "        var t = doc.createElement('track'); " +
-                "        t.id = trackId; " +
-                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = labelStr; t.srclang = 'en'; " +
-                "        v.appendChild(t); " +
-                "      } else { " +
-                "        oldTrack.src = vttUrl; " +
-                "      } " +
-                "      if (v.textTracks && v.textTracks.length > 0) { " +
-                "        for (var i = 0; i < v.textTracks.length; i++) { " +
-                "          var tr = v.textTracks[i]; " +
-                "          if (tr.src === vttUrl || tr.id === trackId || tr.label === labelStr) { " +
-                "            tr.mode = 'showing'; " +
-                "          } else if (!tr.id || !tr.id.startsWith('anilove-sub-')) { " +
-                "            tr.mode = 'disabled'; " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    }); " +
-                "  } catch(e) {} " +
-                "  for (var f = 0; f < win.frames.length; f++) { try { attach(win.frames[f]); } catch(e){} } } " +
-                "  attach(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
-        applyCaptionStyle();
-        applySubtitleTimingOffsetInWeb();
-    }
-
-    private boolean isAdUrl(String lower) {
-        if (lower == null) return false;
-        return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
-               lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
-               lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||
-               lower.contains("probationthimbledespite") || lower.contains("alwingulla") || lower.contains("cpmgate") ||
-               lower.contains("trafficjunky") || lower.contains("exoclick") || lower.contains("juicyads") ||
-               lower.contains("propellerads") || lower.contains("bet365") || lower.contains("1xbet") ||
-               lower.contains("stake") || lower.contains("doubleclick") || lower.contains("googlesyndication") ||
-               lower.contains("google-analytics") || lower.contains("adservice") || lower.contains("turnstile") ||
-               lower.contains("challenge-platform") || lower.contains("popunder") || lower.contains("redirect") ||
-               lower.contains("syndication") || lower.contains("onclick") || lower.contains("outbrain") ||
-               lower.contains("taboola");
-    }
 
     private void setupHybridEngine(String url) {
         if (url == null || url.isEmpty() || playerWebView == null) return;
-
-        int anilistId = getIntent().getIntExtra("anilistId", 0);
-        int idMal = getIntent().getIntExtra("idMal", 0);
-        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-
-        if (anilistId > 0 && episodeNumber > 0) {
-            detectedSubtitles.clear();
-            capturedServer2BSubtitles.clear();
-            startServer2BSubSniffer(anilistId, episodeNumber);
-        }
-        if (idMal > 0 && episodeNumber > 0) {
-            fetchAniSkipIntervals(idMal, episodeNumber);
-        }
-
+        
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -3022,11 +2313,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         playerWebView.setWebViewClient(new WebViewClient() { 
-            @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.proceed();
-            }
-
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
@@ -3075,10 +2361,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
-
-                if (isAdUrl(lower)) {
-                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
@@ -3368,24 +2650,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          } " +
                 "        }); " +
                 "      } " +
-                "      try { " +
-                "        if (typeof win.jwplayer === 'function') { " +
-                "          var jp = win.jwplayer(); " +
-                "          if (jp && typeof jp.getCaptionsList === 'function') { " +
-                "            var cList = jp.getCaptionsList(); " +
-                "            if (cList && cList.length > 0) { " +
-                "              for (var i = 0; i < cList.length; i++) { " +
-                "                var c = cList[i]; " +
-                "                if (c && c.file && c.label && c.label.toLowerCase() !== 'off' && c.label.toLowerCase() !== 'id3 metadata') { " +
-                "                  if (window.AndroidScrubber && typeof window.AndroidScrubber.onTrackFound === 'function') { " +
-                "                    window.AndroidScrubber.onTrackFound(c.label, c.file); " +
-                "                  } " +
-                "                } " +
-                "              } " +
-                "            } " +
-                "          } " +
-                "        } " +
-                "      } catch(e){} " +
                 "      var doc = win.document; " +
                 "      var junkOverlays = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      junkOverlays.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
@@ -3415,9 +2679,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var v = doc.querySelector('video'); " +
                 "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
                 "      if (v) { " +
-                "        if (v.textTracks && v.textTracks.length > 0 && v.textTracks[0].mode !== 'showing') { " +
-                "          try { v.textTracks[0].mode = 'showing'; } catch(e){} " +
-                "        } " +
                 "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
                 "          try { v.muted = true; } catch(e){} " +
                 "          var p = v.play(); " +
@@ -3430,22 +2691,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          if (v.muted) v.muted = false; " +
                 "          if (v.volume < 1.0) v.volume = 1.0; " +
                 "        } " +
-                "      } " +
-                "      if (!win._aniloveObserverSet) { " +
-                "        win._aniloveObserverSet = true; " +
-                "        try { " +
-                "          var observer = new MutationObserver(function() { " +
-                "            try { " +
-                "              var badEls = doc.querySelectorAll('.top-gradient, .glass-panel, .bottom-bar-panel, .skin-controls, .skin-timeline, .skin-menu, .art-controls, .art-bottom, .art-mask, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, vds-controls, media-controls, [data-part=\"controls\"], [class*=\"Controls-module\"], [class*=\"TimeSlider-module\"], [class*=\"CenterControls-module\"], [class*=\"TopRightControls-module\"], [class*=\"VideoLayout-module\"], [class*=\"SettingsMenu-module\"], .vds-controls, .vds-time-slider, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container, div[class*=\"top-0\"], button[class*=\"z-50\"], div[class*=\"z-50\"]'); " +
-                "              badEls.forEach(function(el) { try { el.style.setProperty('display', 'none', 'important'); el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('opacity', '0', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); } catch(e){} }); " +
-                "              var vObs = doc.querySelector('video'); " +
-                "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0 && vObs.textTracks[0].mode !== 'showing') { " +
-                "                try { vObs.textTracks[0].mode = 'showing'; } catch(e){} " +
-                "              } " +
-                "            } catch(e){} " +
-                "          }); " +
-                "          if (doc.body) { observer.observe(doc.body, { childList: true, subtree: true }); } " +
-                "        } catch(e){} " +
                 "      } " +
                 "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
                 "      if (art && typeof art.play === 'function' && !globalPause && !isVideoActive) { " +
@@ -3531,20 +2776,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        '.player-wrapper, .player-container, .artplayer-app, .art-video-player, .jwplayer, .video-js, #artPlayer, #player { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; background: #000 !important; background-color: #000 !important; display: block !important; opacity: 1 !important; visibility: visible !important; } ' + " +
                 "        'iframe#playerFrame, iframe#videoFrame, iframe[src*=\"iqsmart\"], iframe[src*=\"piratex\"], iframe[src*=\"abyss\"], iframe[src*=\"blakite\"], iframe[src*=\"rubystm\"], iframe[src*=\"embed\"], iframe[src*=\"player\"], iframe[src*=\"v2\"], iframe[src*=\"public\"] { width: 100% !important; height: 100% !important; border: none !important; margin: 0 !important; padding: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important; z-index: 9999 !important; } ' + " +
                 "        'video, .jw-video, .vjs-tech, .art-video { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important; opacity: 1 !important; } ' + " +
-                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } ' + " +
-                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .art-state, .art-icon-state, .art-poster, .art-poster-img, .art-notice, .art-layer-state, [class*=\"art-state\"], [class*=\"art-icon\"], [class*=\"art-poster\"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, .player-btn, .player-options, div[class*=\"server-select\"], div[class*=\"servers\"], button[class*=\"server\"], .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, #downloadButton, #moreOptionsBtn, .video-links-modal, .download-btn, #btn-download, #download, .menuButton, #menuButton, iframe[src*=\"probation\"], iframe[src*=\"doubleclick\"], iframe[src*=\"googlesyndication\"], iframe[src*=\"decafeligiblyhad\"], iframe[src*=\"exosrv\"], iframe[src*=\"adsterra\"], iframe[src*=\"popads\"], iframe[src*=\"popcash\"], iframe[src*=\"clocid\"], iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], iframe[src*=\"captcha\"], iframe[src*=\"recaptcha\"], iframe[src*=\"verify\"], .cf-turnstile, #cf-wrapper, #challenge-stage, .verification-modal, .verify-container, .human-verify, #human-verification, .captcha-box, .ad-captcha, #ad-container, .ad-overlay, div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"], div[class*=\"check\"], div[id*=\"check\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
+                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; animation: none !important; transition: opacity 0s !important; } ' + " +
+                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .art-state, .art-icon-state, .art-poster, .art-poster-img, .art-notice, .art-layer-state, [class*=\"art-state\"], [class*=\"art-icon\"], [class*=\"art-poster\"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, #downloadButton, #moreOptionsBtn, .video-links-modal, .download-btn, #btn-download, #download, .menuButton, #menuButton, iframe[src*=\"probation\"], iframe[src*=\"doubleclick\"], iframe[src*=\"googlesyndication\"], iframe[src*=\"decafeligiblyhad\"], iframe[src*=\"exosrv\"], iframe[src*=\"adsterra\"], iframe[src*=\"popads\"], iframe[src*=\"popcash\"], iframe[src*=\"clocid\"], div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
-                "      var allEls = doc.querySelectorAll('div, section, article, iframe, form'); " +
-                "      allEls.forEach(function(el) { " +
-                "        var txt = (el.innerText || el.textContent || '').toLowerCase(); " +
-                "        if (txt.indexOf('security check') !== -1 || txt.indexOf('verify you are human') !== -1 || txt.indexOf('verification required') !== -1 || txt.indexOf('confirm you are human') !== -1 || txt.indexOf('one tap to confirm') !== -1) { " +
-                "          if (!el.querySelector('video') && !el.classList.contains('player-wrapper') && !el.classList.contains('art-video-player')) { " +
-                "            try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); } " +
-                "          } " +
-                "        } " +
-                "      }); " +
                 "    } catch(e) {} " +
                 "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
                 "  } " +

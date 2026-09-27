@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and real-time JWPlayer caption scanner. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, and caption controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -99,33 +99,19 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 🛡️ 4. Nuclear-Grade AdEraser Engine
+## ⚡ 4. Restored Server 1 Engine (Commit `713a1f8` Reference State)
 
-- **Prototype-Level Lock**: Locked `window.open` and `HTMLAnchorElement.prototype.click` at prototype level (`writable: false, configurable: false`).
-- **Touch-Trap Deactivation**: Applied `pointer-events: none !important; z-index: -9999 !important` to ad overlays (`.art-mask`, `#overlay`, `#playback`, `.jw-controls`), leaving ONLY `<video>` touchable.
-- **Network Level Blocking (`shouldInterceptRequest`)**: Intercepts ad domains (`adsterra`, `monetag`, `highperformancegate`, `popads`, `popcash`, `exosrv`, `clocid`, `alwingulla`, `cpmgate`, `probationthimbledespite`, `decafeligiblyhad`, `doubleclick`, `googlesyndication`) and returns blank responses.
-- **AdEraser DOM Text Sweeper**: Sweeps DOM nodes on 0ms for text containing `"security check"`, `"verify you are human"`, `"verification required"`, or `"confirm you are human"`, destroying those ad overlays on 0ms.
-
----
-
-## 💬 5. Real-Time JWPlayer Caption Scanner & Captions Menu Sync
-
-Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
-
-1. **ID3 Metadata Purge**: `ID3 Metadata` is permanently filtered out and excluded.
-2. **Real-Time JWPlayer Caption Scanner (`scanJWCaptions`)**:
-   - Injects a JS scanner that queries JWPlayer's `getCaptionsList()` directly inside WebView every 300ms.
-   - Resolves the **EXACT REAL, WORKING SUBTITLE TRACKS** configured for that specific episode on Server 2-B-SUB / TryEmbed.
-   - Calls `onTrackFound(label, file)` via `@JavascriptInterface` to register real tracks in `capturedServer2BSubtitles` and `detectedSubtitles`.
-3. **Interactive Language Options in Captions Menu**:
-   - Tapping the Captions (CC) button displays **ONLY those REAL, VERIFIED WORKING subtitle options** in `showCaptionMenu()`.
-   - Selecting any language pill (`changeSubtitleTrack`) downloads that language's WebVTT file, parses its cues into `parsedVttCues`, and renders captions in `text_native_subtitle_overlay` Native `TextView` ON TOP of the video.
-4. **Server 1 Native Track Suppression**:
-   - Suppresses and hides Server 1's native caption elements (`.art-subtitle`, `.jw-captions`, `.vjs-text-track-display`) via CSS/JS injection (`display: none !important`).
+- **Pure Single WebView Architecture**:
+  - Restored `NativePlayerActivity` to the high-performance, 0ms latency Server 1 engine from commit `713a1f8`.
+  - Secondary `subSnifferWebView` and background subtitle fetching have been completely removed.
+  - Eliminates all C++ native thread crashes (`pthread_mutex_lock`), memory heap fragmentation (`Scudo ERROR`), and video freezing!
+- **Server 1 Native Playback**:
+  - Loads embed servers directly on top-level frame with proper `Referer` headers.
+  - `injectAdEraser()` cleans ad overlays, blocks popup windows, and sets up 0ms autoplay sweeps.
 
 ---
 
-## ⏩ 6. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
+## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
 
 - **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved the `HTTP 400 Bad Request` error, returning `HTTP 200 OK` with exact OP/ED skip intervals!
 - **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
@@ -139,14 +125,14 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## ⏱️ 7. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
+## ⏱️ 6. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
 
 - **Trigger Rule**: When video playback reaches **2 minutes remaining** (`duration - current <= 120` seconds), `NativePlayerActivity` automatically pre-fetches the stream URL for Episode $N+1$ in the background.
 - **Cache Storage**: Resolved stream URLs are stored in `StreamCache`. When tapping "Next Episode", playback begins instantly with **0ms API latency**.
 
 ---
 
-## 💾 8. 500 MB LRU Disk Segment Cache
+## 💾 7. 500 MB LRU Disk Segment Cache
 
 - **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB disk limit** (`media_lru_cache`).
 - **WebView Storage**: Enables HTML5 IndexedDB, DOM Storage, and HTTP disk caching (`LOAD_DEFAULT`).
@@ -154,7 +140,7 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## 📦 9. Bundle Optimization & Dynamic View Code-Splitting
+## 📦 8. Bundle Optimization & Dynamic View Code-Splitting
 
 - **React Lazy Loading (`App.tsx`)**: Replaced static imports with `React.lazy()` for heavy secondary views:
   - `ReelsView` (~23 KB chunk)
@@ -165,7 +151,7 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## 🛠️ 10. Maintenance & Troubleshooting Checklist for Developers
+## 🛠️ 9. Maintenance & Troubleshooting Checklist for Developers
 
 When updating or adding new servers or player features, verify:
 1. **Never use `el.remove()` on embed elements**: Always use CSS `display: none !important` to hide elements without crashing JS player event listeners.
