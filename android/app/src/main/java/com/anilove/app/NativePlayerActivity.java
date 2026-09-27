@@ -30,6 +30,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1741,8 +1743,22 @@ public class NativePlayerActivity extends AppCompatActivity {
         View scrollTrack = view.findViewById(R.id.scroll_caption_track);
 
         if (groupTrack != null && labelTrack != null && scrollTrack != null) {
-            List<String> subList = new ArrayList<>(detectedSubtitles);
-            if (!subList.contains("Off")) subList.add(0, "Off");
+            Set<String> subSet = new LinkedHashSet<>();
+            subSet.add("Off");
+
+            for (String lang : capturedServer2BSubtitles.keySet()) {
+                if (lang != null && !lang.trim().isEmpty()) {
+                    subSet.add(lang);
+                }
+            }
+
+            for (String s : detectedSubtitles) {
+                if (s != null && !s.equalsIgnoreCase("ID3 Metadata") && !s.equalsIgnoreCase("Off") && !s.trim().isEmpty()) {
+                    subSet.add(s);
+                }
+            }
+
+            List<String> subList = new ArrayList<>(subSet);
             if (subList.size() > 1) {
                 labelTrack.setVisibility(View.VISIBLE);
                 scrollTrack.setVisibility(View.VISIBLE);
@@ -3000,6 +3016,21 @@ public class NativePlayerActivity extends AppCompatActivity {
         applySubtitleTimingOffsetInWeb();
     }
 
+    private boolean isAdUrl(String lower) {
+        if (lower == null) return false;
+        return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
+               lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
+               lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||
+               lower.contains("probationthimbledespite") || lower.contains("alwingulla") || lower.contains("cpmgate") ||
+               lower.contains("trafficjunky") || lower.contains("exoclick") || lower.contains("juicyads") ||
+               lower.contains("propellerads") || lower.contains("bet365") || lower.contains("1xbet") ||
+               lower.contains("stake") || lower.contains("doubleclick") || lower.contains("googlesyndication") ||
+               lower.contains("google-analytics") || lower.contains("adservice") || lower.contains("turnstile") ||
+               lower.contains("challenge-platform") || lower.contains("popunder") || lower.contains("redirect") ||
+               lower.contains("syndication") || lower.contains("onclick") || lower.contains("outbrain") ||
+               lower.contains("taboola");
+    }
+
     private void setupHybridEngine(String url) {
         if (url == null || url.isEmpty() || playerWebView == null) return;
 
@@ -3107,6 +3138,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
+
+                if (isAdUrl(lower)) {
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
+                }
 
                 int anilistId = getIntent().getIntExtra("anilistId", 0);
                 int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
