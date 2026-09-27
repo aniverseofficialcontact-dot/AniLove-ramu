@@ -311,6 +311,26 @@
                     android:shadowRadius="3" />
             </LinearLayout>
 
+            <!-- Server 2-B Native Subtitle Overlay -->
+            <TextView
+                android:id="@+id/text_native_subtitle_overlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_above="@id/bottom_bar"
+                android:layout_centerHorizontal="true"
+                android:layout_marginBottom="12dp"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="5dp"
+                android:gravity="center"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                android:shadowRadius="4"
+                android:visibility="gone" />
+
             <!-- Bottom bar -->
             <LinearLayout
                 android:id="@+id/bottom_bar"

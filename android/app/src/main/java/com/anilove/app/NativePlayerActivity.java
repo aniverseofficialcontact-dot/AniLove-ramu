@@ -30,6 +30,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
 import android.os.Build;
@@ -1054,6 +1055,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 currentVideoTime = current;
                 videoDuration = duration;
+                updateNativeSubtitleOverlay(current);
                 if (opEdSeekBarDrawable != null) {
                     opEdSeekBarDrawable.invalidateSelf();
                 }
@@ -2570,7 +2572,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + idMal + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap";
+                int length = videoDuration > 0 ? (int) videoDuration : 1440;
+                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + idMal + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=" + length;
                 URL url = new URL(reqUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -2740,6 +2743,124 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
+    public static class VttCue {
+        public long startMs;
+        public long endMs;
+        public String text;
+
+        public VttCue(long startMs, long endMs, String text) {
+            this.startMs = startMs;
+            this.endMs = endMs;
+            this.text = text;
+        }
+    }
+
+    private List<VttCue> parsedVttCues = new CopyOnWriteArrayList<>();
+
+    private long parseVttTimestampToMs(String timeStr) {
+        if (timeStr == null) return 0;
+        timeStr = timeStr.trim().replace(',', '.');
+        try {
+            String[] parts = timeStr.split(":");
+            if (parts.length == 3) {
+                long hours = Long.parseLong(parts[0]);
+                long minutes = Long.parseLong(parts[1]);
+                double seconds = Double.parseDouble(parts[2]);
+                return (hours * 3600000L) + (minutes * 60000L) + (long) (seconds * 1000L);
+            } else if (parts.length == 2) {
+                long minutes = Long.parseLong(parts[0]);
+                double seconds = Double.parseDouble(parts[1]);
+                return (minutes * 60000L) + (long) (seconds * 1000L);
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private void parseVttContent(String vttContent) {
+        if (vttContent == null || vttContent.isEmpty()) return;
+        List<VttCue> newCues = new ArrayList<>();
+        String[] lines = vttContent.split("\n");
+        long currentStart = -1;
+        long currentEnd = -1;
+        StringBuilder currentText = new StringBuilder();
+
+        for (String rawLine : lines) {
+            String line = rawLine.trim();
+            if (line.contains("-->")) {
+                if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
+                    String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
+                    if (!cleanText.isEmpty()) {
+                        newCues.add(new VttCue(currentStart, currentEnd, cleanText));
+                    }
+                }
+                currentText.setLength(0);
+                String[] times = line.split("-->");
+                if (times.length == 2) {
+                    String startStr = times[0].trim().split("\\s+")[0];
+                    String endStr = times[1].trim().split("\\s+")[0];
+                    currentStart = parseVttTimestampToMs(startStr);
+                    currentEnd = parseVttTimestampToMs(endStr);
+                }
+            } else if (currentStart >= 0 && !line.isEmpty() && !line.startsWith("WEBVTT") && !line.startsWith("NOTE") && !line.startsWith("STYLE")) {
+                if (currentText.length() > 0) currentText.append("\n");
+                currentText.append(line);
+            }
+        }
+
+        if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
+            String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
+            if (!cleanText.isEmpty()) {
+                newCues.add(new VttCue(currentStart, currentEnd, cleanText));
+            }
+        }
+
+        if (!newCues.isEmpty()) {
+            parsedVttCues.clear();
+            parsedVttCues.addAll(newCues);
+            Log.i("VttParser", "Successfully parsed " + newCues.size() + " WebVTT cues!");
+        }
+    }
+
+    private void downloadAndParseVttFile(String vttUrl) {
+        if (vttUrl == null || vttUrl.isEmpty()) return;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String content = fetchUrlContentWithRedirects(vttUrl, 5);
+                if (content != null && !content.isEmpty()) {
+                    parseVttContent(content);
+                }
+            } catch (Exception e) {
+                Log.e("VttParser", "Failed to download VTT file: " + e.getMessage());
+            }
+        });
+    }
+
+    private void updateNativeSubtitleOverlay(double currentSec) {
+        TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+        if (textOverlay == null) return;
+
+        if (parsedVttCues.isEmpty()) {
+            textOverlay.setVisibility(View.GONE);
+            return;
+        }
+
+        long currentMs = (long) (currentSec * 1000L);
+        VttCue activeCue = null;
+        for (VttCue cue : parsedVttCues) {
+            if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
+                activeCue = cue;
+                break;
+            }
+        }
+
+        if (activeCue != null) {
+            textOverlay.setText(activeCue.text);
+            textOverlay.setVisibility(View.VISIBLE);
+        } else {
+            textOverlay.setVisibility(View.GONE);
+        }
+    }
+
     private String detectLanguageFromVttUrl(String url) {
         if (url == null) return "English";
         String lower = url.toLowerCase();
@@ -2763,6 +2884,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
         subtitleUrl = vttUrl;
         if (langName != null) subtitleLang = langName;
+        downloadAndParseVttFile(vttUrl);
         final String label = (subtitleLang != null ? subtitleLang : "English");
 
         String js = "(function() { " +
@@ -3337,7 +3459,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        '.player-wrapper, .player-container, .artplayer-app, .art-video-player, .jwplayer, .video-js, #artPlayer, #player { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; background: #000 !important; background-color: #000 !important; display: block !important; opacity: 1 !important; visibility: visible !important; } ' + " +
                 "        'iframe#playerFrame, iframe#videoFrame, iframe[src*=\"iqsmart\"], iframe[src*=\"piratex\"], iframe[src*=\"abyss\"], iframe[src*=\"blakite\"], iframe[src*=\"rubystm\"], iframe[src*=\"embed\"], iframe[src*=\"player\"], iframe[src*=\"v2\"], iframe[src*=\"public\"] { width: 100% !important; height: 100% !important; border: none !important; margin: 0 !important; padding: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important; z-index: 9999 !important; } ' + " +
                 "        'video, .jw-video, .vjs-tech, .art-video { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important; opacity: 1 !important; } ' + " +
-                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p, [class*=\"subtitle\"], [class*=\"caption\"], [id*=\"subtitle\"], [id*=\"caption\"] { visibility: visible !important; opacity: 1 !important; display: block !important; z-index: 2147483647 !important; animation: none !important; transition: opacity 0s !important; } ' + " +
+                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } ' + " +
                 "        '#overlay, #playback, #vid_play, #play_btn, #desk, .art-state, .art-icon-state, .art-poster, .art-poster-img, .art-notice, .art-layer-state, [class*=\"art-state\"], [class*=\"art-icon\"], [class*=\"art-poster\"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, .player-btn, .player-options, div[class*=\"server-select\"], div[class*=\"servers\"], button[class*=\"server\"], .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, #downloadButton, #moreOptionsBtn, .video-links-modal, .download-btn, #btn-download, #download, .menuButton, #menuButton, iframe[src*=\"probation\"], iframe[src*=\"doubleclick\"], iframe[src*=\"googlesyndication\"], iframe[src*=\"decafeligiblyhad\"], iframe[src*=\"exosrv\"], iframe[src*=\"adsterra\"], iframe[src*=\"popads\"], iframe[src*=\"popcash\"], iframe[src*=\"clocid\"], iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], iframe[src*=\"captcha\"], iframe[src*=\"recaptcha\"], iframe[src*=\"verify\"], .cf-turnstile, #cf-wrapper, #challenge-stage, .verification-modal, .verify-container, .human-verify, #human-verification, .captcha-box, .ad-captcha, #ad-container, .ad-overlay, div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"], div[class*=\"check\"], div[id*=\"check\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
