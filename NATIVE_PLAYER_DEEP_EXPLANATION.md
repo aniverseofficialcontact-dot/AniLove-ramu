@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and dynamic subtitle controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and verified subtitle controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -102,22 +102,22 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 ## 🛡️ 4. Nuclear-Grade AdEraser Engine
 
 - **Prototype-Level Lock**: Locked `window.open` and `HTMLAnchorElement.prototype.click` at prototype level (`writable: false, configurable: false`).
-- **Touch-Trap Deactivation**: Applied `pointer-events: none !important; z-index: -9999 !important` to ad overlays (`.art-mask`, `#overlay`, `#playback`), leaving ONLY `<video>` touchable.
+- **Touch-Trap Deactivation**: Applied `pointer-events: none !important; z-index: -9999 !important` to ad overlays (`.art-mask`, `#overlay`, `#playback`, `.jw-controls`), leaving ONLY `<video>` touchable.
 - **Network Level Blocking (`shouldInterceptRequest`)**: Intercepts ad domains (`adsterra`, `monetag`, `highperformancegate`, `popads`, `popcash`, `exosrv`, `clocid`, `alwingulla`, `cpmgate`, `probationthimbledespite`, `decafeligiblyhad`, `doubleclick`, `googlesyndication`) and returns blank responses.
 - **AdEraser DOM Text Sweeper**: Sweeps DOM nodes on 0ms for text containing `"security check"`, `"verify you are human"`, `"verification required"`, or `"confirm you are human"`, destroying those ad overlays on 0ms.
 
 ---
 
-## 💬 5. Dynamic Real-Time Subtitle Discovery & Captions Menu Sync
+## 💬 5. Verified Real-Time Subtitle Discovery & Captions Menu Sync
 
 Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
 
 1. **ID3 Metadata Purge**: `ID3 Metadata` is permanently filtered out and excluded.
-2. **Real-Time Subtitle Ingestion (`parseAndAttachVttFromHtml`)**:
-   - `startServer2BSubSniffer` parses the raw HTML and JSON tracks from `Server 2-B-SUB` (`tryembed.us.cc` / `vidnest.fun`) in real-time.
-   - Populates `capturedServer2BSubtitles` and `detectedSubtitles` with **ONLY the REAL, VERIFIED subtitle tracks** that actually exist for that specific episode!
+2. **Verified Subtitle Ingestion (`autoLoadServer2BSubtitles`)**:
+   - `autoLoadServer2BSubtitles` verifies HTTP status and WebVTT content for candidate languages (English, Hindi, Spanish, French, German, Italian, Portuguese, Japanese, Russian, Arabic) from Server 2-B-SUB (`tryembed.us.cc` / `vidnest.fun`).
+   - Populates `capturedServer2BSubtitles` and `detectedSubtitles` with **ONLY VERIFIED, WORKING SUBTITLE TRACKS** that actually exist for that specific episode!
 3. **Interactive Language Options in Captions Menu**:
-   - Tapping the Captions (CC) button displays **ONLY those REAL, WORKING subtitle options** in `showCaptionMenu()`.
+   - Tapping the Captions (CC) button displays **ONLY those VERIFIED WORKING subtitle options** in `showCaptionMenu()`.
    - Selecting any language pill (`changeSubtitleTrack`) downloads that language's WebVTT file, parses its cues into `parsedVttCues`, and renders captions in `text_native_subtitle_overlay` Native `TextView` ON TOP of the video.
 4. **Server 1 Native Track Suppression**:
    - Suppresses and hides Server 1's native caption elements (`.art-subtitle`, `.jw-captions`, `.vjs-text-track-display`) via CSS/JS injection (`display: none !important`).

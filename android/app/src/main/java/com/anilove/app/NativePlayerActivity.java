@@ -2726,6 +2726,82 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private void autoLoadServer2BSubtitles(int anilistId, int episodeNumber) {
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String[][] candidateLangs = {
+                    {"English", "en.vtt", "sub.vtt"},
+                    {"Hindi", "hi.vtt", "hin.vtt"},
+                    {"Spanish", "es.vtt", "spa.vtt"},
+                    {"French", "fr.vtt", "fra.vtt"},
+                    {"German", "de.vtt", "ger.vtt"},
+                    {"Italian", "it.vtt", "ita.vtt"},
+                    {"Portuguese", "pt.vtt", "por.vtt"},
+                    {"Japanese", "ja.vtt", "jp.vtt"},
+                    {"Russian", "ru.vtt", "rus.vtt"},
+                    {"Arabic", "ar.vtt", "ara.vtt"}
+                };
+
+                String[] baseDomains = {
+                    "https://tryembed.us.cc/sub/" + anilistId + "/" + episodeNumber + "/",
+                    "https://vidnest.fun/sub/" + anilistId + "/" + episodeNumber + "/"
+                };
+
+                boolean primaryLoaded = false;
+
+                for (String[] item : candidateLangs) {
+                    String langName = item[0];
+                    String file1 = item[1];
+                    String file2 = item[2];
+
+                    String workingUrl = null;
+                    String workingContent = null;
+
+                    for (String domain : baseDomains) {
+                        String url1 = domain + file1;
+                        String content1 = fetchUrlContentWithRedirects(url1, 3);
+                        if (content1 != null && (content1.contains("WEBVTT") || content1.contains("-->"))) {
+                            workingUrl = url1;
+                            workingContent = content1;
+                            break;
+                        }
+
+                        String url2 = domain + file2;
+                        String content2 = fetchUrlContentWithRedirects(url2, 3);
+                        if (content2 != null && (content2.contains("WEBVTT") || content2.contains("-->"))) {
+                            workingUrl = url2;
+                            workingContent = content2;
+                            break;
+                        }
+                    }
+
+                    if (workingUrl != null && workingContent != null) {
+                        final String finalLang = langName;
+                        final String finalUrl = workingUrl;
+                        final String finalContent = workingContent;
+
+                        capturedServer2BSubtitles.put(finalLang, finalUrl);
+                        if (!detectedSubtitles.contains(finalLang)) {
+                            detectedSubtitles.add(finalLang);
+                        }
+
+                        if (!primaryLoaded || finalLang.equalsIgnoreCase("English")) {
+                            primaryLoaded = true;
+                            subtitleUrl = finalUrl;
+                            subtitleLang = finalLang;
+                            parseVttContent(finalContent);
+                            Log.i("SubSniffer", "Auto-loaded active subtitle track: " + finalLang + " (" + finalUrl + ")");
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("SubSniffer", "Error in autoLoadServer2BSubtitles", e);
+            }
+        });
+    }
+
     private void startServer2BSubSniffer(int anilistId, int episodeNumber) {
         if (anilistId <= 0 || episodeNumber <= 0) return;
 
@@ -2896,12 +2972,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
         if (textOverlay == null) return;
 
-        if (parsedVttCues.isEmpty()) {
+        if (!isSubtitlesEnabled || parsedVttCues.isEmpty()) {
             textOverlay.setVisibility(View.GONE);
             return;
         }
 
-        long currentMs = (long) (currentSec * 1000L);
+        long currentMs = (long) ((currentSec + subtitleTimingOffset) * 1000L);
         VttCue activeCue = null;
         for (VttCue cue : parsedVttCues) {
             if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
@@ -2910,7 +2986,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        if (activeCue != null) {
+        if (activeCue != null && activeCue.text != null && !activeCue.text.isEmpty()) {
             textOverlay.setText(activeCue.text);
             textOverlay.setVisibility(View.VISIBLE);
         } else {
@@ -3012,6 +3088,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (anilistId > 0 && episodeNumber > 0) {
             detectedSubtitles.clear();
             capturedServer2BSubtitles.clear();
+            autoLoadServer2BSubtitles(anilistId, episodeNumber);
             startServer2BSubSniffer(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
