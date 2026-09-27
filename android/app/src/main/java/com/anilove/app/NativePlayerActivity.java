@@ -2701,8 +2701,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var v = doc.querySelector('video'); " +
                 "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
                 "      if (v) { " +
-                "        if (v.textTracks && v.textTracks.length > 0) { " +
-                "          for (var tt = 0; tt < v.textTracks.length; tt++) { try { v.textTracks[tt].mode = 'showing'; } catch(e){} } " +
+                "        if (v.textTracks && v.textTracks.length > 0 && v.textTracks[0].mode !== 'showing') { " +
+                "          try { v.textTracks[0].mode = 'showing'; } catch(e){} " +
                 "        } " +
                 "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
                 "          try { v.muted = true; } catch(e){} " +
@@ -2722,11 +2722,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        try { " +
                 "          var observer = new MutationObserver(function() { " +
                 "            try { " +
-                "              var badEls = doc.querySelectorAll('.top-gradient, .glass-panel, .bottom-bar-panel, .skin-controls, .skin-timeline, .skin-menu, .skin-big-play, .skin-actions, .skin-transport, .art-controls, .art-bottom, .art-mask, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, vds-controls, media-controls, [data-part=\"controls\"], [class*=\"Controls-module\"], [class*=\"TimeSlider-module\"], [class*=\"CenterControls-module\"], [class*=\"TopRightControls-module\"], [class*=\"VideoLayout-module\"], [class*=\"SettingsMenu-module\"], .vds-controls, .vds-time-slider, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container'); " +
+                "              var badEls = doc.querySelectorAll('.top-gradient, .glass-panel, .bottom-bar-panel, .skin-controls, .skin-timeline, .skin-menu, .art-controls, .art-bottom, .art-mask, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, vds-controls, media-controls, [data-part=\"controls\"], [class*=\"Controls-module\"], [class*=\"TimeSlider-module\"], [class*=\"CenterControls-module\"], [class*=\"TopRightControls-module\"], [class*=\"VideoLayout-module\"], [class*=\"SettingsMenu-module\"], .vds-controls, .vds-time-slider, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container, div[class*=\"top-0\"], button[class*=\"z-50\"], div[class*=\"z-50\"]'); " +
                 "              badEls.forEach(function(el) { try { el.style.setProperty('display', 'none', 'important'); el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('opacity', '0', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); } catch(e){} }); " +
                 "              var vObs = doc.querySelector('video'); " +
-                "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0) { " +
-                "                for (var tt2 = 0; tt2 < vObs.textTracks.length; tt2++) { try { vObs.textTracks[tt2].mode = (tt2 === 0) ? 'showing' : 'disabled'; } catch(e){} } " +
+                "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0 && vObs.textTracks[0].mode !== 'showing') { " +
+                "                try { vObs.textTracks[0].mode = 'showing'; } catch(e){} " +
                 "              } " +
                 "            } catch(e){} " +
                 "          }); " +

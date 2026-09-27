@@ -209,7 +209,10 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   - Prevented duplicate subtitle track injection in `toggleWebSubtitles()` in `NativePlayerActivity.java`. VidNest and TryEmbed subtitle tracks render ONCE cleanly on screen without double text overlays.
 - **Next.js Client-Side Exception Fix (`vidnest.fun`)**:
   - Replaced destructive `.remove()` DOM calls in `MutationObserver` in `NativePlayerActivity.java` with inline CSS rule overrides (`display: none !important; pointer-events: none !important;`). Prevents React/Next.js virtual DOM reconciliation errors, eliminating the `Application error: a client-side exception has occurred` screen.
-- **TryEmbed Server Switcher Header Erasure (`tryembed.us.cc`)**:
-  - Target `.top-gradient`, `.top-gradient header`, `.top-gradient > div`, `.glass-panel`, `.skin-controls` in `absoluteCleanse()` and `MutationObserver` in `NativePlayerActivity.java`. Completely erases TryEmbed's top-left "Select server" (Astra/Beta/Sora) button icon.
+- **Subtitle Blinking Fix (`Server 2-A-SUB` & `Server 2-B-SUB`)**:
+  - Guarded `textTracks[0].mode` assignment (`if (v.textTracks[0].mode !== 'showing')`) so track mode is set ONLY ONCE upon load, NOT on every DOM mutation inside `MutationObserver`. Prevents subtitle cues from flashing or blinking on screen.
+- **TryEmbed Server Switcher Button & Play Overlay Fix (`Server 2-B-SUB`)**:
+  - Target `.top-gradient`, `div[class*="top-0"]`, `button[class*="z-50"]`, `div[class*="z-50"]`, `.top-left`, `#btn-server` in `MutationObserver` and `absoluteCleanse()` in `NativePlayerActivity.java`. Completely erases TryEmbed's top-left square server logo button.
+  - Allowed native auto-play triggers (`v.play()`, `jwplayer().play()`) to bypass TryEmbed's big play overlay.
 - **Server 2 Settings Constraints & Download Sync**:
   - In player settings bottom sheet and download options modal, Server 2 SUB options show ONLY `JAP (Sub)` audio and `1080p` quality, while Server 2 DUB options show ONLY `ENG (Dub)` audio and `1080p` quality.
