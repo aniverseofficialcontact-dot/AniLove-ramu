@@ -603,12 +603,9 @@ export async function resolveEpisodeSource({
       }
     }
 
-    // UI Server options: display Server 1, Server 1-B, Server 2-A-SUB, Server 2-A-DUB
-    const uiHiAnimeServers = hiAnimeServers.filter(s => s.name.includes('2-A'));
-
     const combinedAvailableServers: AvailableServerOption[] = [
       ...availableServers,
-      ...uiHiAnimeServers,
+      ...hiAnimeServers,
     ];
 
     // Universal Background Multi-Language Subtitle Track (Powered by Server 2-B Sub: tryembed.us.cc)

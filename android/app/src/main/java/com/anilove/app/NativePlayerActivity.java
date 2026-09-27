@@ -2427,8 +2427,6 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
     private boolean isDirectHls = false;
-    private WebView subSnifferWebView = null;
-
     private Map<String, String> multiLanguageSubtitles = new ConcurrentHashMap<>();
 
     private String detectLanguageFromVttUrl(String url) {
@@ -2446,85 +2444,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         return "English";
     }
 
-    private void cleanupSnifferWebView() {
-        if (subSnifferWebView == null) return;
-        final WebView wv = subSnifferWebView;
-        subSnifferWebView = null;
-        wv.post(() -> {
-            try {
-                wv.stopLoading();
-                wv.setWebViewClient(null);
-                wv.setWebChromeClient(null);
-                wv.destroy();
-            } catch (Exception ignored) {}
-        });
-    }
-
-    private void startBackgroundSubtitleSniffer(int anilistId, int episodeNumber) {
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-        final String audio = getIntent().getStringExtra("audio") != null ? getIntent().getStringExtra("audio") : "DUB";
-
-        String cachedVtt = StreamCache.getSubtitle(anilistId, episodeNumber, audio);
-        if (cachedVtt != null && cachedVtt.contains(".vtt")) {
-            String langName = detectLanguageFromVttUrl(cachedVtt);
-            multiLanguageSubtitles.put(langName, cachedVtt);
-            if (!detectedSubtitles.contains(langName)) detectedSubtitles.add(langName);
-            attachCapturedVttTrack(cachedVtt, langName);
-            return;
-        }
-
-        runOnUiThread(() -> {
-            try {
-                cleanupSnifferWebView();
-
-                subSnifferWebView = new WebView(this);
-                WebSettings s = subSnifferWebView.getSettings();
-                s.setJavaScriptEnabled(true);
-                s.setDomStorageEnabled(true);
-                s.setMediaPlaybackRequiresUserGesture(true);
-                s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-                s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-
-                subSnifferWebView.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                        String reqUrl = request.getUrl().toString();
-                        String lower = reqUrl.toLowerCase();
-
-                        if (lower.contains(".ts") || lower.contains(".m4s") || lower.contains(".mp4") ||
-                            lower.contains(".png") || lower.contains(".jpg") || lower.contains(".jpeg") ||
-                            lower.contains(".woff") || lower.contains(".ttf") || lower.contains("analytics") ||
-                            lower.contains("doubleclick") || lower.contains("googlesyndication")) {
-                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
-                        }
-
-                        if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                            StreamCache.putSubtitle(anilistId, episodeNumber, audio, reqUrl);
-                            String langName = detectLanguageFromVttUrl(reqUrl);
-                            multiLanguageSubtitles.put(langName, reqUrl);
-                            if (!detectedSubtitles.contains(langName)) {
-                                detectedSubtitles.add(langName);
-                            }
-                            final String capturedUrl = reqUrl;
-                            final String capturedLang = langName;
-                            runOnUiThread(() -> {
-                                attachCapturedVttTrack(capturedUrl, capturedLang);
-                            });
-                        }
-                        return super.shouldInterceptRequest(view, request);
-                    }
-                });
-
-                String snifferUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Referer", "https://tryembed.us.cc/");
-                subSnifferWebView.loadUrl(snifferUrl, headers);
-
-                new Handler(Looper.getMainLooper()).postDelayed(() -> cleanupSnifferWebView(), 3500);
-            } catch (Exception ignored) {}
-        });
-    }
-
     private void attachCapturedVttTrack(String vttUrl) {
         attachCapturedVttTrack(vttUrl, detectLanguageFromVttUrl(vttUrl));
     }
@@ -2533,7 +2452,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
         subtitleUrl = vttUrl;
         if (langName != null) subtitleLang = langName;
-        final String label = (subtitleLang != null ? subtitleLang : "English") + " (Server 2-B)";
+        final String label = (subtitleLang != null ? subtitleLang : "English");
 
         String js = "(function() { " +
                 "  var vttUrl = '" + vttUrl.replace("'", "\\'") + "'; " +
@@ -2557,8 +2476,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          var tr = v.textTracks[i]; " +
                 "          if (tr.src === vttUrl || tr.id === 'anilove-universal-sub-track' || tr.label === labelStr) { " +
                 "            tr.mode = 'showing'; " +
-                "          } else { " +
-                "            tr.mode = 'disabled'; " +
                 "          } " +
                 "        } " +
                 "      } " +
@@ -2574,12 +2491,6 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void setupHybridEngine(String url) {
         if (url == null || url.isEmpty() || playerWebView == null) return;
-        
-        int anilistId = getIntent().getIntExtra("anilistId", 0);
-        int epNum = getIntent().getIntExtra("episodeNumber", 0);
-        if (anilistId > 0 && epNum > 0) {
-            startBackgroundSubtitleSniffer(anilistId, epNum);
-        }
         
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
