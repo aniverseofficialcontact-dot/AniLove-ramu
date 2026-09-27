@@ -99,12 +99,21 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 💬 4. Native Subtitle Engine for Server 2-B-SUB Captions
+## 🛡️ 4. Security Check & Human Verification Ad Popup Elimination
+
+- **AdEraser DOM Text Sweeper**:
+  - `absoluteCleanse()` includes a DOM text sweeper that scans every element on 0ms for text containing `"security check"`, `"verify you are human"`, `"verification required"`, or `"confirm you are human"`.
+  - Instantly destroys and removes fake security check/human verification ad overlays before they can block the video screen.
+
+---
+
+## 💬 5. Native Subtitle Engine for Server 2-B-SUB Captions
 
 Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
 
 1. **Dual Ingestion & WebVTT Parser (`parseVttContent`)**:
-   - `startServer2BSubSniffer` queries both `tryembed.us.cc` and `vidnest.fun` to capture Server 2-B-SUB `.vtt` subtitle files.
+   - `subSnifferWebView` is attached directly to `R.id.player_activity_root` with `1x1` px dimensions to run background WebVTT sniffing continuously.
+   - Dual failover queries `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub` and `https://vidnest.fun/anime/{anilistId}/{ep}/sub`.
    - `downloadAndParseVttFile` parses WebVTT timestamp cues into in-memory `VttCue` structures in Native Java.
 2. **Native Android Subtitle Overlay (`text_native_subtitle_overlay`)**:
    - Matches current video time against parsed cues during the 200ms player ticker and renders captions in a Native Android `TextView`.
@@ -115,7 +124,7 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
+## ⏩ 6. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
 
 - **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved the `HTTP 400 Bad Request` error, returning `HTTP 200 OK` with exact OP/ED skip intervals!
 - **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
@@ -129,14 +138,14 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## ⏱️ 6. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
+## ⏱️ 7. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
 
 - **Trigger Rule**: When video playback reaches **2 minutes remaining** (`duration - current <= 120` seconds), `NativePlayerActivity` automatically pre-fetches the stream URL for Episode $N+1$ in the background.
 - **Cache Storage**: Resolved stream URLs are stored in `StreamCache`. When tapping "Next Episode", playback begins instantly with **0ms API latency**.
 
 ---
 
-## 💾 7. 500 MB LRU Disk Segment Cache
+## 💾 8. 500 MB LRU Disk Segment Cache
 
 - **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB disk limit** (`media_lru_cache`).
 - **WebView Storage**: Enables HTML5 IndexedDB, DOM Storage, and HTTP disk caching (`LOAD_DEFAULT`).
@@ -144,7 +153,7 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## 📦 8. Bundle Optimization & Dynamic View Code-Splitting
+## 📦 9. Bundle Optimization & Dynamic View Code-Splitting
 
 - **React Lazy Loading (`App.tsx`)**: Replaced static imports with `React.lazy()` for heavy secondary views:
   - `ReelsView` (~23 KB chunk)
@@ -155,7 +164,7 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## 🛠️ 9. Maintenance & Troubleshooting Checklist for Developers
+## 🛠️ 10. Maintenance & Troubleshooting Checklist for Developers
 
 When updating or adding new servers or player features, verify:
 1. **Never use `el.remove()` on embed elements**: Always use CSS `display: none !important` to hide elements without crashing JS player event listeners.

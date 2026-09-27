@@ -2725,6 +2725,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                     subSnifferWebView = null;
                 }
                 subSnifferWebView = new WebView(this);
+                subSnifferWebView.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                subSnifferWebView.setAlpha(0.01f);
+                ViewGroup root = findViewById(R.id.player_activity_root);
+                if (root != null) {
+                    root.addView(subSnifferWebView);
+                }
                 WebSettings s = subSnifferWebView.getSettings();
                 s.setJavaScriptEnabled(true);
                 s.setDomStorageEnabled(true);
@@ -3475,6 +3481,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
+                "      var allEls = doc.querySelectorAll('div, section, article, iframe, form'); " +
+                "      allEls.forEach(function(el) { " +
+                "        var txt = (el.innerText || el.textContent || '').toLowerCase(); " +
+                "        if (txt.indexOf('security check') !== -1 || txt.indexOf('verify you are human') !== -1 || txt.indexOf('verification required') !== -1 || txt.indexOf('confirm you are human') !== -1 || txt.indexOf('one tap to confirm') !== -1) { " +
+                "          if (!el.querySelector('video') && !el.classList.contains('player-wrapper') && !el.classList.contains('art-video-player')) { " +
+                "            try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); } " +
+                "          } " +
+                "        } " +
+                "      }); " +
                 "    } catch(e) {} " +
                 "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
                 "  } " +
