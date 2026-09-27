@@ -296,6 +296,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private double currentVideoTime = 0;
     private OpEdSeekBarDrawable opEdSeekBarDrawable = null;
     private WebView subSnifferWebView = null;
+    private Map<String, String> capturedServer2BSubtitles = new ConcurrentHashMap<>();
 
     private class OpEdSeekBarDrawable extends Drawable {
         private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1272,7 +1273,20 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void changeSubtitleTrack(String subTrack) {
-        if (playerWebView == null) return;
+        if (subTrack == null || subTrack.equalsIgnoreCase("Off")) {
+            parsedVttCues.clear();
+            TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+            if (textOverlay != null) textOverlay.setVisibility(View.GONE);
+            return;
+        }
+
+        String targetVttUrl = capturedServer2BSubtitles.get(subTrack);
+        if (targetVttUrl != null && !targetVttUrl.isEmpty()) {
+            subtitleUrl = targetVttUrl;
+            subtitleLang = subTrack;
+            downloadAndParseVttFile(targetVttUrl);
+            Log.i("CaptionSwitch", "Switched native subtitle track to: " + subTrack + " (" + targetVttUrl + ")");
+        }
         String js = "(function() { " +
                 "  var target = '" + subTrack.replace("'", "\\'").toLowerCase() + "'; " +
                 "  function setS(w) { try { " +
@@ -2724,8 +2738,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             try {
                 if (subSnifferWebView == null) {
                     subSnifferWebView = new WebView(this);
-                    subSnifferWebView.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
-                    subSnifferWebView.setAlpha(0.01f);
+                    subSnifferWebView.setLayoutParams(new ViewGroup.LayoutParams(0, 0));
+                    subSnifferWebView.setAlpha(0f);
+                    subSnifferWebView.setVisibility(View.GONE);
+                    subSnifferWebView.setX(-9999f);
+                    subSnifferWebView.setY(-9999f);
                     ViewGroup root = findViewById(R.id.player_activity_root);
                     if (root != null) {
                         root.addView(subSnifferWebView);
@@ -2909,7 +2926,13 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void attachCapturedVttTrack(String vttUrl, String langName) {
         if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
         subtitleUrl = vttUrl;
-        if (langName != null) subtitleLang = langName;
+        if (langName != null && !langName.isEmpty()) {
+            subtitleLang = langName;
+            capturedServer2BSubtitles.put(langName, vttUrl);
+            if (!detectedSubtitles.contains(langName)) {
+                detectedSubtitles.add(langName);
+            }
+        }
         downloadAndParseVttFile(vttUrl);
         final String label = (subtitleLang != null ? subtitleLang : "English");
 
