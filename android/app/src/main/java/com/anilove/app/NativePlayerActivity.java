@@ -14,9 +14,12 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
@@ -284,6 +287,57 @@ public class NativePlayerActivity extends AppCompatActivity {
             edgeStyle = prefs.getString("edgeStyle", "Shadow");
             currentSelectedSubtitle = prefs.getString("currentSelectedSubtitle", "English");
         } catch (Exception ignored) {}
+    }
+
+    private double videoDuration = 0;
+    private double currentVideoTime = 0;
+    private OpEdSeekBarDrawable opEdSeekBarDrawable = null;
+    private WebView subSnifferWebView = null;
+
+    private class OpEdSeekBarDrawable extends Drawable {
+        private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint opEdPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        public OpEdSeekBarDrawable() {
+            bgPaint.setColor(Color.parseColor("#44FFFFFF"));
+            opEdPaint.setColor(Color.parseColor("#FFD700")); // Vibrant Yellow for Intro/Outro gaps
+            progressPaint.setColor(Color.WHITE);
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            Rect bounds = getBounds();
+            float centerY = bounds.centerY();
+            float trackHeight = 10f;
+
+            float top = centerY - (trackHeight / 2f);
+            float bottom = centerY + (trackHeight / 2f);
+            float width = bounds.width();
+
+            canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
+
+            if (videoDuration > 0) {
+                if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart) {
+                    float opLeft = (float) ((aniSkipOpStart / videoDuration) * width);
+                    float opRight = (float) ((aniSkipOpEnd / videoDuration) * width);
+                    canvas.drawRoundRect(opLeft, top, opRight, bottom, 3f, 3f, opEdPaint);
+                }
+
+                if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart) {
+                    float edLeft = (float) ((aniSkipEdStart / videoDuration) * width);
+                    float edRight = (float) ((aniSkipEdEnd / videoDuration) * width);
+                    canvas.drawRoundRect(edLeft, top, edRight, bottom, 3f, 3f, opEdPaint);
+                }
+
+                float progressRight = (float) ((currentVideoTime / videoDuration) * width);
+                canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
+            }
+        }
+
+        @Override public void setAlpha(int alpha) { bgPaint.setAlpha(alpha); }
+        @Override public void setColorFilter(ColorFilter colorFilter) {}
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
     
     private Handler updateHandler = new Handler(Looper.getMainLooper());
@@ -664,6 +718,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         btnPlayPause = findViewById(R.id.btn_play_pause);
         seekBar = findViewById(R.id.video_seekbar);
+        opEdSeekBarDrawable = new OpEdSeekBarDrawable();
+        seekBar.setProgressDrawable(opEdSeekBarDrawable);
         textCurrentTime = findViewById(R.id.text_current_time);
         textTotalTime = findViewById(R.id.text_total_time);
         textTimeLeft = findViewById(R.id.text_time_left);
@@ -996,6 +1052,11 @@ public class NativePlayerActivity extends AppCompatActivity {
         @JavascriptInterface
         public void onStateUpdate(double current, double duration, boolean pausedInWeb) {
             runOnUiThread(() -> {
+                currentVideoTime = current;
+                videoDuration = duration;
+                if (opEdSeekBarDrawable != null) {
+                    opEdSeekBarDrawable.invalidateSelf();
+                }
                 if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
                     loadingProgress.setVisibility(View.GONE);
                 }
@@ -2555,62 +2616,126 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void fetchAndAttachServer2BSubtitles(int anilistId, int episodeNumber) {
+    private String fetchUrlContentWithRedirects(String urlStr, int maxRedirects) {
+        if (maxRedirects <= 0 || urlStr == null || urlStr.isEmpty()) return "";
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            conn.setRequestProperty("Referer", "https://tryembed.us.cc/");
+            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+
+            int status = conn.getResponseCode();
+            if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
+                String newUrl = conn.getHeaderField("Location");
+                if (newUrl != null && !newUrl.isEmpty()) {
+                    if (newUrl.startsWith("/")) {
+                        newUrl = url.getProtocol() + "://" + url.getHost() + newUrl;
+                    }
+                    return fetchUrlContentWithRedirects(newUrl, maxRedirects - 1);
+                }
+            }
+
+            if (status == 200) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder content = new StringBuilder();
+                String line;
+                while ((line = in.readLine()) != null) {
+                    content.append(line).append("\n");
+                }
+                in.close();
+                return content.toString();
+            }
+        } catch (Exception e) {
+            Log.d("SubSniffer", "Error fetching redirect content: " + e.getMessage());
+        }
+        return "";
+    }
+
+    private void parseAndAttachVttFromHtml(String html) {
+        if (html == null || html.isEmpty()) return;
+        Pattern pattern1 = Pattern.compile("<track[^>]+src=[\"']([^\"']+\\.vtt[^\"']*)[\"'][^>]*label=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+        Matcher matcher1 = pattern1.matcher(html);
+        boolean foundAny = false;
+        while (matcher1.find()) {
+            String vttUrl = matcher1.group(1);
+            String label = matcher1.group(2);
+            if (vttUrl != null && !vttUrl.isEmpty()) {
+                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
+                final String finalVtt = vttUrl;
+                final String finalLabel = label != null ? label : "English";
+                foundAny = true;
+                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
+            }
+        }
+
+        if (!foundAny) {
+            Pattern pattern2 = Pattern.compile("<track[^>]+label=[\"']([^\"']+)[\"'][^>]*src=[\"']([^\"']+\\.vtt[^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
+            Matcher matcher2 = pattern2.matcher(html);
+            while (matcher2.find()) {
+                String label = matcher2.group(1);
+                String vttUrl = matcher2.group(2);
+                if (vttUrl != null && !vttUrl.isEmpty()) {
+                    if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
+                    final String finalVtt = vttUrl;
+                    final String finalLabel = label != null ? label : "English";
+                    runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
+                }
+            }
+        }
+    }
+
+    private void startServer2BSubSniffer(int anilistId, int episodeNumber) {
         if (anilistId <= 0 || episodeNumber <= 0) return;
+
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 String tryEmbedUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                URL url = new URL(tryEmbedUrl);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-                conn.setRequestProperty("Referer", "https://tryembed.us.cc/");
-                conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-
-                if (conn.getResponseCode() == 200) {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    StringBuilder content = new StringBuilder();
-                    String inputLine;
-                    while ((inputLine = in.readLine()) != null) {
-                        content.append(inputLine).append("\n");
-                    }
-                    in.close();
-
-                    String html = content.toString();
-                    Pattern pattern1 = Pattern.compile("<track[^>]+src=[\"']([^\"']+\\.vtt[^\"']*)[\"'][^>]*label=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-                    Matcher matcher1 = pattern1.matcher(html);
-                    boolean foundAny = false;
-                    while (matcher1.find()) {
-                        String vttUrl = matcher1.group(1);
-                        String label = matcher1.group(2);
-                        if (vttUrl != null && !vttUrl.isEmpty()) {
-                            if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                            final String finalVtt = vttUrl;
-                            final String finalLabel = label != null ? label : "English";
-                            foundAny = true;
-                            runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-                        }
-                    }
-
-                    if (!foundAny) {
-                        Pattern pattern2 = Pattern.compile("<track[^>]+label=[\"']([^\"']+)[\"'][^>]*src=[\"']([^\"']+\\.vtt[^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
-                        Matcher matcher2 = pattern2.matcher(html);
-                        while (matcher2.find()) {
-                            String label = matcher2.group(1);
-                            String vttUrl = matcher2.group(2);
-                            if (vttUrl != null && !vttUrl.isEmpty()) {
-                                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                                final String finalVtt = vttUrl;
-                                final String finalLabel = label != null ? label : "English";
-                                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-                            }
-                        }
-                    }
+                String html = fetchUrlContentWithRedirects(tryEmbedUrl, 5);
+                if (html != null && !html.isEmpty()) {
+                    parseAndAttachVttFromHtml(html);
                 }
             } catch (Exception e) {
-                Log.e("NativePlayerActivity", "Failed to fetch Server 2-B subtitles", e);
+                Log.d("SubSniffer", "HTTP redirect fetch exception: " + e.getMessage());
+            }
+        });
+
+        runOnUiThread(() -> {
+            try {
+                if (subSnifferWebView != null) {
+                    subSnifferWebView.destroy();
+                    subSnifferWebView = null;
+                }
+                subSnifferWebView = new WebView(this);
+                WebSettings s = subSnifferWebView.getSettings();
+                s.setJavaScriptEnabled(true);
+                s.setDomStorageEnabled(true);
+                s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+                subSnifferWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                        String reqUrl = request.getUrl().toString();
+                        String lower = reqUrl.toLowerCase();
+                        if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
+                            Log.i("SubSniffer", "Intercepted Server 2-B VTT track: " + reqUrl);
+                            final String vttUrl = reqUrl;
+                            runOnUiThread(() -> attachCapturedVttTrack(vttUrl));
+                        }
+                        return super.shouldInterceptRequest(view, request);
+                    }
+                });
+
+                String targetUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", "https://tryembed.us.cc/");
+                subSnifferWebView.loadUrl(targetUrl, headers);
+            } catch (Exception e) {
+                Log.e("SubSniffer", "Failed to start subSnifferWebView", e);
             }
         });
     }
@@ -2685,7 +2810,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
 
         if (anilistId > 0 && episodeNumber > 0) {
-            fetchAndAttachServer2BSubtitles(anilistId, episodeNumber);
+            startServer2BSubSniffer(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
             fetchAniSkipIntervals(idMal, episodeNumber);

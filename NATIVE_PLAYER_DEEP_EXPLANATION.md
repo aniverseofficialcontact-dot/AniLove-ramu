@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, and subtitle timing controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, and subtitle timing controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -99,23 +99,25 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 💬 4. Universal Server 2-B-SUB Multi-Language Captions Engine
+## 💬 4. Universal Server 2-B-SUB Subtitles Engine & Offscreen Sniffer
 
 Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
 
-1. **Background Subtitle Ingestion (`fetchAndAttachServer2BSubtitles`)**:
-   - `NativePlayerActivity` automatically queries `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub` in a background worker.
-   - Extracts all multi-language `.vtt` tracks (English, Hindi, Spanish, French, German, Italian, Portuguese, Japanese, etc.).
-2. **Active Video Element Injection (`attachCapturedVttTrack`)**:
-   - Appends the extracted Server 2-B-SUB tracks directly to the active video player element.
-   - Sets Server 2-B-SUB track mode to `'showing'` and disables non-Server-2B native tracks.
-   - **Result**: You can enjoy high-speed Server 1 video playback while using Server 2-B-SUB's rich multi-language subtitles!
+1. **Dual Ingestion Pipeline (`startServer2BSubSniffer`)**:
+   - **Multi-Redirect HTTP Fetcher**: Follows HTTP 301/302 redirects to fetch raw VTT track tags.
+   - **Offscreen Background WebView**: Launches `subSnifferWebView` offscreen loading `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub`. Bypasses Cloudflare & JS challenges, intercepting `.vtt` / `.srt` URLs via `shouldInterceptRequest`.
+2. **Active Video Element Injection & Native Track Suppression**:
+   - Appends the extracted Server 2-B-SUB tracks directly to the active video player element on Server 1.
+   - Sets Server 2-B-SUB track mode to `'showing'` and forces native non-Server-2B tracks (`.art-subtitle`, `.jw-captions`, `.vjs-text-track-display`) to `'disabled'` / `display: none !important`.
+   - **Result**: You enjoy high-speed Server 1 video playback while using Server 2-B-SUB's multi-language subtitles!
 
 ---
 
-## ⏩ 5. AniSkip Integration & OP/ED Skip Buttons
+## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Yellow Seekbar Highlights
 
 - **AniSkip API**: Connects to `https://api.aniskip.com/v2/skip-times/{idMal}/{episodeNumber}`.
+- **Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
+  - Draws a vibrant **yellow highlight bar** (`#FFD700`) on the seekbar track across the exact Opening (`aniSkipOpStart` to `aniSkipOpEnd`) and Ending (`aniSkipEdStart` to `aniSkipEdEnd`) intervals.
 - **Dynamic Overlay Buttons**:
   - Automatically displays `"⏭️ Skip Intro"` during Opening (OP) scenes and `"⏭️ Skip Ending"` during Ending (ED) scenes.
   - Tapping the skip button instantly seeks the player to the exact end timestamp of the section.
