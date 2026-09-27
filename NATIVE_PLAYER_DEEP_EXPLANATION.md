@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, and subtitle timing controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, and subtitle timing controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -97,63 +97,59 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 3. **Server 1 (AnimeWorld India / AbyssPlayer)**: High-speed server loaded directly in top-level frame.
 4. **Server 1-B (RubyStm)**: Strict inclusion rule — **included ONLY IF** resolved stream URL originates from `rubystm.com`. Otherwise filtered out to maintain quality.
 
-### In-Memory Stream API Caching (`EPISODE_STREAM_CACHE`)
-- API responses for server URLs per episode are cached in memory in `streamingProviders.ts`.
-- Switching audio languages (SUB ↔ DUB) or servers within the active episode resolves in **0ms** without redundant network calls.
+---
+
+## 💬 4. Universal Server 2-B-SUB Multi-Language Captions Engine
+
+Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
+
+1. **Background Subtitle Ingestion (`fetchAndAttachServer2BSubtitles`)**:
+   - `NativePlayerActivity` automatically queries `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub` in a background worker.
+   - Extracts all multi-language `.vtt` tracks (English, Hindi, Spanish, French, German, Italian, Portuguese, Japanese, etc.).
+2. **Active Video Element Injection (`attachCapturedVttTrack`)**:
+   - Appends the extracted Server 2-B-SUB tracks directly to the active video player element.
+   - Sets Server 2-B-SUB track mode to `'showing'` and disables non-Server-2B native tracks.
+   - **Result**: You can enjoy high-speed Server 1 video playback while using Server 2-B-SUB's rich multi-language subtitles!
 
 ---
 
-## 🛡️ 4. Hybrid Engine, AdEraser & Protection Bypasses
+## ⏩ 5. AniSkip Integration & OP/ED Skip Buttons
 
-When loading embed players, `NativePlayerActivity` bypasses anti-embed restrictions and ad overlays using the following techniques:
-
-1. **Direct Top-Level Main Frame Loading**: Embed URLs are loaded directly onto the main WebView frame rather than nested inside `<iframe>` tags. This eliminates cross-origin (`Same-Origin Policy`) JavaScript restrictions.
-2. **Referer & Referrer Overriding**:
-   - HTTP Headers: Sets `Referer: https://piratexplay.cc/` or `https://pro.iqsmartgames.com/` on web requests.
-   - DOM Property: Injects `Object.defineProperty(document, 'referrer', { get: function() { return 'https://piratexplay.cc/'; } })` so scripts checking `document.referrer` pass security validation.
-3. **Frame Breaking Prevention**: Injects `Object.defineProperty(window, 'top', { get: function() { return {}; } })` to prevent embed scripts (`abyssplayer.com`) from executing `top.location = window.location` redirects.
-4. **Non-Destructive DOM AdEraser (`absoluteCleanse`)**:
-   - Overlays, popups, and ad containers (`.art-state`, `#playback`, `.top-gradient`, `#btn-server`) are hidden visually using CSS rules (`display: none !important; opacity: 0 !important; pointer-events: none !important;`).
-   - **Crucial Rule**: Elements are **never deleted (`el.remove()`)** from the DOM. Preserving elements prevents Virtual DOM / JS framework reconciliation exceptions (`Application error: a client-side exception has occurred`).
-5. **Mobile Touch Synthesis**: Dispatches mobile `TouchEvent('touchstart')` and `TouchEvent('touchend')` events to auto-trigger video playback on mobile JS players (JWPlayer / ArtPlayer).
+- **AniSkip API**: Connects to `https://api.aniskip.com/v2/skip-times/{idMal}/{episodeNumber}`.
+- **Dynamic Overlay Buttons**:
+  - Automatically displays `"⏭️ Skip Intro"` during Opening (OP) scenes and `"⏭️ Skip Ending"` during Ending (ED) scenes.
+  - Tapping the skip button instantly seeks the player to the exact end timestamp of the section.
+  - Defaults to `+85s Skip` when controls are tapped outside OP/ED timestamps.
 
 ---
 
-## 💬 5. Subtitle & Caption Engine
+## ⏱️ 6. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
 
-### Single Track Enforcement & Blinking Fix
-- Prevents track mode toggling loops by enforcing `if (v.textTracks[0].mode !== 'showing') v.textTracks[0].mode = 'showing'`.
-- Eliminates subtitle flashing and cue blinking on `Server 2-A` and `Server 2-B`.
-
-### Dynamic Caption Timing Stepper Controls
-- Native customization dialog allows real-time subtitle sync adjustments:
-  - Stepper buttons: `[-1.0s]`, `[-0.1s]`, `[+0.1s]`, `[+1.0s]`.
-- Accumulated offsets dynamically shift WebVTT cue `startTime` and `endTime` bounds.
-- Timing offsets are cached for **7 days** per episode in Android `SharedPreferences`.
+- **Trigger Rule**: When video playback reaches **2 minutes remaining** (`duration - current <= 120` seconds), `NativePlayerActivity` automatically pre-fetches the stream URL for Episode $N+1$ in the background.
+- **Cache Storage**: Resolved stream URLs are stored in `StreamCache`. When tapping "Next Episode", playback begins instantly with **0ms API latency**.
 
 ---
 
-## ⚡ 6. High-Speed Multi-Worker Download System
+## 💾 7. 500 MB LRU Disk Segment Cache
 
-### Parallel Downloader (10-Worker Thread Pool)
-- `EpisodeDownloadService.java` utilizes a `ThreadPoolExecutor` with **10 concurrent workers** downloading HLS `.ts` video segments simultaneously.
-- Delivers download speeds of **10 MB/s – 30 MB/s+ (Full 5G / High-Speed Wi-Fi bandwidth)**.
-
-### Main Thread Protection (`Semaphore`)
-- Uses `Semaphore snifferSemaphore = new Semaphore(1, true)` during batch URL resolving.
-- Prevents Main Thread UI freezes when queueing dozens of episodes simultaneously.
-
-### Active Notification Controls
-- Foreground notification includes direct action buttons: `Pause`, `Resume`, and `Cancel`.
-- Supports byte-range resumption (`Range: bytes=existingBytes-`).
-
-### Public Device Storage Export
-- Downloaded episodes can be exported directly to `Storage/Downloads/AniLove/` via `DownloadPlugin.java`.
-- Triggers `MediaScannerConnection` so exported videos appear immediately in Android Gallery and external media players (VLC, MX Player).
+- **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB disk limit** (`media_lru_cache`).
+- **WebView Storage**: Enables HTML5 IndexedDB, DOM Storage, and HTTP disk caching (`LOAD_DEFAULT`).
+- **Benefit**: Seeking backwards or re-watching scenes loads segment chunks instantly from local disk without re-downloading data over the network.
 
 ---
 
-## 🛠️ 7. Maintenance & Troubleshooting Checklist for Developers
+## 📦 8. Bundle Optimization & Dynamic View Code-Splitting
+
+- **React Lazy Loading (`App.tsx`)**: Replaced static imports with `React.lazy()` for heavy secondary views:
+  - `ReelsView` (~23 KB chunk)
+  - `ArcadeView` (~6 KB chunk)
+  - `CardInventoryView` (~22 KB chunk)
+  - `ScheduleView` (~11 KB chunk)
+- **Result**: Significantly reduced main bundle size and improved initial app startup speed on Android devices.
+
+---
+
+## 🛠️ 9. Maintenance & Troubleshooting Checklist for Developers
 
 When updating or adding new servers or player features, verify:
 1. **Never use `el.remove()` on embed elements**: Always use CSS `display: none !important` to hide elements without crashing JS player event listeners.

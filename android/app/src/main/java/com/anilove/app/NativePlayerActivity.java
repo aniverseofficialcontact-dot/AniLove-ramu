@@ -85,6 +85,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -351,6 +353,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isFullscreenMode = false;
     public static NativePlayerActivity currentInstance;
 
+    @UnstableApi
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -625,6 +628,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
+    @UnstableApi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -703,14 +707,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         btnNextEpisode.setVisibility(View.VISIBLE);
         btnPrevEpisode.setVisibility(View.VISIBLE);
 
-        View btnSkipIntro = findViewById(R.id.btn_skip_intro);
-        btnSkipIntro.setOnClickListener(v -> seekVideo(85));
-        
-        GradientDrawable border = new GradientDrawable();
-        border.setColor(Color.TRANSPARENT);
-        border.setStroke(2, Color.parseColor("#666666")); 
-        border.setCornerRadius(8);
-        btnSkipIntro.setBackground(border);
+        TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
+        if (btnSkipIntro != null) {
+            btnSkipIntro.setOnClickListener(v -> {
+                Object tag = btnSkipIntro.getTag();
+                if (tag instanceof Double) {
+                    seekVideoToAbsolute(((Double) tag).intValue());
+                } else {
+                    seekVideo(85);
+                }
+            });
+
+            GradientDrawable border = new GradientDrawable();
+            border.setColor(Color.parseColor("#CC000000"));
+            border.setStroke(2, Color.parseColor("#88FFFFFF"));
+            border.setCornerRadius(16);
+            btnSkipIntro.setBackground(border);
+        }
 
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onSingleTapConfirmed(MotionEvent e) { toggleControlsVisibility(); return true; }
@@ -1003,8 +1016,28 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     if (isPlaying && current > 0) {
                         broadcastProgress(current, duration);
-                        if (current >= duration * 0.8) {
+                        if (duration > 0 && (duration - current <= 120 || current >= duration * 0.85)) {
                             triggerNextEpisodePreFetch();
+                        }
+                    }
+
+                    TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
+                    if (btnSkipIntro != null) {
+                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
+                            btnSkipIntro.setText("⏭️ Skip Intro");
+                            btnSkipIntro.setVisibility(View.VISIBLE);
+                            btnSkipIntro.setTag(aniSkipOpEnd);
+                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
+                            btnSkipIntro.setText("⏭️ Skip Ending");
+                            btnSkipIntro.setVisibility(View.VISIBLE);
+                            btnSkipIntro.setTag(aniSkipEdEnd);
+                        } else {
+                            if (!isControlsVisible) {
+                                btnSkipIntro.setVisibility(View.GONE);
+                            } else {
+                                btnSkipIntro.setText("+85s Skip");
+                                btnSkipIntro.setTag(null);
+                            }
                         }
                     }
                 }
@@ -2431,6 +2464,157 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isDirectHls = false;
     private Map<String, String> multiLanguageSubtitles = new ConcurrentHashMap<>();
 
+    private double aniSkipOpStart = -1, aniSkipOpEnd = -1;
+    private double aniSkipEdStart = -1, aniSkipEdEnd = -1;
+
+    private void seekVideoToAbsolute(int targetSeconds) {
+        if (isOfflineMode && exoPlayer != null) {
+            exoPlayer.seekTo(targetSeconds * 1000L);
+            return;
+        }
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var target = " + targetSeconds + "; " +
+                "  function seekInWin(w) { " +
+                "    try { " +
+                "      var v = w.document.querySelector('video'); " +
+                "      if (v) { try { v.currentTime = target; } catch(e){} } " +
+                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
+                "      if (art) { " +
+                "        try { " +
+                "          if (typeof art.seek === 'function') art.seek(target); " +
+                "          else art.currentTime = target; " +
+                "        } catch(e){} " +
+                "      } " +
+                "      if (typeof w.jwplayer === 'function') { " +
+                "        try { " +
+                "          var jp = w.jwplayer(); " +
+                "          if (jp && typeof jp.seek === 'function') jp.seek(target); " +
+                "        } catch(e){} " +
+                "      } " +
+                "      if (w.frames && w.frames.length) { " +
+                "        for (var i = 0; i < w.frames.length; i++) { seekInWin(w.frames[i]); } " +
+                "      } " +
+                "    } catch(e) {} " +
+                "  } " +
+                "  seekInWin(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+    }
+
+    private void fetchAniSkipIntervals(int idMal, int episodeNumber) {
+        if (idMal <= 0 || episodeNumber <= 0) return;
+        aniSkipOpStart = -1; aniSkipOpEnd = -1;
+        aniSkipEdStart = -1; aniSkipEdEnd = -1;
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + idMal + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap";
+                URL url = new URL(reqUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder content = new StringBuilder();
+                    String line;
+                    while ((line = in.readLine()) != null) content.append(line);
+                    in.close();
+
+                    JSONObject json = new JSONObject(content.toString());
+                    if (json.optBoolean("found", false)) {
+                        JSONArray results = json.optJSONArray("results");
+                        if (results != null) {
+                            for (int i = 0; i < results.length(); i++) {
+                                JSONObject item = results.optJSONObject(i);
+                                if (item == null) continue;
+                                String skipType = item.optString("skipType", "");
+                                JSONObject interval = item.optJSONObject("interval");
+                                if (interval != null) {
+                                    double start = interval.optDouble("startTime", -1);
+                                    double end = interval.optDouble("endTime", -1);
+                                    if (start >= 0 && end > start) {
+                                        if ("op".equalsIgnoreCase(skipType) || "mixed-op".equalsIgnoreCase(skipType)) {
+                                            aniSkipOpStart = start;
+                                            aniSkipOpEnd = end;
+                                        } else if ("ed".equalsIgnoreCase(skipType) || "mixed-ed".equalsIgnoreCase(skipType)) {
+                                            aniSkipEdStart = start;
+                                            aniSkipEdEnd = end;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.d("AniSkip", "AniSkip skip times fetch failed or non-existent: " + e.getMessage());
+            }
+        });
+    }
+
+    private void fetchAndAttachServer2BSubtitles(int anilistId, int episodeNumber) {
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String tryEmbedUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
+                URL url = new URL(tryEmbedUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                conn.setRequestProperty("Referer", "https://tryembed.us.cc/");
+                conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder content = new StringBuilder();
+                    String inputLine;
+                    while ((inputLine = in.readLine()) != null) {
+                        content.append(inputLine).append("\n");
+                    }
+                    in.close();
+
+                    String html = content.toString();
+                    Pattern pattern1 = Pattern.compile("<track[^>]+src=[\"']([^\"']+\\.vtt[^\"']*)[\"'][^>]*label=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+                    Matcher matcher1 = pattern1.matcher(html);
+                    boolean foundAny = false;
+                    while (matcher1.find()) {
+                        String vttUrl = matcher1.group(1);
+                        String label = matcher1.group(2);
+                        if (vttUrl != null && !vttUrl.isEmpty()) {
+                            if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
+                            final String finalVtt = vttUrl;
+                            final String finalLabel = label != null ? label : "English";
+                            foundAny = true;
+                            runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
+                        }
+                    }
+
+                    if (!foundAny) {
+                        Pattern pattern2 = Pattern.compile("<track[^>]+label=[\"']([^\"']+)[\"'][^>]*src=[\"']([^\"']+\\.vtt[^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
+                        Matcher matcher2 = pattern2.matcher(html);
+                        while (matcher2.find()) {
+                            String label = matcher2.group(1);
+                            String vttUrl = matcher2.group(2);
+                            if (vttUrl != null && !vttUrl.isEmpty()) {
+                                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
+                                final String finalVtt = vttUrl;
+                                final String finalLabel = label != null ? label : "English";
+                                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("NativePlayerActivity", "Failed to fetch Server 2-B subtitles", e);
+            }
+        });
+    }
+
     private String detectLanguageFromVttUrl(String url) {
         if (url == null) return "English";
         String lower = url.toLowerCase();
@@ -2463,21 +2647,23 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var doc = win.document; " +
                 "    var videos = doc.querySelectorAll('video'); " +
                 "    videos.forEach(function(v) { " +
-                "      var oldTrack = doc.getElementById('anilove-universal-sub-track'); " +
+                "      var trackId = 'anilove-sub-' + labelStr.toLowerCase().replace(/[^a-z0-9]/g, ''); " +
+                "      var oldTrack = doc.getElementById(trackId); " +
                 "      if (!oldTrack) { " +
                 "        var t = doc.createElement('track'); " +
-                "        t.id = 'anilove-universal-sub-track'; " +
-                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = labelStr; t.srclang = 'en'; t.default = true; " +
+                "        t.id = trackId; " +
+                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = labelStr; t.srclang = 'en'; " +
                 "        v.appendChild(t); " +
                 "      } else { " +
                 "        oldTrack.src = vttUrl; " +
-                "        oldTrack.label = labelStr; " +
                 "      } " +
                 "      if (v.textTracks && v.textTracks.length > 0) { " +
                 "        for (var i = 0; i < v.textTracks.length; i++) { " +
                 "          var tr = v.textTracks[i]; " +
-                "          if (tr.src === vttUrl || tr.id === 'anilove-universal-sub-track' || tr.label === labelStr) { " +
+                "          if (tr.src === vttUrl || tr.id === trackId || tr.label === labelStr) { " +
                 "            tr.mode = 'showing'; " +
+                "          } else if (!tr.id || !tr.id.startsWith('anilove-sub-')) { " +
+                "            tr.mode = 'disabled'; " +
                 "          } " +
                 "        } " +
                 "      } " +
@@ -2493,7 +2679,18 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void setupHybridEngine(String url) {
         if (url == null || url.isEmpty() || playerWebView == null) return;
-        
+
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int idMal = getIntent().getIntExtra("idMal", 0);
+        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
+
+        if (anilistId > 0 && episodeNumber > 0) {
+            fetchAndAttachServer2BSubtitles(anilistId, episodeNumber);
+        }
+        if (idMal > 0 && episodeNumber > 0) {
+            fetchAniSkipIntervals(idMal, episodeNumber);
+        }
+
         WebSettings settings = playerWebView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);

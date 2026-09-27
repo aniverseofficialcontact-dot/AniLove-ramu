@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Anime, UserMediaListItem, UserSettings, MediaListStatus, AnimeTrailer, AppNotification } from './types';
 import { API_BASE, apiFetch, apiUrl } from './services/api';
 import {
@@ -39,22 +39,23 @@ import { AnimeCard } from './components/AnimeCard';
 import { HorizontalAnimeRow } from './components/HorizontalAnimeRow';
 import { ContinueWatchingSection } from './components/ContinueWatchingSection';
 import { SearchView } from './components/SearchView';
-import { ReelsView } from './components/ReelsView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
 import { TrailerModal } from './components/TrailerModal';
-import { ScheduleView } from './components/ScheduleView';
 import { MyLibraryView } from './components/MyLibraryView';
 import { AccountView } from './components/AccountView';
 import { WatchView } from './components/WatchView';
 import { DownloadsView } from './components/DownloadsView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { ArcadeView } from './components/ArcadeView';
 import { AnimeGachaModal } from './components/AnimeGachaModal';
 import { AiAnimeSenseiModal } from './components/AiAnimeSenseiModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+
+const ReelsView = lazy(() => import('./components/ReelsView').then(m => ({ default: m.ReelsView })));
+const ArcadeView = lazy(() => import('./components/ArcadeView').then(m => ({ default: m.ArcadeView })));
+const ScheduleView = lazy(() => import('./components/ScheduleView').then(m => ({ default: m.ScheduleView })));
+const CardInventoryView = lazy(() => import('./components/CardInventoryView').then(m => ({ default: m.CardInventoryView })));
 import { InteractiveAnime3DCardModal } from './components/InteractiveAnime3DCardModal';
-import { CardInventoryView } from './components/CardInventoryView';
 import { PinUnlockModal } from './components/PinUnlockModal';
 import { QuoteOfTheDay } from './components/QuoteOfTheDay';
 import { AniListSyncBar } from './components/AniListSyncBar';
@@ -1351,41 +1352,47 @@ export function App() {
 
             {/* VIEW 2.5: INSTAGRAM-STYLE ANIME EDIT REELS */}
             {currentTab === 'reels' && (
-              <ReelsView
-                onBack={() => {
-                  if (targetReelFilterMode === 'saved') {
-                    handleSelectTab('library');
-                  } else {
-                    handleSelectTab('home');
-                  }
-                  setTargetReelId(null);
-                  setTargetReelFilterMode(null);
-                }}
-                onNavigateToAccount={() => handleSelectTab('account')}
-                onShowToast={showToast}
-                initialReelId={targetReelId || undefined}
-                initialFilterMode={targetReelFilterMode || 'all'}
-                refreshTrigger={reelsRefreshTrigger}
-              />
+              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
+                <ReelsView
+                  onBack={() => {
+                    if (targetReelFilterMode === 'saved') {
+                      handleSelectTab('library');
+                    } else {
+                      handleSelectTab('home');
+                    }
+                    setTargetReelId(null);
+                    setTargetReelFilterMode(null);
+                  }}
+                  onNavigateToAccount={() => handleSelectTab('account')}
+                  onShowToast={showToast}
+                  initialReelId={targetReelId || undefined}
+                  initialFilterMode={targetReelFilterMode || 'all'}
+                  refreshTrigger={reelsRefreshTrigger}
+                />
+              </Suspense>
             )}
 
             {/* VIEW 3: ARCADE MINI-GAMES & CHARACTER GACHA */}
             {currentTab === 'arcade' && (
-              <ArcadeView
-                onOpenDetails={handleOpenDetails}
-                onNavigateToLibrary={() => handleSelectTab('library')}
-                onNavigateToCards={() => handleSelectTab('cards')}
-              />
+              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
+                <ArcadeView
+                  onOpenDetails={handleOpenDetails}
+                  onNavigateToLibrary={() => handleSelectTab('library')}
+                  onNavigateToCards={() => handleSelectTab('cards')}
+                />
+              </Suspense>
             )}
 
             {/* VIEW 4: SCHEDULE AIRING CALENDAR */}
             {currentTab === 'schedule' && (
-              <ScheduleView
-                onOpenDetails={handleOpenDetails}
-                onPlayStream={handlePlayStream}
-                userLibrary={library}
-                onQuickTrack={handleQuickAdd}
-              />
+              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
+                <ScheduleView
+                  onOpenDetails={handleOpenDetails}
+                  onPlayStream={handlePlayStream}
+                  userLibrary={library}
+                  onQuickTrack={handleQuickAdd}
+                />
+              </Suspense>
             )}
 
             {/* VIEW 5: MY WATCHLIST & LIBRARY */}
@@ -1412,13 +1419,15 @@ export function App() {
 
             {/* VIEW 6: CARDS & CHARACTER BINDER INVENTORY */}
             {currentTab === 'cards' && (
-              <CardInventoryView
-                library={library}
-                onOpenDetails={handleOpenDetails}
-                onInspect3DCard={handleInspect3DCard}
-                onNavigateToArcade={() => handleSelectTab('arcade')}
-                onNavigateToLibrary={() => handleSelectTab('library')}
-              />
+              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
+                <CardInventoryView
+                  library={library}
+                  onOpenDetails={handleOpenDetails}
+                  onInspect3DCard={handleInspect3DCard}
+                  onNavigateToArcade={() => handleSelectTab('arcade')}
+                  onNavigateToLibrary={() => handleSelectTab('library')}
+                />
+              </Suspense>
             )}
 
             {/* VIEW 7: ACCOUNT & SETTINGS PERSISTENCE */}

@@ -84,6 +84,7 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("advancePlayer", advancePlayer != null ? advancePlayer : false);
             intent.putExtra("yOffset", call.getInt("yOffset", 320));
             intent.putExtra("anilistId", call.getInt("anilistId", 0));
+            intent.putExtra("idMal", call.getInt("idMal", 0));
             intent.putExtra("episodeNumber", call.getInt("episodeNumber", 0));
             intent.putExtra("audio", call.getString("audio", "DUB"));
             intent.putExtra("subtitleUrl", call.getString("subtitleUrl"));

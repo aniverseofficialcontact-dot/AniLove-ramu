@@ -642,6 +642,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         startFullscreen: false,
         yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
         anilistId: anime.id,
+        idMal: anime.idMal || 0,
         episodeNumber: Number(episodeNumber),
         audio: audioMode,
         advancePlayer: settings?.advancePlayerEnabled ?? false,
