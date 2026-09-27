@@ -1807,11 +1807,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    var style = doc.getElementById('anilove-caption-toggle-style') || doc.createElement('style'); " +
                 "    style.id = 'anilove-caption-toggle-style'; " +
                 "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode) doc.head.appendChild(style); " +
+                "    if(!style.parentNode && doc.head) doc.head.appendChild(style); " +
                 "    var videos = doc.querySelectorAll('video'); " +
                 "    videos.forEach(function(v) { " +
-                "      if (remoteSubUrl && (remoteSubUrl.indexOf('.vtt') !== -1 || remoteSubUrl.indexOf('.srt') !== -1) && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
+                "      var isVtt = remoteSubUrl && (remoteSubUrl.indexOf('.vtt') !== -1 || remoteSubUrl.indexOf('.srt') !== -1); " +
+                "      if (isVtt && !doc.querySelector('#anilove-universal-sub-track')) { " +
                 "        var t = doc.createElement('track'); " +
+                "        t.id = 'anilove-universal-sub-track'; " +
                 "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
                 "      } " +
@@ -1819,8 +1821,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        for (var i = 0; i < v.textTracks.length; i++) { " +
                 "          var tr = v.textTracks[i]; " +
                 "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
-                "          else if (i === 0) { tr.mode = 'showing'; } " +
-                "          else { tr.mode = 'disabled'; } " +
+                "          else if (isVtt) { " +
+                "            if (tr.label === remoteSubLang || tr.src === remoteSubUrl || tr.id === 'anilove-universal-sub-track') { tr.mode = 'showing'; } " +
+                "            else { tr.mode = 'disabled'; } " +
+                "          } else { " +
+                "            if (i === 0) { tr.mode = 'showing'; } " +
+                "            else { tr.mode = 'disabled'; } " +
+                "          } " +
                 "        } " +
                 "      } " +
                 "    }); " +
