@@ -2712,45 +2712,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        if (!foundAny) {
-            Pattern pattern2 = Pattern.compile("<track[^>]+label=[\"']([^\"']+)[\"'][^>]*src=[\"']([^\"']+\\.vtt[^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
-            Matcher matcher2 = pattern2.matcher(html);
-            while (matcher2.find()) {
-                String label = matcher2.group(1);
-                String vttUrl = matcher2.group(2);
-                if (vttUrl != null && !vttUrl.isEmpty()) {
-                    if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                    final String finalVtt = vttUrl;
-                    final String finalLabel = label != null ? label : "English";
-                    runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-                }
-            }
-        }
-    }
-
-    private void initDefaultMultiLanguageSubtitles(int anilistId, int episodeNumber) {
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-        String baseUrl = "https://tryembed.us.cc/sub/" + anilistId + "/" + episodeNumber + "/";
-
-        String[][] langs = {
-            {"English", baseUrl + "en.vtt"},
-            {"Hindi", baseUrl + "hi.vtt"},
-            {"Spanish", baseUrl + "es.vtt"},
-            {"French", baseUrl + "fr.vtt"},
-            {"German", baseUrl + "de.vtt"},
-            {"Italian", baseUrl + "it.vtt"},
-            {"Portuguese", baseUrl + "pt.vtt"},
-            {"Japanese", baseUrl + "ja.vtt"},
-            {"Russian", baseUrl + "ru.vtt"},
-            {"Arabic", baseUrl + "ar.vtt"}
-        };
-
-        for (String[] item : langs) {
-            String langName = item[0];
-            String url = item[1];
-            capturedServer2BSubtitles.put(langName, url);
-            if (!detectedSubtitles.contains(langName)) {
-                detectedSubtitles.add(langName);
+        Pattern patternJson = Pattern.compile("[\"']?(?:file|url|src)[\"']?\\s*:\\s*[\"']([^\"']+\\.vtt[^\"']*)[\"'][^}]*[\"']?(?:label|lang|language)[\"']?\\s*:\\s*[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
+        Matcher matcherJson = patternJson.matcher(html);
+        while (matcherJson.find()) {
+            String vttUrl = matcherJson.group(1);
+            String label = matcherJson.group(2);
+            if (vttUrl != null && !vttUrl.isEmpty()) {
+                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
+                final String finalVtt = vttUrl;
+                final String finalLabel = label != null ? label : "English";
+                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
             }
         }
     }
@@ -3039,7 +3010,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
 
         if (anilistId > 0 && episodeNumber > 0) {
-            initDefaultMultiLanguageSubtitles(anilistId, episodeNumber);
+            detectedSubtitles.clear();
+            capturedServer2BSubtitles.clear();
             startServer2BSubSniffer(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
