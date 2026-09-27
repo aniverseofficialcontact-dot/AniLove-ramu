@@ -207,7 +207,9 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   - Intercepted and blocked `challenges.cloudflare.com`, `turnstile`, and `challenge-platform` scripts directly in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Completely prevents Cloudflare "Verify you are human" ad popups from rendering on Server 1 and Server 1-B.
 - **Single Subtitle Track Enforcement**:
   - Prevented duplicate subtitle track injection in `toggleWebSubtitles()` in `NativePlayerActivity.java`. VidNest and TryEmbed subtitle tracks render ONCE cleanly on screen without double text overlays.
-- **VidNest Vidstack Controls & TryEmbed Server Logo Cleanse**:
-  - Added specific CSS Module and Vidstack player selectors (`[class*="Controls-module"]`, `[class*="TimeSlider-module"]`, `vds-controls`, `media-controls`, `.top-gradient`, `.glass-panel`, `header`) to `MutationObserver` and `absoluteCleanse()` in `NativePlayerActivity.java`. VidNest's green bottom progress bar and TryEmbed's top-left server logo square icon are completely erased.
+- **Next.js Client-Side Exception Fix (`vidnest.fun`)**:
+  - Replaced destructive `.remove()` DOM calls in `MutationObserver` in `NativePlayerActivity.java` with inline CSS rule overrides (`display: none !important; pointer-events: none !important;`). Prevents React/Next.js virtual DOM reconciliation errors, eliminating the `Application error: a client-side exception has occurred` screen.
+- **TryEmbed Server Switcher Header Erasure (`tryembed.us.cc`)**:
+  - Target `.top-gradient`, `.top-gradient header`, `.top-gradient > div`, `.glass-panel`, `.skin-controls` in `absoluteCleanse()` and `MutationObserver` in `NativePlayerActivity.java`. Completely erases TryEmbed's top-left "Select server" (Astra/Beta/Sora) button icon.
 - **Server 2 Settings Constraints & Download Sync**:
   - In player settings bottom sheet and download options modal, Server 2 SUB options show ONLY `JAP (Sub)` audio and `1080p` quality, while Server 2 DUB options show ONLY `ENG (Dub)` audio and `1080p` quality.
