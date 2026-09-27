@@ -92,6 +92,7 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -813,6 +814,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         return super.onTouchEvent(event);
     }
 
+    @UnstableApi
     private void setupExoPlayer(String videoPath, String subPath) {
         if (videoPath == null || videoPath.isEmpty()) return;
         try {

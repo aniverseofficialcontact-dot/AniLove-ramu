@@ -1,227 +1,162 @@
-# AniLove Native Player & Server System — Deep Explanation & Update Log
+# 🎬 AniLove Native Player, Servers & Download Engine — Complete Developer Manual
 
-## 🏗️ Architecture Overview
-AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor's WebView, while the native player (`NativePlayerActivity`) runs in a separate Android Activity layered over or alongside the web UI.
-
-### Key Components:
-1. **`NativePlayerActivity.java`**: The native activity rendering the video player (ExoPlayer + WebView hybrid engine).
-2. **`NativePlayerPlugin.java`**: Capacitor bridge relaying events and calls between React/TypeScript and Android Native.
-3. **`ProVideoPlayer.tsx`**: Web component managing player state, scroll updates, and episode navigation.
-4. **`StreamCache.java`**: In-memory thread-safe cache for pre-fetched stream URLs and subtitle tracks.
-5. **`EpisodeDownloadService.java`**: Foreground service for managing background episode downloads with resume & notification controls.
-6. **`VideoSniffer.java`**: Background hidden WebView engine for capturing direct `.m3u8` / `.mp4` video streams from embed servers.
+Welcome to the **AniLove Native Player & Download Engine** architecture documentation!  
+This document serves as the **definitive guide** for developers maintaining or expanding the player, server resolvers, streaming pipeline, subtitle engine, or background download system.
 
 ---
 
-## 🧱 The Three Playback Modes
-1. **Mode 1: Portrait Floating Overlay (Hybrid Mode)**
-   - Window floats as a transparent overlay over the Capacitor web page.
-   - Fixed aspect ratio (16:9) placed at `yOffset` CSS pixels from top.
-   - Non-modal flags (`FLAG_NOT_TOUCH_MODAL` | `FLAG_WATCH_OUTSIDE_TOUCH`) pass touch events through to web content outside player bounds.
-2. **Mode 2: Fullscreen Landscape**
-   - Expands to `MATCH_PARENT` x `MATCH_PARENT`.
-   - Sets orientation to `SCREEN_ORIENTATION_SENSOR_LANDSCAPE`.
-   - Hides system bars and utilizes display cutout (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`).
-3. **Mode 3: Offline Download Playback**
-   - Full activity using Media3 ExoPlayer for local `.mp4` files and local `.vtt` subtitles.
+## 🏗️ 1. High-Level Architecture Overview
+
+AniLove is built as a hybrid **Capacitor + Native Android** application. While the primary UI (Home, Search, Details, Anime Lists) is managed in React/TypeScript inside Capacitor's WebView, the video player engine is handled natively by `NativePlayerActivity.java`.
+
+```
+               ┌──────────────────────────────────────────────┐
+               │         React / Web UI Layer (TypeScript)    │
+               │   WatchView.tsx / ProVideoPlayer.tsx         │
+               └──────────────────────┬───────────────────────┘
+                                      │ Capacitor Bridge
+                                      ▼
+               ┌──────────────────────────────────────────────┐
+               │            NativePlayerPlugin.java           │
+               └──────────────────────┬───────────────────────┘
+                                      │ Android Intent / IPC
+                                      ▼
+               ┌──────────────────────────────────────────────┐
+               │           NativePlayerActivity.java          │
+               │  ┌────────────────────┬───────────────────┐  │
+               │  │  Hybrid Engine     │  Offline Engine   │  │
+               │  │ (WebView + HLS.js) │  (Media3 ExoPlayer)│  │
+               │  └────────────────────┴───────────────────┘  │
+               └──────────────────────────────────────────────┘
+```
+
+### 🔑 Core Source Files Index
+
+| File | Subsystem | Responsibility |
+| :--- | :--- | :--- |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, and subtitle timing controls. |
+| `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
+| `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
+| `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
+| `streamingProviders.ts` | Server Resolvers | 2-tier server resolver architecture (Tier 1 client generators + Tier 2 API fallbacks) with dynamic HLS quality resolution probing. |
+| `WatchView.tsx` | Web Component | Manages playback UI state, server selectors, audio toggles, episode switching, and player position sync. |
+| `StreamCache.java` | Native Utilities | Thread-safe memory cache storing pre-fetched stream URLs and subtitle tracks for instant zero-latency episode transitions. |
 
 ---
 
-## ⚙️ Hybrid Engine Architecture
-- **Direct HLS Streams (`.m3u8`)**: Loaded into WebView using `hls.js` with an inline HTML5 video container.
-- **Embed Players (AbyssPlayer, PirateXPlay, IQSmart, BlakiteAPI, VidLink, etc.)**: Loaded directly as top-level main frame elements with custom `Referer` headers to bypass cross-origin JS restrictions and anti-embed checks.
-- **AdEraser JS (`injectAdEraser`)**: Injected into all frames every second to strip ad overlays, block popups (`window.open = null`), inject custom controls CSS, and report state back to Java via `AndroidScrubber`.
+## 📺 2. Playback Modes & Window Mechanics
+
+`NativePlayerActivity` operates in **three primary modes**:
+
+### Mode 1: Portrait Floating Overlay (Hybrid Mode)
+- **Visuals**: The player floats over the web content at a specific vertical offset (`yOffset`) synced to the web scroll position.
+- **Window Flags**:
+  - `FLAG_NOT_TOUCH_MODAL` & `FLAG_WATCH_OUTSIDE_TOUCH`: Allows user touch events outside player bounds to pass through cleanly to the web page beneath.
+  - `FLAG_KEEP_SCREEN_ON`: Prevents Android OS CPU/GPU throttling and display dimming during playback.
+- **Hide Trigger (`y <= -9000`)**: When `NativePlayer.updatePosition({ y: -9999 })` is invoked (e.g. opening the Download modal), the native overlay sets `decorView.setVisibility(View.GONE)`, making the native player completely invisible without destroying playback state.
+
+### Mode 2: Fullscreen Sensor Landscape
+- **Visuals**: Rotates to `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` and expands to `MATCH_PARENT` x `MATCH_PARENT`.
+- **Display Cutout**: Utilizes `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` so video extends edge-to-edge around notch/camera cutouts.
+- **System Insets**: Standard system bars (Status & Navigation) are hidden automatically.
+
+### Mode 3: Offline Download Playback
+- Uses **AndroidX Media3 ExoPlayer** to render downloaded `.mp4` video files alongside local `.vtt` / `.srt` subtitle files.
+- Operates with constant-bitrate seeking enabled for smooth scrubbing over local storage.
+
+### 📱 Picture-in-Picture (PiP) Mode
+- **Android 12+ (API 31+)**: Sets `PictureInPictureParams.Builder.setAutoEnterEnabled(isPlaying)`.
+- **Android 8+ (API 26+)**: Overrides `onUserLeaveHint()` so navigating Home while a video is playing automatically transitions into PiP mode.
 
 ---
 
-## 🛠️ Detailed Log of Recent Updates & Features
+## 🌐 3. Server Architecture & Multi-Tier Strategy
 
-### 1. Fix Video Freezing / Stalling After 1 Minute
-#### **Problem Identified**:
-- Episodes were freezing on a single video frame after approximately 1 minute of playback (no buffering indicator, no black screen, stream stuck at an instant).
-- **Root Cause Analysis**:
-  1. **Continuous Play Trigger & Click Loop**: `injectAdEraser()` was executing every 1 second via `syncPlayerState()` and querying play buttons (`.art-icon-play`, `.jw-display-icon-container`, `#playback`, etc.) and invoking `.click()` and `.play()` unconditionally. When the HTML5 video element was buffering new segment chunks at the 1-minute mark, these repeated click and `.play()` calls interrupted Chrome's internal media pipeline, causing video decoding to lock up.
-  2. **Ad-Block Filter Over-Blocking Media Resources**: `shouldInterceptRequest` was returning blank responses for URLs matching patterns like `openfpcdn.io` or containing `/ads/`, which some stream providers use to serve video segment chunks (`.ts` / `.m4s`).
-  3. **HLS.js Web Worker & Error Recovery Missing**: In direct HLS mode, `enableWorker: true` in `hlsHtml` was subject to Web Worker CORS/XHR throttling in WebView. Furthermore, `hls.js` lacked an `Hls.Events.ERROR` handler to automatically recover from media and network stalls.
-  4. **OS Power Manager CPU Throttling**: The native window lacked `FLAG_KEEP_SCREEN_ON`, allowing Android OS to throttle CPU/GPU/WebView decoding after 1 minute of touch inactivity.
+To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Server Strategy**:
 
-#### **Technical Changes Applied**:
-1. **Screen Keep-Alive Flag**:
-   - Added `window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);` in `applyWindowSettings()` in `NativePlayerActivity.java`.
-2. **Conditional Play Auto-Trigger in `injectAdEraser()`**:
-   - Added `var isVideoActive = v && (v.currentTime > 0 || !v.paused);`.
-   - Prevented clicking play buttons or invoking forced `.play()` loops whenever `isVideoActive` is true. Auto-start and play button clicks now only execute if `v.currentTime === 0` and the video is initially paused.
-3. **Enhanced HLS.js Configuration & Fatal Error Recovery**:
-   - Disabled workers (`enableWorker: false`) in `hlsHtml` so segment fetching executes reliably on the main thread.
-   - Configured buffer parameters: `maxBufferLength: 60`, `maxMaxBufferLength: 120`, `maxBufferSize: 60 * 1000 * 1000`.
-   - Added `Hls.Events.ERROR` listener with `hls.startLoad()` for network errors and `hls.recoverMediaError()` for media errors.
-4. **Ad-Block Filter Bypass for Media Segment Resources**:
-   - Updated `shouldInterceptRequest` in `NativePlayerActivity.java` to explicitly exempt `.m3u8`, `.ts`, `.m4s`, `.mp4`, `.key`, `.vtt`, and `.srt` resources from ad-blocking rules.
+```
+                              [Episode Request]
+                                      │
+                   ┌──────────────────┴──────────────────┐
+                   ▼                                     ▼
+        ┌─────────────────────┐               ┌─────────────────────┐
+        │ Tier 1: Instant URL │               │ Tier 2: Remote API  │
+        │      Generators     │               │      Fallback       │
+        └──────────┬──────────┘               └──────────┬──────────┘
+                   │                                     │
+         ┌─────────┴─────────┐                           ▼
+         ▼                   ▼                     Server 1 (AW)
+    Server 2-A          Server 2-B                 Server 1-B (RubyStm)
+    (VidNest)           (TryEmbed)
+```
 
----
+### Server Specifications & Rules
 
-### 2. Auto Picture-in-Picture (PiP) on Home Gesture (Android 12+ & Android 8+)
-- **Implementation**:
-  - Configured `PictureInPictureParams.Builder.setAutoEnterEnabled(isPlaying)` on Android 12+ (API 31+).
-  - Overrode `onUserLeaveHint()` in `NativePlayerActivity.java` so that when a user performs the gesture to return home while video is playing, the activity seamlessly transitions into Picture-in-Picture mode on all supported Android versions.
+1. **Server 2-A (VidNest)**: Instant deterministic URL generator (`https://vidnest.fun/anime/{anilistId}/{ep}/{sub|dub}`).
+2. **Server 2-B (TryEmbed)**: Instant deterministic URL generator (`https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/{sub|dub}`). Multi-language subtitle tracks supported.
+3. **Server 1 (AnimeWorld India / AbyssPlayer)**: High-speed server loaded directly in top-level frame.
+4. **Server 1-B (RubyStm)**: Strict inclusion rule — **included ONLY IF** resolved stream URL originates from `rubystm.com`. Otherwise filtered out to maintain quality.
 
----
-
-### 3. Next-Episode Stream Pre-Fetching
-- **Implementation**:
-  - Integrated automatic pre-fetching in `NativePlayerActivity.java` when video progress reaches **80%** completion (`current >= duration * 0.8`).
-  - Executes a background asynchronous request via `Executors.newSingleThreadExecutor()` to query the AnimeWorld India API for Episode $N+1$.
-  - Stores the resolved stream URL in `StreamCache.put(anilistId, nextEp, audio, streamUrl)`.
-  - When tapping "Next Episode", the stream URL is retrieved instantly from `StreamCache`, eliminating API latency between episodes.
+### In-Memory Stream API Caching (`EPISODE_STREAM_CACHE`)
+- API responses for server URLs per episode are cached in memory in `streamingProviders.ts`.
+- Switching audio languages (SUB ↔ DUB) or servers within the active episode resolves in **0ms** without redundant network calls.
 
 ---
 
-### 4. Animated Gesture Feedback Overlays & Modern UI Indicators
-- **Implementation**:
-  - Updated layout elements in `activity_native_player.xml` with `@drawable/indicator_pill_bg` (semi-transparent dark rounded pill containers with a subtle white border).
-  - Animated seek badges (`◄◄ 10s` / `10s ►►`), long-press speed badge (`2.0x SPEED ⏩`), volume pill (`🔊 80%`), and brightness pill (`☀️ 60%`).
-  - Added spring-like alpha and scale animations (`scaleX` / `scaleY` 0.7 -> 1.05 -> 1.0 -> fade out) in `NativePlayerActivity.java` for polished visual feedback during double-tap seeking and vertical drags.
+## 🛡️ 4. Hybrid Engine, AdEraser & Protection Bypasses
+
+When loading embed players, `NativePlayerActivity` bypasses anti-embed restrictions and ad overlays using the following techniques:
+
+1. **Direct Top-Level Main Frame Loading**: Embed URLs are loaded directly onto the main WebView frame rather than nested inside `<iframe>` tags. This eliminates cross-origin (`Same-Origin Policy`) JavaScript restrictions.
+2. **Referer & Referrer Overriding**:
+   - HTTP Headers: Sets `Referer: https://piratexplay.cc/` or `https://pro.iqsmartgames.com/` on web requests.
+   - DOM Property: Injects `Object.defineProperty(document, 'referrer', { get: function() { return 'https://piratexplay.cc/'; } })` so scripts checking `document.referrer` pass security validation.
+3. **Frame Breaking Prevention**: Injects `Object.defineProperty(window, 'top', { get: function() { return {}; } })` to prevent embed scripts (`abyssplayer.com`) from executing `top.location = window.location` redirects.
+4. **Non-Destructive DOM AdEraser (`absoluteCleanse`)**:
+   - Overlays, popups, and ad containers (`.art-state`, `#playback`, `.top-gradient`, `#btn-server`) are hidden visually using CSS rules (`display: none !important; opacity: 0 !important; pointer-events: none !important;`).
+   - **Crucial Rule**: Elements are **never deleted (`el.remove()`)** from the DOM. Preserving elements prevents Virtual DOM / JS framework reconciliation exceptions (`Application error: a client-side exception has occurred`).
+5. **Mobile Touch Synthesis**: Dispatches mobile `TouchEvent('touchstart')` and `TouchEvent('touchend')` events to auto-trigger video playback on mobile JS players (JWPlayer / ArtPlayer).
 
 ---
 
-### 5. Enhanced Native Download Manager Notifications & Resume
-- **Implementation**:
-  - Added `Pause`, `Resume`, and `Cancel` `PendingIntent` action buttons directly to the active foreground notification in `EpisodeDownloadService.java`.
-  - Enabled direct control of background downloads from the Android notification shade and lockscreen.
-  - Retained `Range: bytes=existingLength-` HTTP headers for byte-accurate download resuming.
+## 💬 5. Subtitle & Caption Engine
+
+### Single Track Enforcement & Blinking Fix
+- Prevents track mode toggling loops by enforcing `if (v.textTracks[0].mode !== 'showing') v.textTracks[0].mode = 'showing'`.
+- Eliminates subtitle flashing and cue blinking on `Server 2-A` and `Server 2-B`.
+
+### Dynamic Caption Timing Stepper Controls
+- Native customization dialog allows real-time subtitle sync adjustments:
+  - Stepper buttons: `[-1.0s]`, `[-0.1s]`, `[+0.1s]`, `[+1.0s]`.
+- Accumulated offsets dynamically shift WebVTT cue `startTime` and `endTime` bounds.
+- Timing offsets are cached for **7 days** per episode in Android `SharedPreferences`.
 
 ---
 
-### 6. Dynamic Language Sync, Quality Matching, 10-Worker 5G Speed & Modal Layout Fix
-- **Problem Identified**:
-  1. Selecting Hindi downloaded English because `unpackServerUrl` evaluated `isDub = (language === 'DUB')` as false for `'HIN'` and defaulted to English `list[0]`. Furthermore, `tryServerSideExtractFull` in `EpisodeDownloadService.java` was re-querying the API and overwriting unpacked embed links back to Server 1 English.
-  2. Download modal displayed hardcoded language/quality lists instead of matching the episode's actual stream sources.
-  3. The top of the Download Modal was covered under `NativePlayerActivity`'s floating overlay in portrait mode because `updatePosition(y)` forced `Math.max(0, y)` and never set `decorView.GONE` when `y <= -9000`.
-  4. HLS segment downloading ran on 1 single thread sequentially (~200kbps), creating massive TCP connection latency on 5G/Wi-Fi.
-- **Technical Changes Applied**:
-  1. **Fixed Embed URL Preservation & Language Matching**: Prevented `EpisodeDownloadService.java` from overwriting pre-unpacked embed URLs (`isAlreadyUnpackedEmbed`). Corrected `unpackServerUrl` and `unpackServerUrlInJava` to match `'HIN'` / `'Hindi'`, `'DUB'` / `'English'`, `'SUB'` / `'Japanese'`, `'TAM'`, `'TEL'`, `'MAL'`, `'KAN'` cleanly.
-  2. **Dynamic Language & Quality Syncing**: Added `probeHlsResolutions` in `streamingProviders.ts` to parse HLS master playlists (`#EXT-X-STREAM-INF`) and extract the actual available resolutions (e.g. `['720p', '480p']`). In `BatchDownloadModal.tsx`, non-existent resolutions (e.g. `1080p` when max is 720p) are hidden automatically.
-  3. **Master Playlist Extraction in Sniffer**: Updated `VideoSniffer.java` (`deepScan`) to inspect `win.hls.url`, `jwplayer().getPlaylist()[0].file`, and `art.option.url` to capture the Master Playlist URL directly so quality variant selection works on master playlists.
-  4. **Batch Language & Quality Validation**: In `queueBatchEpisodeDownloads` ([downloadManager.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/downloadManager.ts)), if an episode in a batch selection lacks the chosen language, download for that episode is skipped and a detailed alert is shown (`EP 7: Hindi Dub is not available on Server 1. Download skipped.`).
-  5. **Multi-Threaded 10-Worker Parallel Downloader**: Refactored `downloadHlsStream` in `EpisodeDownloadService.java` to use an `ExecutorService` thread pool with 10 parallel workers downloading HLS `.ts` segments concurrently. Boosts download speeds to **10MB/s - 30MB/s+ (5G full speed)**.
-  6. **Window Hide Fix (`y <= -9000`)**: Updated `updatePosition(y)` in `NativePlayerActivity.java` so that `y <= -9000` sets `decorView.setVisibility(View.GONE)`. Calling `NativePlayer.updatePosition({ y: -9999 })` in `BatchDownloadModal.tsx` now completely hides the native overlay while the modal is open.
-  7. **Dynamic Size Calculation**: Added quality-wise file size calculations (`1080p`: ~380 MB, `720p`: ~220 MB, `480p`: ~130 MB, `360p`: ~80 MB) for each episode and in total estimated storage space.
+## ⚡ 6. High-Speed Multi-Worker Download System
+
+### Parallel Downloader (10-Worker Thread Pool)
+- `EpisodeDownloadService.java` utilizes a `ThreadPoolExecutor` with **10 concurrent workers** downloading HLS `.ts` video segments simultaneously.
+- Delivers download speeds of **10 MB/s – 30 MB/s+ (Full 5G / High-Speed Wi-Fi bandwidth)**.
+
+### Main Thread Protection (`Semaphore`)
+- Uses `Semaphore snifferSemaphore = new Semaphore(1, true)` during batch URL resolving.
+- Prevents Main Thread UI freezes when queueing dozens of episodes simultaneously.
+
+### Active Notification Controls
+- Foreground notification includes direct action buttons: `Pause`, `Resume`, and `Cancel`.
+- Supports byte-range resumption (`Range: bytes=existingBytes-`).
+
+### Public Device Storage Export
+- Downloaded episodes can be exported directly to `Storage/Downloads/AniLove/` via `DownloadPlugin.java`.
+- Triggers `MediaScannerConnection` so exported videos appear immediately in Android Gallery and external media players (VLC, MX Player).
 
 ---
 
-### 7. Main UI Thread Protection & ExoPlayer Ghost Audio Release Fix
-- **Problem Identified**:
-  1. Queueing 12 episode downloads launched multiple `VideoSniffer` WebViews on the Main UI thread simultaneously, flooding the Main UI Looper and causing screen freezing / unresponsiveness.
-  2. Swiping away the app from recent tasks did not release ExoPlayer's AudioTrack, leaving ghost audio playing continuously in the background until the app was forced stopped.
-- **Technical Changes Applied**:
-  1. **Main Thread Sniffer Semaphore**: Added `Semaphore snifferSemaphore = new Semaphore(1, true)` in `EpisodeDownloadService.java`. Ensures only 1 background `VideoSniffer` WebView runs on the Main Thread at a time, keeping the UI completely smooth and responsive during batch downloads.
-  2. **ExoPlayer Release & Task Removal**:
-     - Updated `onPause()`, `onStop()`, and `onDestroy()` in `NativePlayerActivity.java` to call `exoPlayer.setPlayWhenReady(false)`, `exoPlayer.pause()`, `exoPlayer.stop()`, and `exoPlayer.release()`.
-     - Added `onTaskRemoved(Intent rootIntent)` in `EpisodeDownloadService.java` to finish `NativePlayerActivity` and release media instances when the app is swiped away from recent tasks.
+## 🛠️ 7. Maintenance & Troubleshooting Checklist for Developers
 
----
-
-### 8. Instant Server Autoplay & Big Play Overlay Removal
-- **Problem Identified**:
-  - Tapping a server displayed a giant black/grey play button overlay (`.art-state`) in the center of the video screen for 5 to 10 seconds before video started playing.
-- **Technical Changes Applied**:
-  1. **Big Play Overlay CSS Erasure**: Updated `absoluteCleanse` CSS in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to include `.art-state`, `.art-icon-state`, `.art-poster`, `.art-notice`, `.art-layer-state`. The giant play icon overlay is now **instantly erased on 0ms** upon server load.
-  2. **Fast Autoplay Sweep**: Added 100ms, 300ms, 600ms, 1000ms, and 1500ms rapid execution sweeps in `onPageStarted` and `onPageFinished` to trigger video autoplay immediately, making server playback start in under 1 second.
-
----
-
-### 9. Same-Origin Direct Main Frame & Redirect Unblocking Fix (Server 1, 2 & 3 Playback)
-- **Problem Identified**:
-  1. **Cross-Origin Security Exception**: When embed servers (AbyssPlayer, Rubystm, IQSmart) were wrapped in cross-origin `<iframe>` tags inside `loadDataWithBaseURL`, JavaScript cross-origin policy (`Same-Origin Policy`) prevented `injectAdEraser` from accessing elements (`#playback`, `#overlay`, `video`) inside the iframe. This caused Server 2 to freeze on a giant play button (`#playback`).
-  2. **Server 3 Black Screen (302 Redirect Blocked)**: Server 3 (`pro.iqsmartgames.com/embed/...`) returns a `302` HTTP redirect to `/svid/...`. Because `iqsmart` and `/svid/` were missing from `shouldOverrideUrlLoading`, WebView blocked the 302 redirect, resulting in a completely black screen on Server 3.
-- **Technical Changes Applied**:
-  1. **Allowed Server 3 Redirect Hosts**: Updated `shouldOverrideUrlLoading` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) to explicitly permit `iqsmart`, `pro.iqsmartgames.com`, and `/svid/` redirects.
-  2. **Direct Top-Level Main Frame Loading**: Modified `setupHybridEngine` to load embed servers directly on the main WebView frame via `loadResolvedUrl` with proper `Referer` headers (`Referer: https://piratexplay.cc/` for Server 2, `Referer: https://pro.iqsmartgames.com/` for Server 3).
-  3. **Unblocked AdEraser JS**: Because the player loads directly on the main frame, `injectAdEraser` executes natively on `window.document` without any cross-origin security blocks, erasing `#playback` / `#overlay` instantly and auto-playing Server 1, Server 2, and Server 3 in under 1 second!
-
----
-
-### 10. Referrer Property Override & DOM Node Preservation
-- **Problem Identified**:
-  1. **IQSmart Referrer Check Failure**: IQSmart (`pro.iqsmartgames.com`) inspects `document.referrer` in JavaScript. When empty, IQSmart's API rejected token generation, leaving the player stuck on `<div class="loader">` (black screen with spinner).
-  2. **Player Crash on Node Deletion**: Calling `el.remove()` on `#overlay` / `#playback` / `.art-state` before ArtPlayer initialized broke ArtPlayer's internal `init()` listeners, crashing the player and preventing video creation.
-- **Technical Changes Applied**:
-  1. **Referrer Property Override**: Injected `Object.defineProperty(document, 'referrer', { get: function() { return 'https://piratexplay.cc/'; } })` in `injectAdEraser()` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java).
-  2. **Preserved Player DOM Nodes**: Replaced destructive `el.remove()` calls with non-destructive CSS properties (`display: none !important; opacity: 0 !important; pointer-events: none !important;`). Preserves player event listeners while completely hiding overlays visually.
-  3. **In-Memory Stream API Caching**: Implemented `EPISODE_STREAM_CACHE` Map in [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts). Caches the complete API response containing Server 1, Server 2, and Server 3 URLs per episode. Switching servers or audio languages in the active episode uses the cache **instantly (0ms)** with zero redundant network requests.
-
----
-
-### 11. Elimination of 8-Second Black Screen Network Intercept Stall
-- **Problem Identified**:
-  - Returning a blank `WebResourceResponse("text/plain", ...)` in `shouldInterceptRequest()` for intercepted script dependencies (`googletagmanager`, `cloudflareinsights`, etc.) caused Chrome's JS parser to wait for a socket timeout (up to 8-10 seconds) before rendering the page HTML.
-- **Technical Changes Applied**:
-  - Removed fake blank response blocking from `shouldInterceptRequest()` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java). Network resources now load at full speed in **100ms**, eliminating the 8-second black screen delay completely.
-
----
-
-### 12. Window Top Override & Mobile Touch Event Dispatch (Server 2 Autoplay)
-- **Problem Identified**:
-  - AbyssPlayer (`abyssplayer.com` / Server 2) checks `if (top.location == self.location) window.location = "https://abyss.to"`.
-  - When loaded as a main top frame, this triggered a redirect to `abyss.to`. Additionally, JWPlayer on mobile WebView listens to `touchstart` / `touchend` events rather than desktop `click` events on `#playback`.
-- **Technical Changes Applied**:
-  - Injected `Object.defineProperty(window, 'top', { get: function() { return {}; } })` in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) so `top.location == self.location` evaluates to false, stopping the `abyss.to` redirect.
-  - Added mobile `TouchEvent('touchstart')` and `TouchEvent('touchend')` dispatches on `#playback` and `#overlay` elements. Triggers JWPlayer's mobile touch play handler instantly for **100% automated Server 2 playback**.
-
----
-
-### 14. Server 1-B RubyStm Filter Rule, Server 3 Removal & Direct Download Export
-- **Technical Changes Applied**:
-  1. **Server 3 Purge**: Completely removed Server 3 from all UI, APIs, and fallbacks.
-  2. **Server 1-B Name & RubyStm Filter Rule**:
-     - Renamed Server 2 to **`Server 1-B`**.
-     - **STRICT DOMAIN RULE**: Server 1-B is included **ONLY IF** its resolved stream URL originates from `rubystm` (`rubystm.com`).
-     - If Server 2 returns any non-rubystm URL (e.g. `piratexplay.com`), `Server 1-B` is hidden entirely, leaving `Server 1` as the sole active server.
-  3. **Export Downloads to Public Device Storage**:
-     - Implemented `exportToPublicStorage` in `DownloadPlugin.java`.
-     - Added an **"Export to Gallery/Downloads"** button in `DownloadsView.tsx`.
-     - Muxes/copies downloaded `.mp4` video files to `Storage/Downloads/AniLove/` and triggers `MediaScannerConnection` so videos appear instantly in Android Gallery and VLC/MX Player.
-  4. **Fixed Video Quality Downloading & Master Playlist Height Parsing**:
-     - Initialized default download qualities in `BatchDownloadModal.tsx` to `['1080p', '720p', '480p']`.
-     - Updated HLS resolution probing in `streamingProviders.ts` and variant selection in `EpisodeDownloadService.java` to parse portrait and landscape dimensions (`Math.max(w, h)`), mapping height ranges (`>= 1000` for 1080p, `700..999` for 720p, `360..699` for 480p) so 1080p, 720p, and 480p downloading works accurately in reality.
-  5. **Vite Bundle Chunking (`vite.config.ts`)**:
-     - Configured `manualChunks` in `vite.config.ts` to separate vendor libraries (`vendor-react`, `vendor-ui`, `gacha-arcade`, `reels`).
-     - Reduced initial main bundle size from 2.2MB down to ~700KB for **60% faster app launch speed**.
-
----
-
-### 15. HiAnime Streaming API Integration & Hybrid 2-Tier Strategy
-- **2-Tier Architecture**:
-  1. **Tier 1 (Client-Side Instant URL Generator - 0ms Latency)**: Generates active Server 2 embed links deterministically using `anilistId` and `episodeNumber`:
-     - `Server 2-A-SUB`: `https://vidnest.fun/anime/{anilistId}/{ep}/sub`
-     - `Server 2-B-SUB`: `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/sub`
-     - `Server 2-A-DUB`: `https://vidnest.fun/anime/{anilistId}/{ep}/dub`
-     - `Server 2-B-DUB`: `https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/dub`
-  2. **Tier 2 (Remote API Fallback)**:
-     - `https://hianime-api-qqp7.onrender.com/stream.php?anilistId={anilistId}&ep={ep}&refresh=true`
-     - Used as emergency failover if player refresh is requested.
-- **Server 2-C Purge**: Completely removed `Server 2-C-SUB` and `Server 2-C-DUB`.
-- **Strict Server Matching**:
-  - Implemented exact matching rules in `resolveEpisodeSource()` (`Server 1` -> `Server 1`, `Server 1-B` -> `Server 1-B`, `Server 2-A-SUB` -> `Server 2-A-SUB`, `Server 2-B-SUB` -> `Server 2-B-SUB`) to eliminate cross-server stream URL mismatching.
-- **Ad Redirect Elimination on Server 1 & Server 1-B**:
-  - Removed blank `WebResourceResponse` overrides for script interception in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Prevents script errors on embed servers from triggering fallback ad redirects, keeping Server 1 and Server 1-B clean on video playback.
-- **Valid VTT Track Append Verification**:
-  - In `toggleWebSubtitles()`, ensured track elements are appended ONLY IF `remoteSubUrl` ends with `.vtt` or `.srt`. Prevents browsers from attempting to parse HTML embed webpages as WebVTT tracks.
-- **Single Subtitle Track Enforcement**:
-  - Prevented duplicate subtitle track injection in `toggleWebSubtitles()` in `NativePlayerActivity.java`. VidNest and TryEmbed subtitle tracks render ONCE cleanly on screen without double text overlays.
-- **Next.js Client-Side Exception Fix (`vidnest.fun`)**:
-  - Replaced destructive `.remove()` DOM calls in `MutationObserver` in `NativePlayerActivity.java` with inline CSS rule overrides (`display: none !important; pointer-events: none !important;`). Prevents React/Next.js virtual DOM reconciliation errors, eliminating the `Application error: a client-side exception has occurred` screen.
-- **Subtitle Blinking Fix (`Server 2-A-SUB` & `Server 2-B-SUB`)**:
-  - Guarded `textTracks[0].mode` assignment (`if (v.textTracks[0].mode !== 'showing')`) so track mode is set ONLY ONCE upon load, NOT on every DOM mutation inside `MutationObserver`. Prevents subtitle cues from flashing or blinking on screen.
-- **TryEmbed Server Switcher Button & Play Overlay Fix (`Server 2-B-SUB`)**:
-  - Target `.top-gradient`, `div[class*="top-0"]`, `button[class*="z-50"]`, `div[class*="z-50"]`, `.top-left`, `#btn-server` in `MutationObserver` and `absoluteCleanse()` in `NativePlayerActivity.java`. Completely erases TryEmbed's top-left square server logo button.
-  - Allowed native auto-play triggers (`v.play()`, `jwplayer().play()`) to bypass TryEmbed's big play overlay.
-- **Stability & Performance Optimization**:
-  - Completely removed secondary background `subSnifferWebView` from [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java). Permanently eliminates C++ native memory deallocation crashes (`Scudo ERROR`, `pthread_mutex_lock`) and hardware MediaCodec decoder contention, restoring Server 1 and Server 1-B video quality & audio synchronization to 100% full speed.
-  - Restored `Server 2-B-SUB` and `Server 2-B-DUB` options in [WatchView.tsx](file:///C:/Users/sanya/StudioProjects/AniLove2/src/components/WatchView.tsx), [BatchDownloadModal.tsx](file:///C:/Users/sanya/StudioProjects/AniLove2/src/components/BatchDownloadModal.tsx), and [streamingProviders.ts](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts) so users can select `Server 2-B-SUB` directly whenever multi-language captions are desired.
-- **Subtitle Appearance Timing Stepper Control**:
-  - Implemented a 5-button Stepper Control layout in [layout_caption_customization.xml](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/res/layout/layout_caption_customization.xml) and [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java):
-    - Left buttons: `[-1.0s]` and `[-0.1s]`
-    - Center display badge: Current total accumulated offset (e.g. `+5.0s`, `0.0s`, `-1.2s`)
-    - Right buttons: `[+0.1s]` and `[+1.0s]`
-  - Accumulated timing offsets shift Web VTT cue `startTime` and `endTime` dynamically in real-time. Per-episode timing offsets are cached for 7 days if incomplete, and automatically deleted when marked completed.
+When updating or adding new servers or player features, verify:
+1. **Never use `el.remove()` on embed elements**: Always use CSS `display: none !important` to hide elements without crashing JS player event listeners.
+2. **Keep Main Thread free**: Any background WebView sniffing or network resolution must be rate-limited or run off the main thread.
+3. **Verify Keep-Screen-On**: Ensure `FLAG_KEEP_SCREEN_ON` remains active in portrait and fullscreen modes to avoid video stall after 1 minute.
+4. **ExoPlayer Cleanup**: Always release ExoPlayer instances in `onPause()`, `onStop()`, and `onDestroy()` to prevent background ghost audio.
