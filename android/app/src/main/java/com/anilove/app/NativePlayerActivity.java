@@ -50,6 +50,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.net.http.SslError;
+import android.webkit.SslErrorHandler;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -2720,35 +2722,42 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         runOnUiThread(() -> {
             try {
-                if (subSnifferWebView != null) {
-                    subSnifferWebView.destroy();
-                    subSnifferWebView = null;
-                }
-                subSnifferWebView = new WebView(this);
-                subSnifferWebView.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
-                subSnifferWebView.setAlpha(0.01f);
-                ViewGroup root = findViewById(R.id.player_activity_root);
-                if (root != null) {
-                    root.addView(subSnifferWebView);
-                }
-                WebSettings s = subSnifferWebView.getSettings();
-                s.setJavaScriptEnabled(true);
-                s.setDomStorageEnabled(true);
-                s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-
-                subSnifferWebView.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                        String reqUrl = request.getUrl().toString();
-                        String lower = reqUrl.toLowerCase();
-                        if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                            Log.i("SubSniffer", "Intercepted Server 2-B VTT track: " + reqUrl);
-                            final String vttUrl = reqUrl;
-                            runOnUiThread(() -> attachCapturedVttTrack(vttUrl));
-                        }
-                        return super.shouldInterceptRequest(view, request);
+                if (subSnifferWebView == null) {
+                    subSnifferWebView = new WebView(this);
+                    subSnifferWebView.setLayoutParams(new ViewGroup.LayoutParams(1, 1));
+                    subSnifferWebView.setAlpha(0.01f);
+                    ViewGroup root = findViewById(R.id.player_activity_root);
+                    if (root != null) {
+                        root.addView(subSnifferWebView);
                     }
-                });
+                    WebSettings s = subSnifferWebView.getSettings();
+                    s.setJavaScriptEnabled(true);
+                    s.setDomStorageEnabled(true);
+                    s.setDatabaseEnabled(true);
+                    s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+                    subSnifferWebView.setWebViewClient(new WebViewClient() {
+                        @Override
+                        public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                            handler.proceed();
+                        }
+
+                        @Override
+                        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                            String reqUrl = request.getUrl().toString();
+                            String lower = reqUrl.toLowerCase();
+                            if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
+                                Log.i("SubSniffer", "Intercepted Server 2-B VTT track: " + reqUrl);
+                                final String vttUrl = reqUrl;
+                                runOnUiThread(() -> attachCapturedVttTrack(vttUrl));
+                            }
+                            return super.shouldInterceptRequest(view, request);
+                        }
+                    });
+                } else {
+                    subSnifferWebView.stopLoading();
+                    subSnifferWebView.loadUrl("about:blank");
+                }
 
                 String targetUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
                 Map<String, String> headers = new HashMap<>();
@@ -2994,6 +3003,11 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
 
         playerWebView.setWebViewClient(new WebViewClient() { 
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.proceed();
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String reqUrl = request.getUrl().toString();
