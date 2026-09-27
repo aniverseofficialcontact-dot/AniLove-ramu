@@ -148,6 +148,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String currentSelectedSubtitle = "English";
     
     // Caption State Defaults
+    private double subtitleTimingOffset = 0.0;
     private String bgOpacity = "Off";
     private String bgColor = "Black";
     private int captionFontSize = 90;
@@ -159,6 +160,93 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String edgeStyle = "Shadow";
     private String subtitleUrl = null;
     private String subtitleLang = "English";
+
+    private void loadEpisodeSubOffset() {
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+
+        try {
+            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
+            String key = anilistId + "_ep" + episodeNumber;
+            String valStr = prefs.getString(key, null);
+
+            if (valStr != null) {
+                JSONObject obj = new JSONObject(valStr);
+                long timestamp = obj.optLong("timestamp", 0);
+                long ageDays = (System.currentTimeMillis() - timestamp) / (24 * 60 * 60 * 1000L);
+                if (ageDays < 7) {
+                    subtitleTimingOffset = obj.optDouble("offset", 0.0);
+                } else {
+                    prefs.edit().remove(key).apply();
+                    subtitleTimingOffset = 0.0;
+                }
+            }
+        } catch (Exception ignored) {
+            subtitleTimingOffset = 0.0;
+        }
+    }
+
+    private void saveEpisodeSubOffset(double offset) {
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+
+        try {
+            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
+            String key = anilistId + "_ep" + episodeNumber;
+            subtitleTimingOffset = Math.round(offset * 10.0) / 10.0;
+
+            JSONObject obj = new JSONObject();
+            obj.put("offset", subtitleTimingOffset);
+            obj.put("timestamp", System.currentTimeMillis());
+            prefs.edit().putString(key, obj.toString()).apply();
+        } catch (Exception ignored) {}
+
+        applySubtitleTimingOffsetInWeb();
+    }
+
+    private void deleteEpisodeSubOffset() {
+        int anilistId = getIntent().getIntExtra("anilistId", 0);
+        int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+
+        try {
+            SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
+            String key = anilistId + "_ep" + episodeNumber;
+            prefs.edit().remove(key).apply();
+            subtitleTimingOffset = 0.0;
+        } catch (Exception ignored) {}
+    }
+
+    private void applySubtitleTimingOffsetInWeb() {
+        if (playerWebView == null) return;
+        String js = "(function() { " +
+                "  var offset = " + subtitleTimingOffset + "; " +
+                "  function shift(win) { try { " +
+                "    var v = win.document.querySelector('video'); " +
+                "    if (v && v.textTracks) { " +
+                "      for (var i = 0; i < v.textTracks.length; i++) { " +
+                "        var tr = v.textTracks[i]; " +
+                "        if (tr && tr.cues) { " +
+                "          for (var j = 0; j < tr.cues.length; j++) { " +
+                "            var c = tr.cues[j]; " +
+                "            if (typeof c._origStart === 'undefined') { " +
+                "              c._origStart = c.startTime; " +
+                "              c._origEnd = c.endTime; " +
+                "            } " +
+                "            c.startTime = Math.max(0, c._origStart + offset); " +
+                "            c.endTime = Math.max(0, c._origEnd + offset); " +
+                "          } " +
+                "        } " +
+                "      } " +
+                "    } " +
+                "  } catch(e){} " +
+                "  for (var f = 0; f < win.frames.length; f++) { try { shift(win.frames[f]); } catch(e){} } } " +
+                "  shift(window); " +
+                "})();";
+        playerWebView.evaluateJavascript(js, null);
+    }
 
     private void saveCaptionSettingsToPrefs() {
         try {
@@ -541,6 +629,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         currentInstance = this;
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         loadCaptionSettingsFromPrefs();
+        loadEpisodeSubOffset();
         
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
@@ -1553,6 +1642,18 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
+        // Setup Subtitle Appearance Timing group (+/- 0.1s steps)
+        String[] timingOptions = new String[]{"-3.0s", "-2.0s", "-1.0s", "-0.5s", "-0.2s", "-0.1s", "0.0s", "+0.1s", "+0.2s", "+0.5s", "+1.0s", "+2.0s", "+3.0s"};
+        String currTimingStr = (subtitleTimingOffset >= 0 ? "+" : "") + String.format(Locale.US, "%.1fs", subtitleTimingOffset);
+        if (subtitleTimingOffset == 0.0) currTimingStr = "0.0s";
+
+        setupCaptionGroup(view.findViewById(R.id.group_sub_timing), timingOptions, currTimingStr, val -> {
+            try {
+                double parsed = Double.parseDouble(val.replace("s", "").replace("+", ""));
+                saveEpisodeSubOffset(parsed);
+            } catch (Exception ignored) {}
+        });
+
         captionPreview = view.findViewById(R.id.caption_preview);
         setupCaptionGroup(view.findViewById(R.id.group_bg_opacity), new String[]{"Off", "25%", "40%", "60%", "80%", "100%"}, bgOpacity, val -> { bgOpacity = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
         setupCaptionGroup(view.findViewById(R.id.group_bg_color), new String[]{"Black", "Gray", "Navy", "White"}, bgColor, val -> { bgColor = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });
@@ -2216,6 +2317,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void broadcastProgress(double current, double duration) {
+        if (duration > 0 && current >= duration * 0.85) {
+            deleteEpisodeSubOffset();
+        }
         if (MainActivity.instance == null || MainActivity.instance.getBridge() == null) return;
         
         final int anilistId = getIntent().getIntExtra("anilistId", 0);

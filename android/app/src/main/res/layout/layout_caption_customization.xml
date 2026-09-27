@@ -95,6 +95,12 @@
             <LinearLayout android:id="@+id/group_caption_track" style="@style/CaptionGroup" />
         </HorizontalScrollView>
 
+        <!-- SUBTITLE APPEARANCE TIMING (SHIFT CUES BY +/- 0.1s) -->
+        <TextView style="@style/CaptionSettingLabel" android:text="SUBTITLE APPEARANCE TIMING" />
+        <HorizontalScrollView style="@style/CaptionScroll">
+            <LinearLayout android:id="@+id/group_sub_timing" style="@style/CaptionGroup" />
+        </HorizontalScrollView>
+
         <!-- BACKGROUND OPACITY -->
         <TextView style="@style/CaptionSettingLabel" android:text="BACKGROUND OPACITY" />
         <HorizontalScrollView style="@style/CaptionScroll">

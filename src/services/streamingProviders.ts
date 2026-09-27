@@ -603,10 +603,17 @@ export async function resolveEpisodeSource({
       }
     }
 
+    // UI Server options: display Server 1, Server 1-B, Server 2-A-SUB, Server 2-A-DUB
+    const uiHiAnimeServers = hiAnimeServers.filter(s => s.name.includes('2-A'));
+
     const combinedAvailableServers: AvailableServerOption[] = [
       ...availableServers,
-      ...hiAnimeServers,
+      ...uiHiAnimeServers,
     ];
+
+    // Universal Background Multi-Language Subtitle Track (Powered by Server 2-B Sub: tryembed.us.cc)
+    const backgroundSubSource = hiAnimeServers.find(s => s.name === 'Server 2-B-SUB');
+    const universalSubtitleUrl = backgroundSubSource?.linkId || `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`;
 
     // Select requested server URL strictly
     let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
@@ -656,6 +663,8 @@ export async function resolveEpisodeSource({
         source: {
           provider,
           url: selectedUrl,
+          subtitleUrl: universalSubtitleUrl,
+          subtitleLang: 'Multi-Sub (TryEmbed)',
           language,
           resolution,
           isEmbeddable: true,
