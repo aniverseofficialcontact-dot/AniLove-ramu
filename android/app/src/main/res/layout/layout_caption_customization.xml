@@ -95,11 +95,88 @@
             <LinearLayout android:id="@+id/group_caption_track" style="@style/CaptionGroup" />
         </HorizontalScrollView>
 
-        <!-- SUBTITLE APPEARANCE TIMING (SHIFT CUES BY +/- 0.1s) -->
+        <!-- SUBTITLE APPEARANCE TIMING STEPPER CONTROL -->
         <TextView style="@style/CaptionSettingLabel" android:text="SUBTITLE APPEARANCE TIMING" />
-        <HorizontalScrollView style="@style/CaptionScroll">
-            <LinearLayout android:id="@+id/group_sub_timing" style="@style/CaptionGroup" />
-        </HorizontalScrollView>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp"
+            android:background="#111111"
+            android:paddingVertical="12dp"
+            android:paddingHorizontal="12dp">
+
+            <TextView
+                android:id="@+id/btn_sub_minus_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="-1.0s"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginEnd="4dp" />
+
+            <TextView
+                android:id="@+id/btn_sub_minus_01"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="-0.1s"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/text_sub_timing_center"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0.0s"
+                android:textColor="#8888FF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:gravity="center"
+                android:minWidth="70dp" />
+
+            <TextView
+                android:id="@+id/btn_sub_plus_01"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="+0.1s"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="4dp" />
+
+            <TextView
+                android:id="@+id/btn_sub_plus_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="+1.0s"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
 
         <!-- BACKGROUND OPACITY -->
         <TextView style="@style/CaptionSettingLabel" android:text="BACKGROUND OPACITY" />

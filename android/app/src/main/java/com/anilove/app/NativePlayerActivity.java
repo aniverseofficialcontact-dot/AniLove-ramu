@@ -1642,17 +1642,47 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        // Setup Subtitle Appearance Timing group (+/- 0.1s steps)
-        String[] timingOptions = new String[]{"-3.0s", "-2.0s", "-1.0s", "-0.5s", "-0.2s", "-0.1s", "0.0s", "+0.1s", "+0.2s", "+0.5s", "+1.0s", "+2.0s", "+3.0s"};
-        String currTimingStr = (subtitleTimingOffset >= 0 ? "+" : "") + String.format(Locale.US, "%.1fs", subtitleTimingOffset);
-        if (subtitleTimingOffset == 0.0) currTimingStr = "0.0s";
+        // Setup Subtitle Appearance Timing Stepper Control
+        TextView textSubTimingCenter = view.findViewById(R.id.text_sub_timing_center);
+        TextView btnSubMinus1 = view.findViewById(R.id.btn_sub_minus_1);
+        TextView btnSubMinus01 = view.findViewById(R.id.btn_sub_minus_01);
+        TextView btnSubPlus01 = view.findViewById(R.id.btn_sub_plus_01);
+        TextView btnSubPlus1 = view.findViewById(R.id.btn_sub_plus_1);
 
-        setupCaptionGroup(view.findViewById(R.id.group_sub_timing), timingOptions, currTimingStr, val -> {
-            try {
-                double parsed = Double.parseDouble(val.replace("s", "").replace("+", ""));
-                saveEpisodeSubOffset(parsed);
-            } catch (Exception ignored) {}
-        });
+        Runnable updateTimingBadge = () -> {
+            if (textSubTimingCenter != null) {
+                String str = (subtitleTimingOffset >= 0 ? "+" : "") + String.format(Locale.US, "%.1fs", subtitleTimingOffset);
+                if (Math.abs(subtitleTimingOffset) < 0.05) str = "0.0s";
+                textSubTimingCenter.setText(str);
+            }
+        };
+
+        updateTimingBadge.run();
+
+        if (btnSubMinus1 != null) {
+            btnSubMinus1.setOnClickListener(v -> {
+                saveEpisodeSubOffset(subtitleTimingOffset - 1.0);
+                updateTimingBadge.run();
+            });
+        }
+        if (btnSubMinus01 != null) {
+            btnSubMinus01.setOnClickListener(v -> {
+                saveEpisodeSubOffset(subtitleTimingOffset - 0.1);
+                updateTimingBadge.run();
+            });
+        }
+        if (btnSubPlus01 != null) {
+            btnSubPlus01.setOnClickListener(v -> {
+                saveEpisodeSubOffset(subtitleTimingOffset + 0.1);
+                updateTimingBadge.run();
+            });
+        }
+        if (btnSubPlus1 != null) {
+            btnSubPlus1.setOnClickListener(v -> {
+                saveEpisodeSubOffset(subtitleTimingOffset + 1.0);
+                updateTimingBadge.run();
+            });
+        }
 
         captionPreview = view.findViewById(R.id.caption_preview);
         setupCaptionGroup(view.findViewById(R.id.group_bg_opacity), new String[]{"Off", "25%", "40%", "60%", "80%", "100%"}, bgOpacity, val -> { bgOpacity = val; updatePreviewSet(); applyCaptionStyle(); saveCaptionSettingsToPrefs(); });

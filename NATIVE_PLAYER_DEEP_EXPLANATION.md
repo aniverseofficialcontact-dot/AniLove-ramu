@@ -217,7 +217,9 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
 - **Universal Background Subtitle Engine (Server 2-B Sub Powered)**:
   - Removed `Server 2-B-SUB` and `Server 2-B-DUB` from the visible UI server bar to keep the interface clean (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-A-DUB`).
   - In the background, `resolveEpisodeSource()` automatically fetches multi-language VTT/SRT subtitle tracks from `Server 2-B-SUB` (`https://tryembed.us.cc/embed/anime/{anilistId}/{episodeNumber}/sub`) for ALL streams (`Server 1`, `Server 1-B`, `Server 2-A`, etc.). If `Server 2-B-SUB` lacks subtitles for an episode, it falls back to the current video server's captions.
-- **Subtitle Appearance Timing Shift (+/- 0.1s Steps)**:
-  - Added **"Subtitle Appearance Timing"** control in the Caption Customization bottom sheet in [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) and [layout_caption_customization.xml](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/res/layout/layout_caption_customization.xml).
-  - Allows users to shift subtitle appearance forward or backward in steps of 0.1s (e.g., `-1.0s`, `+0.2s`, `+2.0s`).
-  - Per-episode timing offsets are cached in SharedPreferences for 7 days if incomplete, and automatically deleted when the episode is completed.
+- **Subtitle Appearance Timing Stepper Control**:
+  - Implemented a 5-button Stepper Control layout in [layout_caption_customization.xml](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/res/layout/layout_caption_customization.xml) and [NativePlayerActivity.java](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java):
+    - Left buttons: `[-1.0s]` and `[-0.1s]`
+    - Center display badge: Current total accumulated offset (e.g. `+5.0s`, `0.0s`, `-1.2s`)
+    - Right buttons: `[+0.1s]` and `[+1.0s]`
+  - Accumulated timing offsets shift Web VTT cue `startTime` and `endTime` dynamically in real-time. Per-episode timing offsets are cached for 7 days if incomplete, and automatically deleted when marked completed.
