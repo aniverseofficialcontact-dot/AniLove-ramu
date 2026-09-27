@@ -341,24 +341,6 @@
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="6dp">
 
-                <!-- Skip Intro Button (Compact horizontal pill) -->
-                <TextView
-                    android:id="@+id/btn_skip_intro"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginBottom="4dp"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="3dp"
-                    android:text="+85s Skip"
-                    android:textColor="@android:color/white"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true" />
-
                 <SeekBar
                     android:id="@+id/video_seekbar"
                     android:layout_width="match_parent"
@@ -431,6 +413,26 @@
                 </RelativeLayout>
             </LinearLayout>
         </RelativeLayout>
+
+        <!-- Independent Skip Intro/Outro Button (Stays visible even when controls hide) -->
+        <TextView
+            android:id="@+id/btn_skip_intro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:layout_marginBottom="60dp"
+            android:layout_marginEnd="12dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="5dp"
+            android:text="⏭️ Skip Intro"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="20dp"
+            android:translationZ="20dp"
+            android:visibility="gone" />
 
         <ProgressBar
             android:id="@+id/loading_progress"

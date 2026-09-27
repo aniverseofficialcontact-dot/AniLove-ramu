@@ -316,23 +316,27 @@ public class NativePlayerActivity extends AppCompatActivity {
             float bottom = centerY + (trackHeight / 2f);
             float width = bounds.width();
 
+            // 1. Base track background
             canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
 
             if (videoDuration > 0) {
+                // 2. Current progress bar (Drawn BEFORE OP/ED so yellow OP/ED stays on top permanently)
+                float progressRight = (float) ((currentVideoTime / videoDuration) * width);
+                canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
+
+                // 3. Permanent yellow highlight for Intro (OP)
                 if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart) {
                     float opLeft = (float) ((aniSkipOpStart / videoDuration) * width);
                     float opRight = (float) ((aniSkipOpEnd / videoDuration) * width);
                     canvas.drawRoundRect(opLeft, top, opRight, bottom, 3f, 3f, opEdPaint);
                 }
 
+                // 4. Permanent yellow highlight for Outro (ED)
                 if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart) {
                     float edLeft = (float) ((aniSkipEdStart / videoDuration) * width);
                     float edRight = (float) ((aniSkipEdEnd / videoDuration) * width);
                     canvas.drawRoundRect(edLeft, top, edRight, bottom, 3f, 3f, opEdPaint);
                 }
-
-                float progressRight = (float) ((currentVideoTime / videoDuration) * width);
-                canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
             }
         }
 
@@ -2701,6 +2705,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String html = fetchUrlContentWithRedirects(tryEmbedUrl, 5);
                 if (html != null && !html.isEmpty()) {
                     parseAndAttachVttFromHtml(html);
+                }
+                if (parsedVttCues.isEmpty()) {
+                    String vidnestUrl = "https://vidnest.fun/anime/" + anilistId + "/" + episodeNumber + "/sub";
+                    String vHtml = fetchUrlContentWithRedirects(vidnestUrl, 5);
+                    if (vHtml != null && !vHtml.isEmpty()) {
+                        parseAndAttachVttFromHtml(vHtml);
+                    }
                 }
             } catch (Exception e) {
                 Log.d("SubSniffer", "HTTP redirect fetch exception: " + e.getMessage());

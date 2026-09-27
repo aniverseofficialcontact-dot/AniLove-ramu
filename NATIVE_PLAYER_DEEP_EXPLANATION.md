@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and caption controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -104,7 +104,7 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
 
 1. **Dual Ingestion & WebVTT Parser (`parseVttContent`)**:
-   - `startServer2BSubSniffer` follows HTTP redirects AND launches `subSnifferWebView` offscreen to capture Server 2-B-SUB `.vtt` subtitle files.
+   - `startServer2BSubSniffer` queries both `tryembed.us.cc` and `vidnest.fun` to capture Server 2-B-SUB `.vtt` subtitle files.
    - `downloadAndParseVttFile` parses WebVTT timestamp cues into in-memory `VttCue` structures in Native Java.
 2. **Native Android Subtitle Overlay (`text_native_subtitle_overlay`)**:
    - Matches current video time against parsed cues during the 200ms player ticker and renders captions in a Native Android `TextView`.
@@ -115,13 +115,15 @@ Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2
 
 ---
 
-## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Yellow Seekbar Highlights
+## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
 
 - **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved the `HTTP 400 Bad Request` error, returning `HTTP 200 OK` with exact OP/ED skip intervals!
-- **Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
+- **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
   - Draws a vibrant **yellow highlight bar** (`#FFD700`) on the seekbar track across the exact Opening (`aniSkipOpStart` to `aniSkipOpEnd`) and Ending (`aniSkipEdStart` to `aniSkipEdEnd`) intervals.
-- **Dynamic Overlay Buttons**:
-  - Automatically displays `"⏭️ Skip Intro"` during Opening (OP) scenes and `"⏭️ Skip Ending"` during Ending (ED) scenes.
+  - Drawn **ON TOP** of the progress bar so the yellow highlight remains permanent on the seekbar even after current progress passes over it.
+- **Independent Skip Buttons**:
+  - Moved `btn_skip_intro` outside `controls_overlay`.
+  - Automatically displays `"⏭️ Skip Intro"` during Opening (OP) scenes and `"⏭️ Skip Ending"` during Ending (ED) scenes, **remaining 100% visible on screen even when player controls overlay hides**.
   - Tapping the skip button instantly seeks the player to the exact end timestamp of the section.
   - Defaults to `+85s Skip` when controls are tapped outside OP/ED timestamps.
 
