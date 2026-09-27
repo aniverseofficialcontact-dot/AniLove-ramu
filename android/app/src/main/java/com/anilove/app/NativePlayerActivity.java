@@ -1015,6 +1015,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         public void processFrame(String base64) {}
 
         @JavascriptInterface
+        public void onTrackFound(String label, String url) {
+            if (label == null || url == null || label.trim().isEmpty() || url.trim().isEmpty()) return;
+            if (label.equalsIgnoreCase("Off") || label.equalsIgnoreCase("ID3 Metadata")) return;
+            String cleanLabel = label.trim();
+            capturedServer2BSubtitles.put(cleanLabel, url);
+            if (!detectedSubtitles.contains(cleanLabel)) {
+                detectedSubtitles.add(cleanLabel);
+            }
+            if (parsedVttCues.isEmpty() || cleanLabel.equalsIgnoreCase("English")) {
+                subtitleUrl = url;
+                subtitleLang = cleanLabel;
+                downloadAndParseVttFile(url);
+            }
+            Log.i("SubTrackFound", "Discovered real subtitle track: " + cleanLabel + " -> " + url);
+        }
+
+        @JavascriptInterface
         public void onMediaOptions(String json) {
             if (json == null || json.isEmpty()) return;
             try {
@@ -3428,6 +3445,24 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "          } " +
                 "        }); " +
                 "      } " +
+                "      try { " +
+                "        if (typeof win.jwplayer === 'function') { " +
+                "          var jp = win.jwplayer(); " +
+                "          if (jp && typeof jp.getCaptionsList === 'function') { " +
+                "            var cList = jp.getCaptionsList(); " +
+                "            if (cList && cList.length > 0) { " +
+                "              for (var i = 0; i < cList.length; i++) { " +
+                "                var c = cList[i]; " +
+                "                if (c && c.file && c.label && c.label.toLowerCase() !== 'off' && c.label.toLowerCase() !== 'id3 metadata') { " +
+                "                  if (window.AndroidScrubber && typeof window.AndroidScrubber.onTrackFound === 'function') { " +
+                "                    window.AndroidScrubber.onTrackFound(c.label, c.file); " +
+                "                  } " +
+                "                } " +
+                "              } " +
+                "            } " +
+                "          } " +
+                "        } " +
+                "      } catch(e){} " +
                 "      var doc = win.document; " +
                 "      var junkOverlays = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      junkOverlays.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
