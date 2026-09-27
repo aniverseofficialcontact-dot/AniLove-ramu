@@ -1679,19 +1679,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "    if(!style.parentNode) doc.head.appendChild(style); " +
                 "    var videos = doc.querySelectorAll('video'); " +
                 "    videos.forEach(function(v) { " +
-                "      if (remoteSubUrl && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
+                "      if (remoteSubUrl && remoteSubUrl.length > 5 && !doc.querySelector('track[src=\"' + remoteSubUrl + '\"]')) { " +
                 "        var t = doc.createElement('track'); " +
                 "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
                 "        v.appendChild(t); " +
                 "      } " +
-                "      if (v.textTracks) { " +
-                "        var hasCustom = doc.querySelector('" + selectors + "'); " +
-                "        var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
+                "      if (v.textTracks && v.textTracks.length > 0) { " +
                 "        for (var i = 0; i < v.textTracks.length; i++) { " +
                 "          var tr = v.textTracks[i]; " +
                 "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
-                "          else if (tr.label === remoteSubLang) { tr.mode = 'showing'; } " +
-                "          else { tr.mode = customVisible ? 'hidden' : 'showing'; } " +
+                "          else if (i === 0) { tr.mode = 'showing'; } " +
+                "          else { tr.mode = 'disabled'; } " +
                 "        } " +
                 "      } " +
                 "    }); " +
@@ -2724,11 +2722,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "        try { " +
                 "          var observer = new MutationObserver(function() { " +
                 "            try { " +
-                "              var badEls = doc.querySelectorAll('.top-gradient, .skin-controls, .skin-timeline, .bottom-bar-panel, .skin-menu, .skin-big-play, .art-controls, .art-bottom, .art-mask, .top-left, #btn-server, .btn-server, .server-toggle, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container'); " +
+                "              var badEls = doc.querySelectorAll('.top-gradient, .glass-panel, .bottom-bar-panel, .skin-controls, .skin-timeline, .skin-menu, .skin-big-play, .skin-actions, .skin-transport, .art-controls, .art-bottom, .art-mask, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, vds-controls, media-controls, [data-part=\"controls\"], [class*=\"Controls-module\"], [class*=\"TimeSlider-module\"], [class*=\"CenterControls-module\"], [class*=\"TopRightControls-module\"], [class*=\"VideoLayout-module\"], [class*=\"SettingsMenu-module\"], .vds-controls, .vds-time-slider, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container'); " +
                 "              badEls.forEach(function(el) { try { el.style.setProperty('display', 'none', 'important'); el.style.setProperty('visibility', 'hidden', 'important'); el.remove(); } catch(e){} }); " +
                 "              var vObs = doc.querySelector('video'); " +
                 "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0) { " +
-                "                for (var tt2 = 0; tt2 < vObs.textTracks.length; tt2++) { try { vObs.textTracks[tt2].mode = 'showing'; } catch(e){} } " +
+                "                for (var tt2 = 0; tt2 < vObs.textTracks.length; tt2++) { try { vObs.textTracks[tt2].mode = (tt2 === 0) ? 'showing' : 'disabled'; } catch(e){} } " +
                 "              } " +
                 "            } catch(e){} " +
                 "          }); " +

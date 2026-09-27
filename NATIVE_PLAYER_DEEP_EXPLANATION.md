@@ -205,8 +205,9 @@ AniLove is a hybrid Capacitor app for Android. The web UI runs inside Capacitor'
   - Implemented exact matching rules in `resolveEpisodeSource()` (`Server 1` -> `Server 1`, `Server 1-B` -> `Server 1-B`, `Server 2-A-SUB` -> `Server 2-A-SUB`, `Server 2-B-SUB` -> `Server 2-B-SUB`) to eliminate cross-server stream URL mismatching.
 - **Network-Level Cloudflare Script Blocking**:
   - Intercepted and blocked `challenges.cloudflare.com`, `turnstile`, and `challenge-platform` scripts directly in `shouldInterceptRequest()` in `NativePlayerActivity.java`. Completely prevents Cloudflare "Verify you are human" ad popups from rendering on Server 1 and Server 1-B.
-- **VidNest & TryEmbed Web Control & Toggle Erasure**:
-  - Injected dynamic CSS rules into all documents and frames to erase TryEmbed top-left toggle buttons (`.top-left`, `#btn-server`, `.btn-server`, `.server-toggle`, `#server-select`) and VidNest web player control bars.
-  - Activated HTML5 text tracks (`v.textTracks[i].mode = 'showing'`) for synchronized Japanese subtitles on VidNest and TryEmbed sub streams.
+- **Single Subtitle Track Enforcement**:
+  - Prevented duplicate subtitle track injection in `toggleWebSubtitles()` in `NativePlayerActivity.java`. VidNest and TryEmbed subtitle tracks render ONCE cleanly on screen without double text overlays.
+- **VidNest Vidstack Controls & TryEmbed Server Logo Cleanse**:
+  - Added specific CSS Module and Vidstack player selectors (`[class*="Controls-module"]`, `[class*="TimeSlider-module"]`, `vds-controls`, `media-controls`, `.top-gradient`, `.glass-panel`, `header`) to `MutationObserver` and `absoluteCleanse()` in `NativePlayerActivity.java`. VidNest's green bottom progress bar and TryEmbed's top-left server logo square icon are completely erased.
 - **Server 2 Settings Constraints & Download Sync**:
   - In player settings bottom sheet and download options modal, Server 2 SUB options show ONLY `JAP (Sub)` audio and `1080p` quality, while Server 2 DUB options show ONLY `ENG (Dub)` audio and `1080p` quality.
