@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, Native WebVTT subtitle overlay, and multi-language caption controls. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -108,15 +108,16 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 💬 5. Native Subtitle Engine & Multi-Language Menu Sync
+## 💬 5. Native Subtitle Engine & Multi-Language Captions Sync
 
 Regardless of which streaming server is selected (Server 1, Server 1-B, Server 2-A, or Server 2-B):
 
-1. **Multi-Language Ingestion (`capturedServer2BSubtitles`)**:
-   - `startServer2BSubSniffer` captures all multi-language `.vtt` tracks (English, Russian, Hindi, Spanish, French, German, Italian, Portuguese, Japanese, Arabic).
-   - Dynamically populates the Captions bottom sheet menu (`showCaptionMenu()`).
-2. **Language Switcher & Native Overlay**:
-   - Selecting any language in the Captions menu (`changeSubtitleTrack`) downloads that language's WebVTT file, parses its cues into `parsedVttCues`, and renders captions in `text_native_subtitle_overlay` Native `TextView` ON TOP of the video.
+1. **Multi-Language Ingestion (`initDefaultMultiLanguageSubtitles`)**:
+   - `initDefaultMultiLanguageSubtitles` pre-populates `capturedServer2BSubtitles` map and `detectedSubtitles` list with English, Hindi, Spanish, French, German, Italian, Portuguese, Japanese, Russian, and Arabic tracks.
+   - `startServer2BSubSniffer` runs in background to capture any additional specific WebVTT tracks.
+2. **Interactive Language Options in Captions Menu**:
+   - Tapping the Captions (CC) button displays ALL multi-language options as interactive pills in `showCaptionMenu()`.
+   - Selecting any language (`changeSubtitleTrack`) downloads that language's WebVTT file, parses its cues into `parsedVttCues`, and renders captions in `text_native_subtitle_overlay` Native `TextView` ON TOP of the video.
 3. **Server 1 Native Track Suppression**:
    - Suppresses and hides Server 1's native caption elements (`.art-subtitle`, `.jw-captions`, `.vjs-text-track-display`) via CSS/JS injection (`display: none !important`).
 

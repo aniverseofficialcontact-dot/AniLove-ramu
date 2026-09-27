@@ -2712,6 +2712,33 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private void initDefaultMultiLanguageSubtitles(int anilistId, int episodeNumber) {
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+        String baseUrl = "https://tryembed.us.cc/sub/" + anilistId + "/" + episodeNumber + "/";
+
+        String[][] langs = {
+            {"English", baseUrl + "en.vtt"},
+            {"Hindi", baseUrl + "hi.vtt"},
+            {"Spanish", baseUrl + "es.vtt"},
+            {"French", baseUrl + "fr.vtt"},
+            {"German", baseUrl + "de.vtt"},
+            {"Italian", baseUrl + "it.vtt"},
+            {"Portuguese", baseUrl + "pt.vtt"},
+            {"Japanese", baseUrl + "ja.vtt"},
+            {"Russian", baseUrl + "ru.vtt"},
+            {"Arabic", baseUrl + "ar.vtt"}
+        };
+
+        for (String[] item : langs) {
+            String langName = item[0];
+            String url = item[1];
+            capturedServer2BSubtitles.put(langName, url);
+            if (!detectedSubtitles.contains(langName)) {
+                detectedSubtitles.add(langName);
+            }
+        }
+    }
+
     private void startServer2BSubSniffer(int anilistId, int episodeNumber) {
         if (anilistId <= 0 || episodeNumber <= 0) return;
 
@@ -2981,6 +3008,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
 
         if (anilistId > 0 && episodeNumber > 0) {
+            initDefaultMultiLanguageSubtitles(anilistId, episodeNumber);
             startServer2BSubSniffer(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
