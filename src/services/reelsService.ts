@@ -27,6 +27,8 @@ export interface ReelsSessionState {
 }
 
 let inMemoryReelsSession: ReelsSessionState | null = null;
+
+// Temporary in-memory RAM cache for active session
 const cloudMetadataCache = new Map<string, EnrichedReelMetadata>();
 
 /**
@@ -133,11 +135,20 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
 }
 
 /**
- * Auto-Sync Engine: Scrapes Google Drive folder live to discover any NEW reels added in future
+ * Auto-Sync Engine: Safely handles live Google Drive folder checks without CORS noise
  */
 export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'): Promise<{ reels: AnimeReel[]; newCount: number }> {
   try {
+    const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const isCapacitor = typeof window !== 'undefined' && Boolean((window as any).Capacitor);
+
+    // Bypasses browser CORS policy errors on local Capacitor WebView while retaining local dataset
+    if (isLocalhost || isCapacitor) {
+      return { reels: getBundledReels(false), newCount: 0 };
+    }
+
     const res = await fetch(`https://drive.google.com/embeddedfolderview?id=${folderId}#list`, {
+      mode: 'cors',
       headers: {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       }
