@@ -31,6 +31,7 @@ import {
   EnrichedReelMetadata
 } from '../services/reelsService';
 import bundledReelsRaw from '../data/animeReels.json';
+import { reelMediaCache } from '../services/reelMediaCache';
 import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 
 interface ReelsViewProps {
@@ -102,13 +103,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true); // Default muted for 100% instant autoplay compliance
+  const [isMuted, setIsMuted] = useState(false);
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [is2xSpeed, setIs2xSpeed] = useState(false);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
 
   // Scene Finder Modal & Cloud Enriched Metadata
@@ -168,11 +170,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Direct MP4 Video Stream Source
+  // Direct Raw Stream URL or RAM Blob URL
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
-    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`;
+    const syncBlob = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
+    if (syncBlob) return syncBlob;
+    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
   }, [currentReel?.id, videoSrcOverride]);
 
   // Poster Image Source
@@ -184,6 +188,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   useEffect(() => {
     setVideoSrcOverride(null);
     setIs2xSpeed(false);
+    setIsVideoLoaded(false);
   }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata
@@ -224,12 +229,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (!video || !currentReel) return;
 
     video.playbackRate = is2xSpeed ? 2.0 : 1.0;
-    video.currentTime = 0;
-    setProgress(0);
 
-    const playVideo = async () => {
+    const playUnmuted = async () => {
       try {
         video.muted = isMuted;
+        video.volume = 1.0;
         await video.play();
         setIsPlaying(true);
       } catch {
@@ -244,7 +248,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       }
     };
 
-    playVideo();
+    playUnmuted();
   }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo]);
 
   const goToNext = useCallback(() => {
@@ -306,14 +310,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [currentReel, onShowToast]);
 
-  // Native Android Download Integration
+  // Native Android & Web Download Handler
   const handleDownloadReel = () => {
     if (!currentReel) return;
-    const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}`;
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`;
     const displayTitle = currentMeta?.animeTitle || currentReel.cleanTitle || 'Anime Reel';
 
     if (onShowToast) {
-      onShowToast('success', `Downloading ${displayTitle}...`, 'Reel Download');
+      onShowToast('success', `Starting download: ${displayTitle}...`, 'Reel Download');
     }
 
     if (Capacitor.isNativePlatform()) {
@@ -543,7 +547,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleVideoError = () => {
     if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}`);
+      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`);
     }
   };
 
@@ -682,7 +686,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 onPointerLeave={handlePointerLeave}
                 className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer overflow-hidden touch-none"
               >
-                {/* Background Ambient Poster Image */}
+                {/* Background Ambient Blur Poster */}
                 <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
                   <img
                     src={activePosterUrl}
@@ -691,7 +695,22 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   />
                 </div>
 
-                {/* Pure Clean HTML5 Video Stage (No Google Drive Embed Controls!) */}
+                {/* Zero-Flash Poster Overlay Mask */}
+                <div
+                  className={`absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none transition-opacity duration-300 z-10 ${
+                    isVideoLoaded ? 'opacity-0' : 'opacity-100'
+                  }`}
+                >
+                  <img
+                    src={activePosterUrl}
+                    alt=""
+                    className={`w-full h-full ${
+                      aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
+                    }`}
+                  />
+                </div>
+
+                {/* Pure Borderless HTML5 Video Element (NO Google Drive Embed Controls!) */}
                 <video
                   id="active-reel-video"
                   ref={el => { videoRef.current = el; }}
@@ -703,27 +722,17 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   muted={isMuted}
                   referrerPolicy="no-referrer"
                   onError={handleVideoError}
+                  onPlaying={() => setIsVideoLoaded(true)}
+                  onLoadedData={() => setIsVideoLoaded(true)}
                   className={`w-full h-full ${
                     aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
                   }`}
-                  onCanPlay={e => {
-                    e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                  }}
-                  onLoadedData={e => {
-                    e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                  }}
                   onTimeUpdate={e => {
                     const el = e.currentTarget;
                     if (el.duration) {
                       setProgress((el.currentTime / el.duration) * 100);
                       setDuration(el.duration);
                       setCurrentTime(el.currentTime);
-                    }
-                  }}
-                  onLoadedMetadata={e => {
-                    const el = e.currentTarget;
-                    if (el.videoWidth && el.videoHeight) {
-                      setVideoAspectRatio(el.videoWidth / el.videoHeight);
                     }
                   }}
                 />
@@ -803,7 +812,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               <span className="text-[10px] font-bold text-slate-200">Share</span>
             </button>
 
-            {/* Fit Mode Toggle */}
+            {/* Fit / Cover Mode Toggle */}
             <button
               onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
               className="flex flex-col items-center gap-1 group cursor-pointer"

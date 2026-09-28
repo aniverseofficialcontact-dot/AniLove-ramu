@@ -74,8 +74,8 @@ export function clearWatchedReelIds(): void {
 
 export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
   const id = String(reel.id || '').trim();
-  const videoStreamUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download`;
-  const fallbackDownloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;
+  const rawStreamUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`;
+  const fallbackDownloadUrl = `https://drive.google.com/uc?export=download&id=${id}&confirm=t`;
   const posterImageUrl = `https://lh3.googleusercontent.com/d/${id}`;
 
   return {
@@ -84,10 +84,10 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
     cleanTitle: String(reel.cleanTitle || reel.title || `Anime Reel ${id.slice(0, 6)}`),
     folderId: 'anime_edits_vault',
     folderName: String(reel.folderName || 'Anime Edits'),
-    url: videoStreamUrl,
-    directUrl: videoStreamUrl,
+    url: rawStreamUrl,
+    directUrl: rawStreamUrl,
     thumbnailUrl: posterImageUrl,
-    streamProxyUrl: videoStreamUrl,
+    streamProxyUrl: rawStreamUrl,
     downloadProxyUrl: fallbackDownloadUrl,
     size: reel.size ? String(reel.size) : 'HD Video',
     mimeType: String(reel.mimeType || 'video/mp4')

@@ -1,10 +1,10 @@
 /**
- * High-Performance Client-Side Media Cache for Anime Reels
- * Direct Google Drive Edge CDN integration with immediate memory cleanup.
+ * High-Performance RAM Blob URL Cache for Anime Reels
+ * Bypasses Google Drive player iframe completely and converts raw MP4 streams into 0ms RAM Blob URLs.
  */
 
-const CACHE_NAME = 'anime-reels-media-v1';
-const MAX_MEMORY_OBJECT_URLS = 10; // Keep up to 10 reels in RAM (~30MB)
+const CACHE_NAME = 'anime-reels-media-v2';
+const MAX_MEMORY_OBJECT_URLS = 12; // Keep up to 12 reels in instant RAM (~45MB)
 
 interface CacheEntry {
   objectUrl: string;
@@ -19,24 +19,25 @@ class ReelMediaCache {
   private isCacheStorageSupported = typeof window !== 'undefined' && 'caches' in window;
 
   /**
-   * Get direct playable Google Drive CDN URL for a reel.
+   * Get raw MP4 video stream URL for a reel.
+   * Returns in-memory Blob URL (0ms RAM lookup) if available, or direct stream with &confirm=t
    */
   async getReelVideoUrl(reelId: string): Promise<string> {
     if (!reelId) return '';
 
-    // 1. Check in-memory Object URL cache
+    // 1. Check 0ms RAM Blob URL
     const mem = this.memoryCache.get(reelId);
     if (mem) {
       mem.lastAccessed = Date.now();
       return mem.objectUrl;
     }
 
-    // 2. Direct Google Drive Edge CDN URL
-    return `https://lh3.googleusercontent.com/d/${reelId}`;
+    // 2. Direct raw MP4 binary stream with &confirm=t flag (Bypasses Google Drive virus scan warning)
+    return `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`;
   }
 
   /**
-   * Preload a reel into local memory cache in the background
+   * Preload upcoming reel into RAM Blob URL in background
    */
   async preloadReel(reelId: string, priority: 'high' | 'low' = 'low'): Promise<string | null> {
     if (!reelId) return null;
@@ -53,14 +54,17 @@ class ReelMediaCache {
 
     const fetchPromise = (async () => {
       try {
-        const streamUrl = `https://lh3.googleusercontent.com/d/${reelId}`;
+        const rawStreamUrl = `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`;
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-        const response = await fetch(streamUrl, {
+        const response = await fetch(rawStreamUrl, {
           signal: controller.signal,
-          headers: { 'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8' },
+          headers: {
+            'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+            'Referer': 'https://drive.google.com/'
+          },
         });
         clearTimeout(timeoutId);
 
@@ -85,10 +89,25 @@ class ReelMediaCache {
     return fetchPromise;
   }
 
+  /**
+   * Preload active reel + next 2 reels in background RAM
+   */
   async preloadBatch(reelIds: string[]): Promise<void> {
     if (!reelIds || reelIds.length === 0) return;
-    const top2 = reelIds.slice(0, 2);
-    await Promise.allSettled(top2.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
+    const top3 = reelIds.slice(0, 3);
+    await Promise.allSettled(top3.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
+  }
+
+  /**
+   * Synchronous check if Blob Object URL is available in RAM
+   */
+  getSynchronousBlobUrl(reelId: string): string | null {
+    const mem = this.memoryCache.get(reelId);
+    if (mem) {
+      mem.lastAccessed = Date.now();
+      return mem.objectUrl;
+    }
+    return null;
   }
 
   private setMemoryCache(reelId: string, objectUrl: string, blob: Blob) {
