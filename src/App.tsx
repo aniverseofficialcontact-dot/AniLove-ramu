@@ -1488,8 +1488,8 @@ export function App() {
         </div>
       )}
 
-      {/* Mobile Bottom Bar (Hidden on Watch Page & Anime Details) */}
-      {!activeWatchEpisode && !isDetailModalOpen && (
+      {/* Mobile Bottom Bar (Hidden on Watch Page, Anime Details & Reels Tab) */}
+      {!activeWatchEpisode && !isDetailModalOpen && currentTab !== 'reels' && (
         <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <MobileBottomNav
             currentTab={currentTab}

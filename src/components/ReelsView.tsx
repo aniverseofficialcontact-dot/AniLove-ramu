@@ -3,6 +3,8 @@ import {
   Bookmark,
   Play,
   Pause,
+  ChevronUp,
+  ChevronDown,
   ChevronLeft,
   Share2,
   Crop,
@@ -10,7 +12,9 @@ import {
   Camera,
   FastForward,
   Volume2,
-  VolumeX
+  VolumeX,
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AnimeReel } from '../types';
@@ -140,7 +144,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return null;
   }, []);
 
-  // Mode Switch ('all' vs 'saved')
+  // Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -161,14 +165,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Direct MP4 Stream URL
+  // Video Stream Source with Fail-Safe Fallbacks
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
-    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`;
+    return `https://drive.google.com/uc?export=download&id=${currentReel.id}`;
   }, [currentReel?.id, videoSrcOverride]);
 
-  // Direct Poster Image
+  // Poster Image Source
   const activePosterUrl = useMemo(() => {
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
@@ -179,7 +183,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     setIs2xSpeed(false);
   }, [currentReel?.id, historyIndex]);
 
-  // Fetch enriched metadata
+  // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
     if (!currentReel?.id) return;
     const reelId = currentReel.id;
@@ -216,27 +220,28 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
-    video.muted = isMuted;
-    video.volume = 1.0;
     video.playbackRate = is2xSpeed ? 2.0 : 1.0;
-    video.currentTime = 0;
-    setProgress(0);
-    setCurrentTime(0);
 
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch(() => {
-          // If unmuted autoplay blocked by browser policy, play muted instantly
+    const playUnmuted = async () => {
+      try {
+        video.muted = isMuted;
+        video.volume = 1.0;
+        await video.play();
+        setIsPlaying(true);
+      } catch {
+        try {
           video.muted = true;
           setIsMuted(true);
-          video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-        });
-    }
-  }, [historyIndex, currentReel, activeVideoUrl, getActiveVideo]);
+          await video.play();
+          setIsPlaying(true);
+        } catch {
+          setIsPlaying(false);
+        }
+      }
+    };
+
+    playUnmuted();
+  }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo]);
 
   const goToNext = useCallback(() => {
     setDragOffsetY(0);
@@ -296,6 +301,29 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       onShowToast('info', isNowSaved ? 'Saved to Bookmarks' : 'Removed from Bookmarks', 'Saved Reels');
     }
   }, [currentReel, onShowToast]);
+
+  const handleDownloadReel = () => {
+    if (!currentReel) return;
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}`;
+
+    try {
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${currentReel.cleanTitle || 'Anime_Reel'}.mp4`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (onShowToast) {
+        onShowToast('success', `Downloading ${currentReel.cleanTitle || 'Reel'}...`, 'Reel Download');
+      }
+    } catch {
+      if (onShowToast) {
+        onShowToast('info', 'Opening download link...', 'Reel Download');
+      }
+      window.open(downloadUrl, '_blank');
+    }
+  };
 
   const handleShare = async () => {
     if (!currentReel) return;
@@ -472,7 +500,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleVideoError = () => {
     if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}`);
+      setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`);
     }
   };
 
@@ -620,7 +648,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   />
                 </div>
 
-                {/* Clean HTML5 Video Stage (No Google Drive Embed Controls!) */}
+                {/* Direct HTML5 Video Stage */}
                 <video
                   id="active-reel-video"
                   ref={el => { videoRef.current = el; }}
@@ -635,6 +663,18 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   className={`w-full h-full ${
                     aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
                   }`}
+                  onCanPlay={(e) => {
+                    const el = e.currentTarget;
+                    if (!isManuallyPausedRef.current) {
+                      el.play().then(() => setIsPlaying(true)).catch(() => {});
+                    }
+                  }}
+                  onLoadedData={(e) => {
+                    const el = e.currentTarget;
+                    if (!isManuallyPausedRef.current) {
+                      el.play().then(() => setIsPlaying(true)).catch(() => {});
+                    }
+                  }}
                   onTimeUpdate={e => {
                     const el = e.currentTarget;
                     if (el.duration) {
@@ -676,10 +716,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           )
         )}
 
-        {/* Right Side Floating Action Buttons */}
+        {/* Right Side Floating Action Buttons & Navigation Chevrons */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-4 pointer-events-auto">
-            {/* Bookmark Button */}
+          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-3.5 pointer-events-auto">
+            {/* Scroll Up Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+              disabled={historyIndex === 0}
+              className="p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 hover:bg-pink-600 disabled:opacity-30 transition-all cursor-pointer shadow-lg"
+              title="Previous Reel"
+            >
+              <ChevronUp className="w-5 h-5" />
+            </button>
+
+            {/* Bookmark / Save Button */}
             <button
               onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
               className="flex flex-col items-center gap-1 group cursor-pointer"
@@ -689,9 +739,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   ? 'bg-pink-600 text-white border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]'
                   : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
               }`}>
-                <Bookmark className={`w-6 h-6 ${savedStatus[currentReel.id] ? 'fill-white' : ''}`} />
+                <Bookmark className={`w-5 h-5 ${savedStatus[currentReel.id] ? 'fill-white' : ''}`} />
               </div>
               <span className="text-[10px] font-bold text-slate-200">Save</span>
+            </button>
+
+            {/* Download Reel Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDownloadReel(); }}
+              className="flex flex-col items-center gap-1 group cursor-pointer"
+            >
+              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-pink-600 hover:border-pink-500 transition-all">
+                <Download className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-200">Download</span>
             </button>
 
             {/* Share Button */}
@@ -700,20 +761,29 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               className="flex flex-col items-center gap-1 group cursor-pointer"
             >
               <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-                <Share2 className="w-6 h-6" />
+                <Share2 className="w-5 h-5" />
               </div>
               <span className="text-[10px] font-bold text-slate-200">Share</span>
             </button>
 
-            {/* Fit / Cover Mode Toggle */}
+            {/* Fit Mode Toggle */}
             <button
               onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
               className="flex flex-col items-center gap-1 group cursor-pointer"
             >
               <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-                <Crop className="w-6 h-6" />
+                <Crop className="w-5 h-5" />
               </div>
               <span className="text-[10px] font-bold text-slate-200">{aspectFitMode === 'contain' ? 'Fit' : 'Fill'}</span>
+            </button>
+
+            {/* Scroll Down Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); goToNext(); }}
+              className="p-3 rounded-full bg-pink-600 text-white backdrop-blur-md border border-pink-400 hover:bg-pink-500 transition-all cursor-pointer shadow-lg animate-pulse"
+              title="Next Reel"
+            >
+              <ChevronDown className="w-5 h-5" />
             </button>
           </div>
         )}
