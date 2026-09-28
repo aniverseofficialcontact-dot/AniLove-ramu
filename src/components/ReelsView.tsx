@@ -85,17 +85,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return session.index || 0;
   });
 
-  const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
+  const [useEmbedPlayer, setUseEmbedPlayer] = useState(false);
 
   // Scene Finder Modal & Cloud Enriched Metadata
   const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
@@ -104,9 +98,22 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('contain');
 
+  // Gesture Physics State
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
+
+  // Touch & Swipe Gesture references
+  const touchStartYRef = useRef<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartTimeRef = useRef<number>(0);
+  const lastWheelTimeRef = useRef<number>(0);
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const isManuallyPausedRef = useRef<boolean>(false);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -119,10 +126,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
     return null;
   }, []);
-
-  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTimeRef = useRef<number>(0);
-  const isManuallyPausedRef = useRef<boolean>(false);
 
   // Handle Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
@@ -145,22 +148,21 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Direct Google Drive MP4 Video Source
+  // Direct Google Drive MP4 Stream Source
   const activeVideoUrl = useMemo(() => {
-    if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
     return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`;
-  }, [currentReel?.id, videoSrcOverride]);
+  }, [currentReel?.id]);
 
-  // Direct Google Drive JPEG Poster Image Source
+  // Direct Google Drive Poster Image
   const activePosterUrl = useMemo(() => {
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
   }, [currentReel?.id]);
 
-  // Reset video source override on reel change
+  // Reset embed player flag on reel change
   useEffect(() => {
-    setVideoSrcOverride(null);
+    setUseEmbedPlayer(false);
   }, [currentReel?.id, historyIndex]);
 
   // Live Auto-Sync: Background check for new reels added to Google Drive
@@ -205,21 +207,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => clearTimeout(timer);
   }, [currentReel?.id, isPlaying]);
 
-  // Keep URL path clean (Skipped on Capacitor Android)
-  useEffect(() => {
-    if (currentReel?.id && typeof window !== 'undefined') {
-      try {
-        const isCapacitor = Boolean((window as any).Capacitor);
-        if (!isCapacitor) {
-          const cleanPath = `/reel/${encodeURIComponent(currentReel.id)}`;
-          if (window.location.pathname !== cleanPath) {
-            window.history.replaceState(null, '', cleanPath);
-          }
-        }
-      } catch {}
-    }
-  }, [currentReel?.id]);
-
   // Preload upcoming reels
   useEffect(() => {
     if (!currentReel) return;
@@ -227,34 +214,40 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Auto-play video
+  // Auto-play video & timeout fallback to embed player if video stalls
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
-    if (!video || !currentReel) return;
+    if (!video || !currentReel || useEmbedPlayer) return;
 
     video.muted = false;
     video.volume = 1.0;
     video.currentTime = 0;
     setProgress(0);
-    setCurrentTime(0);
 
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
           setIsPlaying(true);
-          setIsBuffering(false);
         })
         .catch(() => {
           setIsPlaying(false);
-          setIsBuffering(false);
         });
     }
-  }, [historyIndex, currentReel, activeVideoUrl, getActiveVideo]);
+
+    // Safety timeout: If HTML5 video is stalled or rejected by Android WebView after 3.5s, fallback to embed player
+    const fallbackTimer = setTimeout(() => {
+      if (video && video.paused && video.currentTime === 0 && !isManuallyPausedRef.current) {
+        setUseEmbedPlayer(true);
+      }
+    }, 3500);
+
+    return () => clearTimeout(fallbackTimer);
+  }, [historyIndex, currentReel, activeVideoUrl, useEmbedPlayer, getActiveVideo]);
 
   const goToNext = useCallback(() => {
-    setSlideDirection(1);
+    setDragOffsetY(0);
     setHistoryIndex(prev => {
       const nextIdx = prev + 1;
       if (nextIdx >= feedHistory.length) {
@@ -268,7 +261,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   }, [feedHistory.length]);
 
   const goToPrev = useCallback(() => {
-    setSlideDirection(-1);
+    setDragOffsetY(0);
     setHistoryIndex(prev => Math.max(0, prev - 1));
   }, []);
 
@@ -318,8 +311,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(shareUrl);
-        setCopiedLink(true);
-        setTimeout(() => setCopiedLink(false), 2000);
         if (onShowToast) onShowToast('success', 'Reel link copied!', 'Share Reel');
       } catch {}
     }
@@ -351,19 +342,104 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   }, [getActiveVideo, handleToggleSave, togglePlay]);
 
   const handleVideoError = () => {
-    if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}`);
+    // Automatically switch to Google Drive HTML5 Embed Player on video element load error
+    setUseEmbedPlayer(true);
+  };
+
+  // Touch Swipe & Drag Physics Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartYRef.current = touch.clientY;
+    touchStartXRef.current = touch.clientX;
+    touchStartTimeRef.current = Date.now();
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartYRef.current || !isDragging) return;
+    const touch = e.touches[0];
+    const diffY = touch.clientY - touchStartYRef.current;
+    setDragOffsetY(diffY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartYRef.current) return;
+    setIsDragging(false);
+    const diffY = e.changedTouches[0].clientY - touchStartYRef.current;
+    const timeDiff = Date.now() - touchStartTimeRef.current;
+    touchStartYRef.current = null;
+
+    const DRAG_THRESHOLD = 50;
+    const isQuickFlick = timeDiff < 300 && Math.abs(diffY) > 30;
+
+    if (diffY < -DRAG_THRESHOLD || (isQuickFlick && diffY < 0)) {
+      goToNext();
+    } else if (diffY > DRAG_THRESHOLD || (isQuickFlick && diffY > 0)) {
+      goToPrev();
+    } else {
+      setDragOffsetY(0);
+      if (Math.abs(diffY) < 15) {
+        handleCanvasInteraction();
+      }
     }
   };
 
-  const isLandscape = videoAspectRatio > 1.1;
+  // Wheel Scroll Handler
+  const handleWheel = (e: React.WheelEvent) => {
+    const now = Date.now();
+    const WHEEL_COOLDOWN = 380;
+    if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN) return;
+
+    if (Math.abs(e.deltaY) > 20) {
+      lastWheelTimeRef.current = now;
+      if (e.deltaY > 0) {
+        goToNext();
+      } else {
+        goToPrev();
+      }
+    }
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) || activeEl.isContentEditable)) {
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        goToNext();
+      } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        goToPrev();
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleToggleSave();
+      } else if (e.key === 'Escape' && onBack) {
+        e.preventDefault();
+        onBack();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goToNext, goToPrev, togglePlay, handleToggleSave, onBack]);
+
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[100dvh] bg-slate-950 text-white overflow-hidden select-none flex flex-col justify-between font-sans"
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="relative w-full h-[100dvh] bg-slate-950 text-white overflow-hidden select-none flex flex-col justify-between font-sans touch-pan-y"
     >
       {/* Top Floating Overlay Controls */}
       <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
@@ -371,7 +447,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="p-2 rounded-full bg-slate-900/60 text-white hover:bg-slate-800 backdrop-blur-md border border-slate-700/50 transition-all"
+              className="p-2 rounded-full bg-slate-900/60 text-white hover:bg-slate-800 backdrop-blur-md border border-slate-700/50 transition-all cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -405,7 +481,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         {/* Scene Finder Trigger Button */}
         <button
           onClick={() => setIsSceneFinderOpen(true)}
-          className="px-3 py-1.5 rounded-full bg-slate-900/80 text-pink-400 hover:text-white border border-pink-500/40 backdrop-blur-md text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all"
+          className="px-3 py-1.5 rounded-full bg-slate-900/80 text-pink-400 hover:text-white border border-pink-500/40 backdrop-blur-md text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer"
         >
           <Camera className="w-4 h-4" />
           <span>Identify Scene</span>
@@ -451,11 +527,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           </div>
         ) : (
           currentReel && (
-            <div
-              onClick={handleCanvasInteraction}
+            <motion.div
+              style={{ y: dragOffsetY }}
               className="relative w-full h-full flex items-center justify-center cursor-pointer"
             >
-              {/* Background Ambient Poster Image (Using activePosterUrl) */}
+              {/* Background Ambient Poster Image */}
               <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
                 <img
                   src={activePosterUrl}
@@ -464,37 +540,48 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 />
               </div>
 
-              {/* Video Element */}
-              <video
-                id="active-reel-video"
-                key={currentReel.id}
-                ref={el => { videoRef.current = el; }}
-                src={activeVideoUrl}
-                poster={activePosterUrl}
-                autoPlay
-                playsInline
-                loop
-                muted={false}
-                referrerPolicy="no-referrer"
-                onError={handleVideoError}
-                className={`w-full h-full max-w-[420px] max-h-[92vh] ${
-                  aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
-                }`}
-                onTimeUpdate={e => {
-                  const el = e.currentTarget;
-                  if (el.duration) {
-                    setProgress((el.currentTime / el.duration) * 100);
-                    setDuration(el.duration);
-                    setCurrentTime(el.currentTime);
-                  }
-                }}
-                onLoadedMetadata={e => {
-                  const el = e.currentTarget;
-                  if (el.videoWidth && el.videoHeight) {
-                    setVideoAspectRatio(el.videoWidth / el.videoHeight);
-                  }
-                }}
-              />
+              {/* Hybrid Video Player Stage */}
+              {useEmbedPlayer ? (
+                /* Google Drive Native Player Embed Stage */
+                <div className="w-full h-full max-w-[420px] max-h-[92vh] flex items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-black">
+                  <iframe
+                    src={`https://drive.google.com/file/d/${currentReel.id}/preview`}
+                    title={displayTitle}
+                    allow="autoplay"
+                    className="w-full h-full border-0 pointer-events-auto"
+                  />
+                </div>
+              ) : (
+                /* HTML5 Video Stage */
+                <video
+                  id="active-reel-video"
+                  key={currentReel.id}
+                  ref={el => { videoRef.current = el; }}
+                  src={activeVideoUrl}
+                  poster={activePosterUrl}
+                  autoPlay
+                  playsInline
+                  loop
+                  muted={false}
+                  referrerPolicy="no-referrer"
+                  onError={handleVideoError}
+                  className={`w-full h-full max-w-[420px] max-h-[92vh] ${
+                    aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+                  }`}
+                  onTimeUpdate={e => {
+                    const el = e.currentTarget;
+                    if (el.duration) {
+                      setProgress((el.currentTime / el.duration) * 100);
+                    }
+                  }}
+                  onLoadedMetadata={e => {
+                    const el = e.currentTarget;
+                    if (el.videoWidth && el.videoHeight) {
+                      setVideoAspectRatio(el.videoWidth / el.videoHeight);
+                    }
+                  }}
+                />
+              )}
 
               {/* Double Tap Heart Burst Animation */}
               {showHeartBurst && (
@@ -516,17 +603,27 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           )
         )}
 
-        {/* Right Side Overlay Action Buttons */}
+        {/* Right Side Overlay Controls & Navigation Chevrons */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute right-4 bottom-24 z-30 flex flex-col items-center gap-5">
+          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-4 pointer-events-auto">
+            {/* Scroll Up Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+              disabled={historyIndex === 0}
+              className="p-3 rounded-full bg-black/60 text-white backdrop-blur-md border border-white/20 hover:bg-pink-600 disabled:opacity-30 transition-all cursor-pointer shadow-lg"
+              title="Previous Reel"
+            >
+              <ChevronUp className="w-6 h-6" />
+            </button>
+
             {/* Bookmark Button */}
             <button
-              onClick={() => handleToggleSave()}
-              className="flex flex-col items-center gap-1 group"
+              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+              className="flex flex-col items-center gap-1 group cursor-pointer"
             >
               <div className={`p-3 rounded-full backdrop-blur-md border transition-all ${
                 savedStatus[currentReel.id]
@@ -540,8 +637,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
             {/* Share Button */}
             <button
-              onClick={handleShare}
-              className="flex flex-col items-center gap-1 group"
+              onClick={(e) => { e.stopPropagation(); handleShare(); }}
+              className="flex flex-col items-center gap-1 group cursor-pointer"
             >
               <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
                 <Share2 className="w-6 h-6" />
@@ -551,20 +648,29 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
             {/* Fit Mode Toggle */}
             <button
-              onClick={() => setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
-              className="flex flex-col items-center gap-1 group"
+              onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
+              className="flex flex-col items-center gap-1 group cursor-pointer"
             >
               <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
                 <Crop className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-bold text-slate-200">{aspectFitMode === 'contain' ? 'Fit' : 'Fill'}</span>
             </button>
+
+            {/* Scroll Down Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); goToNext(); }}
+              className="p-3 rounded-full bg-pink-600 text-white backdrop-blur-md border border-pink-400 hover:bg-pink-500 transition-all cursor-pointer shadow-lg animate-pulse"
+              title="Next Reel"
+            >
+              <ChevronDown className="w-6 h-6" />
+            </button>
           </div>
         )}
 
         {/* Bottom Metadata Info Card */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute bottom-6 left-4 right-16 z-30 flex flex-col gap-1.5 pointer-events-auto">
+          <div className="absolute bottom-6 left-4 right-20 z-30 flex flex-col gap-1.5 pointer-events-auto">
             {currentMeta && (
               <div className="inline-flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 font-bold text-[10px] border border-pink-500/30">
