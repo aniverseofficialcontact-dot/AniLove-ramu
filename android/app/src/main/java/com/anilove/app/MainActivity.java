@@ -76,11 +76,6 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // 100% Sure Fix: Clear all WebView cache on every launch to prevent old versions from showing
-        if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().clearCache(true);
-        }
-
         // High-frequency polling to dismiss native logo the moment the homepage is actually loaded in background
         startWebReadyPolling();
     }
@@ -106,7 +101,6 @@ public class MainActivity extends BridgeActivity {
                             Log.i("MainActivity", "Web signaled READY. Revealing homepage.");
                             isWebReady = true;
                         } else {
-                            // Ultra-aggressive polling (50ms) for an instant feel
                             splashHandler.postDelayed(this, 50);
                         }
                     });
@@ -221,7 +215,6 @@ public class MainActivity extends BridgeActivity {
                 if (parts.length > 1) {
                     final String token = parts[1].split("&")[0];
                     if (token != null && !token.isEmpty()) {
-                        // Use bridge to inject token into WebView
                         if (getBridge() != null && getBridge().getWebView() != null) {
                             String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: '" + token + "' }));";
                             getBridge().getWebView().evaluateJavascript(js, null);
