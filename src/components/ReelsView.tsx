@@ -45,6 +45,9 @@ interface ReelsViewProps {
 
 const DownloadPlugin = registerPlugin<any>('DownloadPlugin');
 
+// Global Unmuted Preference Flag across session
+let globalUserUnmutedPreference = false;
+
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
   const mins = Math.floor(seconds / 60);
@@ -110,7 +113,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false); // Unmuted audio by default
+  const [isMuted, setIsMuted] = useState(!globalUserUnmutedPreference);
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -137,6 +140,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const seekbarRef = useRef<HTMLDivElement>(null);
   const isInitialMountRef = useRef<boolean>(true);
 
+  // Stall & Progress Watchdog references
+  const lastTimeUpdateRef = useRef<number>(Date.now());
+  const lastCurrentTimeRef = useRef<number>(0);
+
   // Gesture & Hold references
   const touchStartYRef = useRef<number | null>(null);
   const touchStartTimeRef = useRef<number>(0);
@@ -158,9 +165,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return null;
   }, []);
 
-  // First User Touch Unmutes Audio automatically across all reels
+  // First Touch Unmutes Audio permanently across all reels
   useEffect(() => {
     const handleFirstTouch = () => {
+      globalUserUnmutedPreference = true;
       const video = getActiveVideo();
       if (video) {
         video.muted = false;
@@ -175,6 +183,26 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       window.removeEventListener('touchstart', handleFirstTouch);
       window.removeEventListener('click', handleFirstTouch);
     };
+  }, [getActiveVideo]);
+
+  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s) and forces resume
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const video = getActiveVideo();
+      if (!video || isManuallyPausedRef.current || video.paused) return;
+
+      const now = Date.now();
+      if (video.currentTime === lastCurrentTimeRef.current) {
+        if (now - lastTimeUpdateRef.current > 1200) {
+          video.play().catch(() => {});
+        }
+      } else {
+        lastCurrentTimeRef.current = video.currentTime;
+        lastTimeUpdateRef.current = now;
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
   }, [getActiveVideo]);
 
   // Mode Switch ('all' vs 'saved') - Skips initial mount
@@ -272,7 +300,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Instant Autoplay Loop (Unmuted Priority)
+  // Instant Autoplay Loop
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
@@ -282,10 +310,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     const playVideo = async () => {
       try {
-        video.muted = isMuted;
+        video.muted = !globalUserUnmutedPreference;
         video.volume = 1.0;
         await video.play();
         setIsPlaying(true);
+        setIsMuted(!globalUserUnmutedPreference ? video.muted : false);
       } catch {
         try {
           video.muted = true;
@@ -346,6 +375,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const nextMuted = !video.muted;
     video.muted = nextMuted;
     setIsMuted(nextMuted);
+    globalUserUnmutedPreference = !nextMuted;
   }, [getActiveVideo]);
 
   const handleToggleSave = useCallback((targetReel?: AnimeReel) => {
@@ -363,7 +393,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
 
-  // Native Android & Web Download Handler (Guarantees Direct Download via EpisodeDownloadService)
+  // Native Android & Web Download Handler
   const handleDownloadReel = () => {
     if (!currentReel) return;
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`;
@@ -438,6 +468,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (video && video.muted) {
       video.muted = false;
       setIsMuted(false);
+      globalUserUnmutedPreference = true;
     }
 
     const now = Date.now();
@@ -467,6 +498,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (video && video.muted) {
       video.muted = false;
       setIsMuted(false);
+      globalUserUnmutedPreference = true;
     }
 
     touchStartYRef.current = e.clientY;
@@ -663,26 +695,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          {/* Mute/Unmute Quick Toggle */}
-          <button
-            onClick={toggleMute}
-            className="p-2 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer"
-            title={isMuted ? 'Unmute' : 'Mute'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-pink-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
-          </button>
-
-          {/* Scene Finder Trigger Button */}
-          <button
-            onClick={() => setIsSceneFinderOpen(true)}
-            className="px-3.5 py-1.5 rounded-full bg-black/50 text-pink-400 hover:text-white border border-pink-500/30 backdrop-blur-md text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Identify Scene</span>
-          </button>
-        </div>
       </div>
 
       {/* 2x Fast Forward Small White Text Badge Indicator */}
@@ -818,17 +830,35 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   </motion.div>
                 )}
 
-                {/* Play/Pause Glassmorphism Overlay Feedback */}
-                {showPlayPauseFeedback && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                    <motion.div
-                      initial={{ scale: 0.6, opacity: 0 }}
-                      animate={{ scale: 1.1, opacity: 1 }}
-                      exit={{ scale: 0.6, opacity: 0 }}
-                      className="p-5 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 shadow-2xl"
+                {/* PAUSE OVERLAY STACK (Matching Images 1, 2, 3) */}
+                {(!isPlaying || isManuallyPausedRef.current) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-40 bg-black/35 backdrop-blur-[2px] transition-all pointer-events-auto">
+                    {/* 1. Mute/Unmute Circular Button (Above Play Symbol - Image 2 & 3) */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl cursor-pointer active:scale-90 transition-all"
+                      title={isMuted ? 'Unmute' : 'Mute'}
                     >
-                      {showPlayPauseFeedback === 'play' ? <Play className="w-12 h-12 fill-white" /> : <Pause className="w-12 h-12 fill-white" />}
-                    </motion.div>
+                      {isMuted ? <VolumeX className="w-6 h-6 text-pink-400" /> : <Volume2 className="w-6 h-6 text-emerald-400" />}
+                    </button>
+
+                    {/* 2. Center Play Symbol (Image 1) */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                      className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl cursor-pointer active:scale-95 transition-all"
+                      title="Resume Video"
+                    >
+                      <Play className="w-8 h-8 fill-white translate-x-0.5" />
+                    </button>
+
+                    {/* 3. Identify Scene Button (Beneath Play Symbol) */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsSceneFinderOpen(true); }}
+                      className="px-4 py-2 rounded-full bg-black/60 hover:bg-black/80 text-pink-400 hover:text-white border border-pink-500/40 backdrop-blur-md text-xs font-bold flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition-all"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Identify Scene</span>
+                    </button>
                   </div>
                 )}
               </motion.div>

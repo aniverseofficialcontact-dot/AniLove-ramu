@@ -191,13 +191,13 @@ export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
   return candidatePool;
 }
 
+// Session state is stored ONLY in sessionStorage (cleared automatically when app is removed from recent apps)
 export function getStoredReelsSession(): ReelsSessionState | null {
   if (inMemoryReelsSession && inMemoryReelsSession.feedHistory.length > 0) {
     return inMemoryReelsSession;
   }
   try {
-    const raw = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(REELS_SESSION_STORAGE_KEY) : null) ||
-      (typeof localStorage !== 'undefined' ? localStorage.getItem(REELS_SESSION_STORAGE_KEY) : null);
+    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(REELS_SESSION_STORAGE_KEY) : null;
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.feedHistory) && parsed.feedHistory.length > 0) {
@@ -241,12 +241,6 @@ export function saveStoredReelsSession(session: ReelsSessionState): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
     }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
-      if (cleanSession.lastWatchedReelId) {
-        localStorage.setItem('anilove_last_watched_reel_id', cleanSession.lastWatchedReelId);
-      }
-    }
   } catch {
     // silent
   }
@@ -257,9 +251,6 @@ export function clearReelsSession(): void {
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(REELS_SESSION_STORAGE_KEY);
-    }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(REELS_SESSION_STORAGE_KEY);
     }
   } catch {
     // silent
@@ -335,7 +326,7 @@ export function getStartingReelsFeed(
     };
   }
 
-  // Restore active session when switching tabs in app
+  // Restore active session when switching tabs in app during current session
   if (existingSession && existingSession.feedHistory && existingSession.feedHistory.length > 0 && existingSession.filterMode !== 'saved') {
     let resumeIndex = Math.max(0, Math.min(existingSession.historyIndex, existingSession.feedHistory.length - 1));
     return {
