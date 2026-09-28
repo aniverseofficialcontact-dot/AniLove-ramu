@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
 import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSource } from '../services/streamingProviders';
 import { queueBatchEpisodeDownloads, isEpisodeDownloaded } from '../services/downloadManager';
+import { verifyBatchSubtitleAvailability } from '../services/subtitleService';
 import { NativePlayer } from '../services/nativePlayer';
 
 interface BatchDownloadModalProps {
@@ -28,6 +29,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
   const [selectedServer, setSelectedServer] = useState<string>(initialServer);
   const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
+  const [selectedSubtitleLang, setSelectedSubtitleLang] = useState<string>('English');
   const [availableLanguages, setAvailableLanguages] = useState<StreamLanguage[]>(SUPPORTED_LANGUAGES.map(l => l.code));
   const [isProbingStream, setIsProbingStream] = useState(false);
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
@@ -160,6 +162,21 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     setResultMessage(null);
 
     const targetEpisodes = episodes.filter(e => selectedEpNumbers.has(e.number));
+    const targetEpNumbers = targetEpisodes.map(e => e.number);
+
+    // Verify target subtitle language availability across all selected episodes
+    setResultMessage(`Checking ${selectedSubtitleLang} subtitle availability for selected episodes...`);
+    const checkRes = await verifyBatchSubtitleAvailability(anime.id, targetEpNumbers, selectedSubtitleLang);
+
+    if (!checkRes.valid) {
+      setIsSubmitting(false);
+      setResultMessage(
+        `Download halted: Episode ${checkRes.missingEpisode} does not have "${selectedSubtitleLang}" subtitles available. Please select another subtitle language or adjust the selected episode range to proceed.`
+      );
+      return;
+    }
+
+    setResultMessage(`Subtitles verified! Queuing background downloads...`);
 
     const res = await queueBatchEpisodeDownloads(
       anime,
@@ -293,6 +310,25 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
                   {q === '1080p' ? '1080p Full HD' : q === '720p' ? '720p HD' : q === '480p' ? '480p SD' : q}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-neutral-300">Subtitle Language</span>
+            <select
+              value={selectedSubtitleLang}
+              onChange={e => setSelectedSubtitleLang(e.target.value)}
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="English">English</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Italian">Italian</option>
+              <option value="Portuguese">Portuguese</option>
+              <option value="Russian">Russian</option>
+              <option value="Arabic">Arabic</option>
+              <option value="Japanese">Japanese</option>
             </select>
           </div>
         </div>

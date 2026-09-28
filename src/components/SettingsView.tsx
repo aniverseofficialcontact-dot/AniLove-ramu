@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Settings, Bell, RefreshCw, Download, Upload, ShieldCheck,
   CheckCircle2, AlertCircle, LogOut, ArrowRight, UserCheck,
-  FileJson, Sparkles, ExternalLink, Play, Volume2, Database,
+  FileJson, Sparkles, ExternalLink, Play, Volume2, Subtitles, Database,
   Sliders, Smartphone, Check, Moon, Sun, Info, BellRing,
   Trash2, Send
 } from 'lucide-react';
@@ -994,6 +994,86 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     >
                       <option value="SUB">🇯🇵 Japanese Audio with English Subtitles (SUB)</option>
                       <option value="DUB">🇺🇸 English Voice Dubbing (DUB)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preferred Subtitle Language Ranking (1st and 2nd Priority) */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+                      <Subtitles className="w-4 h-4 text-emerald-400" />
+                      <span>Preferred Subtitle Language (Priority Order)</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Defaulting to English subtitles with automatic fallback to secondary subtitle preferences.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-[11px] font-bold text-emerald-300">
+                    Auto-Synced with Player
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Primary Subtitle Preference */}
+                  <div className="p-3.5 rounded-xl bg-[#0b0e1b] border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                      <span className="text-emerald-400">1st Preference (Primary):</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-[10px] text-emerald-300 font-black">Rank 1</span>
+                    </div>
+                    <select
+                      value={settings.primarySubtitleLang || 'English'}
+                      onChange={e => {
+                        onSaveSettings({
+                          ...settings,
+                          primarySubtitleLang: e.target.value
+                        });
+                        onShowToast('success', `Primary subtitle set to ${e.target.value}.`, 'Subtitles Updated');
+                      }}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      <option value="English">English</option>
+                      <option value="English 2">English 2</option>
+                      <option value="Spanish">Spanish</option>
+                      <option value="French">French</option>
+                      <option value="German">German</option>
+                      <option value="Italian">Italian</option>
+                      <option value="Portuguese">Portuguese</option>
+                      <option value="Russian">Russian</option>
+                      <option value="Arabic">Arabic</option>
+                      <option value="Japanese">Japanese</option>
+                    </select>
+                  </div>
+
+                  {/* Secondary Subtitle Preference */}
+                  <div className="p-3.5 rounded-xl bg-[#0b0e1b] border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                      <span className="text-indigo-400">2nd Preference (Fallback):</span>
+                      <span className="px-2 py-0.5 rounded bg-indigo-950/70 border border-indigo-500/40 text-[10px] text-indigo-300 font-black">Rank 2</span>
+                    </div>
+                    <select
+                      value={settings.secondarySubtitleLang || 'English 2'}
+                      onChange={e => {
+                        onSaveSettings({
+                          ...settings,
+                          secondarySubtitleLang: e.target.value
+                        });
+                        onShowToast('success', `Secondary subtitle fallback set to ${e.target.value}.`, 'Subtitles Updated');
+                      }}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="English 2">English 2</option>
+                      <option value="English">English</option>
+                      <option value="Spanish">Spanish</option>
+                      <option value="French">French</option>
+                      <option value="German">German</option>
+                      <option value="Italian">Italian</option>
+                      <option value="Portuguese">Portuguese</option>
+                      <option value="Russian">Russian</option>
+                      <option value="Arabic">Arabic</option>
+                      <option value="Japanese">Japanese</option>
                     </select>
                   </div>
                 </div>

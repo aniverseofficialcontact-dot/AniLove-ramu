@@ -35,6 +35,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
 | `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, and top bar title alignment. |
+| `subtitleService.ts` | Subtitle Pipeline | Unified API fetching (`subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
@@ -44,7 +45,17 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 📺 2. Playback Modes & Window Mechanics
+## 💬 2. Unified Subtitle Pipeline & Smart 3-Day Cache
+
+- **API Endpoint**: `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId={anilistId}&ep={epNum}`
+- **3-Day Local Cache**: Caches subtitle tracks in `anilove_subtitle_cache_{anilistId}_{epNum}` for 72 hours.
+- **Eviction Triggers**: Auto-evicted after 72 hours, or when the episode is marked **Watched / Completed**, or when removed from **Watch History**.
+- **Anonymization & Sorting**: Provider brand names (`HiAnime`, `SubtitleCat`) are **100% hidden**. Primary English $\rightarrow$ `"English"`, Secondary English $\rightarrow$ `"English 2"`. Sorted by user Primary/Secondary settings, then Spanish, German, Russian, Arabic, and other languages.
+- **Pre-Download Pre-Check**: Validates subtitle availability across all target episodes before initiating batch downloads. Halts download with a clear error toast if any episode lacks the requested subtitle language.
+
+---
+
+## 📺 3. Playback Modes & Window Mechanics
 
 `NativePlayerActivity` operates in **three primary modes**:
 
@@ -67,22 +78,6 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 ### 📱 Picture-in-Picture (PiP) Mode
 - **Android 12+ (API 31+)**: Sets `PictureInPictureParams.Builder.setAutoEnterEnabled(isPlaying)`.
 - **Android 8+ (API 26+)**: Overrides `onUserLeaveHint()` so navigating Home while a video is playing automatically transitions into PiP mode.
-
----
-
-## 🎨 3. UI Enhancements & Layout Adjustments
-
-1. **Floating Seek Preview Timestamp Pill (Problem 1)**:
-   - Removed `scrubberContainer.setTranslationY(40)` translation offset.
-   - Added `layout_marginBottom="28dp"` with `@drawable/indicator_pill_bg` background pill.
-   - The timestamp pill now floats high above the white seekbar thumb circle without any text overlap.
-2. **Top Bar Dynamic Height Adjustment (Problem 2)**:
-   - Fixed `topBar.setPadding()` in Java (`NativePlayerActivity.java`) where double status bar padding was being dynamically applied.
-   - Set clean padding in Java: `10dp` top padding in portrait mode (below `status_bar_filler`) and `14dp` top padding in fullscreen landscape mode.
-   - All top bar action buttons (PiP, Captions, Settings) and top-left title text now render comfortably lower down inside the visible player area with zero top-edge clipping.
-3. **Expandable Server Selector Dropdown Position (Problem 3)**:
-   - Updated top margin to `mt-5 mb-2` in `WatchView.tsx`.
-   - The `SERVERS` label and `Server 1 ▾` dropdown button now sit with clean clearance below the video player, matching the ideal UI layout in Image 4.
 
 ---
 
