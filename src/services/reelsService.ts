@@ -1,8 +1,6 @@
 import { AnimeReel } from '../types';
 import { reelMediaCache } from './reelMediaCache';
 import bundledReelsRaw from '../data/animeReels.json';
-import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const SAVED_REELS_STORAGE_KEY = 'anilove_saved_anime_reels';
 const WATCHED_REELS_IDS_KEY = 'anilove_reels_watched_ids';
@@ -302,7 +300,6 @@ export function getStartingReelsFeed(
   index: number;
   filterMode: 'all' | 'saved';
 } {
-  const existingSession = getStoredReelsSession();
   const bundled = getBundledReels(true);
   const savedReels = getStoredSavedReels();
 
@@ -311,7 +308,7 @@ export function getStartingReelsFeed(
       const foundIdx = initialReelId ? findReelIndexByIdOrPrefix(savedReels, initialReelId) : 0;
       return {
         feed: savedReels,
-        index: foundIdx >= 0 ? foundIdx : 0,
+        index: Math.max(0, foundIdx),
         filterMode: 'saved',
       };
     }
@@ -322,45 +319,25 @@ export function getStartingReelsFeed(
     const cleanId = String(initialReelId).trim();
     let match = findReelByIdOrPrefix(bundled, cleanId) || findReelByIdOrPrefix(savedReels, cleanId);
 
-    if (!match && existingSession && Array.isArray(existingSession.feedHistory)) {
-      match = findReelByIdOrPrefix(existingSession.feedHistory, cleanId);
-    }
-
     if (!match) {
       match = sanitizeReelForStorage({ id: cleanId });
     }
 
     reelMediaCache.preloadReel(match.id);
-    const others = bundled.filter(r => r.id !== match!.id).slice(0, 3);
+    const others = bundled.filter(r => r.id !== match!.id);
     const feed = [match, ...others];
 
-    saveStoredReelsSession({
-      feedHistory: feed,
-      historyIndex: 0,
-      lastWatchedReelId: match.id,
-      filterMode: 'all',
-    });
-
-    return { feed, index: 0, filterMode: 'all' };
-  }
-
-  if (existingSession && existingSession.feedHistory.length > 0) {
-    let resumeIndex = existingSession.historyIndex;
-    if (existingSession.lastWatchedReelId) {
-      const matchIdx = existingSession.feedHistory.findIndex(r => r.id === existingSession.lastWatchedReelId);
-      if (matchIdx >= 0) resumeIndex = matchIdx;
-    }
-    resumeIndex = Math.max(0, Math.min(resumeIndex, existingSession.feedHistory.length - 1));
-
     return {
-      feed: existingSession.feedHistory,
-      index: resumeIndex,
-      filterMode: existingSession.filterMode || 'all',
+      feed,
+      index: 0,
+      filterMode: 'all',
     };
   }
 
+  const fullPool = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
+
   return {
-    feed: bundled.slice(0, 5),
+    feed: fullPool,
     index: 0,
     filterMode: 'all',
   };
