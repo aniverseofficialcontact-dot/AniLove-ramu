@@ -45,6 +45,13 @@ interface ReelsViewProps {
 
 const DownloadPlugin = registerPlugin<any>('DownloadPlugin');
 
+function formatTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
 // Framer Motion Spring Slide Variants (Instagram / Shorts Style)
 const slideVariants = {
   enter: (direction: number) => ({
@@ -103,7 +110,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false); // Unmuted audio by default as requested
+  const [isMuted, setIsMuted] = useState(false); // Unmuted audio by default
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -112,6 +119,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [is2xSpeed, setIs2xSpeed] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   // Scene Finder Modal & Cloud Enriched Metadata
   const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
@@ -149,6 +158,25 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return null;
   }, []);
 
+  // First User Touch Unmutes Audio automatically across all reels
+  useEffect(() => {
+    const handleFirstTouch = () => {
+      const video = getActiveVideo();
+      if (video) {
+        video.muted = false;
+        video.volume = 1.0;
+        setIsMuted(false);
+      }
+    };
+
+    window.addEventListener('touchstart', handleFirstTouch, { once: true });
+    window.addEventListener('click', handleFirstTouch, { once: true });
+    return () => {
+      window.removeEventListener('touchstart', handleFirstTouch);
+      window.removeEventListener('click', handleFirstTouch);
+    };
+  }, [getActiveVideo]);
+
   // Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
     if (isInitialMountRef.current) {
@@ -182,26 +210,36 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
 
-  // Direct Stream Source or RAM Blob URL
+  // Direct Stream Source or RAM Blob URL (Resolves Reel 1 immediately)
+  useEffect(() => {
+    if (!currentReel?.id) return;
+    let isMounted = true;
+
+    setVideoSrcOverride(null);
+    setIs2xSpeed(false);
+    setIsVideoLoaded(false);
+
+    reelMediaCache.getReelVideoUrl(currentReel.id).then(url => {
+      if (isMounted && url) {
+        setResolvedVideoUrl(url);
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [currentReel?.id, historyIndex]);
+
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
+    if (resolvedVideoUrl) return resolvedVideoUrl;
     if (!currentReel?.id) return '';
-    const syncBlob = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
-    if (syncBlob) return syncBlob;
     return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
-  }, [currentReel?.id, videoSrcOverride]);
+  }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
 
   // Poster Image Source
   const activePosterUrl = useMemo(() => {
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
   }, [currentReel?.id]);
-
-  useEffect(() => {
-    setVideoSrcOverride(null);
-    setIs2xSpeed(false);
-    setIsVideoLoaded(false);
-  }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
@@ -234,7 +272,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Instant Autoplay Loop
+  // Instant Autoplay Loop (Unmuted Priority)
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
@@ -322,14 +360,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [currentReel, onShowToast]);
 
-  // Native Android & Web Download Handler
+  const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
+  const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
+
+  // Native Android & Web Download Handler (Guarantees Direct Download via EpisodeDownloadService)
   const handleDownloadReel = () => {
     if (!currentReel) return;
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`;
-    const displayTitle = currentMeta?.animeTitle || currentReel.cleanTitle || 'Anime Reel';
 
     if (onShowToast) {
-      onShowToast('success', `Starting download: ${displayTitle}...`, 'Reel Download');
+      onShowToast('success', `Downloading ${displayTitle}...`, 'Reel Download');
     }
 
     if (Capacitor.isNativePlatform()) {
@@ -338,7 +378,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           item: {
             id: `reel_${currentReel.id}`,
             anilistId: 0,
-            animeTitle: 'Anime Reels',
+            animeTitle: displayTitle,
             episodeNumber: historyIndex + 1,
             streamUrl: downloadUrl,
             pageUrl: downloadUrl,
@@ -491,14 +531,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     setDragOffsetY(0);
   };
 
-  // Interactive Bottom Seekbar Tap / Drag Handler
-  const handleSeekbarInteraction = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+  // Interactive Bottom Seekbar Drag / Scrubbing Handlers
+  const handleSeekbarScrub = (clientX: number) => {
     const video = getActiveVideo();
     if (!video || !seekbarRef.current || !duration) return;
 
     const rect = seekbarRef.current.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clickPos = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const targetPercentage = clickPos / rect.width;
     const newTime = targetPercentage * duration;
@@ -506,6 +544,27 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     video.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(targetPercentage * 100);
+  };
+
+  const handleSeekbarStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsScrubbing(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    handleSeekbarScrub(clientX);
+  };
+
+  const handleSeekbarMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isScrubbing) return;
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    handleSeekbarScrub(clientX);
+  };
+
+  const handleSeekbarEnd = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (isScrubbing) {
+      e.stopPropagation();
+      setIsScrubbing(false);
+    }
   };
 
   // Wheel Scroll Handler
@@ -561,9 +620,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
     }
   };
-
-  const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
-  const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
 
   return (
     <div
@@ -782,7 +838,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
         {/* Right Side Floating Action Column (Matching Image 2: Clean Transparent Line Icons) */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-6 pointer-events-auto">
+          <div className="absolute right-4 bottom-24 z-30 flex flex-col items-center gap-6 pointer-events-auto">
             {/* 1. Share / Send Icon */}
             <button
               onClick={(e) => { e.stopPropagation(); handleShare(); }}
@@ -842,7 +898,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
         {/* Bottom Metadata Info Card */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute bottom-6 left-4 right-20 z-30 flex flex-col gap-1.5 pointer-events-auto">
+          <div className="absolute bottom-10 left-4 right-20 z-30 flex flex-col gap-1.5 pointer-events-auto">
             {currentMeta && (
               <div className="inline-flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 font-bold text-[10px] border border-pink-500/30">
@@ -865,23 +921,36 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         )}
       </div>
 
-      {/* Interactive Bottom Seekbar */}
+      {/* Interactive Bottom Seekbar with Current Time & Total Duration Timestamps */}
       {feedHistory.length > 0 && currentReel && (
-        <div
-          ref={seekbarRef}
-          onClick={handleSeekbarInteraction}
-          onTouchStart={handleSeekbarInteraction}
-          onTouchMove={handleSeekbarInteraction}
-          className="relative w-full h-3.5 z-30 group cursor-pointer flex items-end px-2 pb-1"
-        >
-          <div className="w-full h-1 group-hover:h-2 rounded-full bg-white/20 relative overflow-hidden transition-all duration-200">
-            <div
-              className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full transition-all duration-75 relative"
-              style={{ width: `${progress}%` }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-pink-400 shadow-[0_0_8px_#ec4899]" />
+        <div className="absolute bottom-2 left-4 right-4 z-30 flex items-center gap-2.5 select-none pointer-events-auto">
+          <span className="text-[11px] font-bold text-slate-300 min-w-[28px] text-right font-mono drop-shadow">
+            {formatTime(currentTime)}
+          </span>
+
+          <div
+            ref={seekbarRef}
+            onMouseDown={handleSeekbarStart}
+            onMouseMove={handleSeekbarMove}
+            onMouseUp={handleSeekbarEnd}
+            onTouchStart={handleSeekbarStart}
+            onTouchMove={handleSeekbarMove}
+            onTouchEnd={handleSeekbarEnd}
+            className="relative flex-1 h-4 group cursor-pointer flex items-center"
+          >
+            <div className="w-full h-1.5 group-hover:h-2.5 rounded-full bg-white/25 relative overflow-hidden transition-all duration-150">
+              <div
+                className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full relative"
+                style={{ width: `${progress}%` }}
+              >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-pink-400 shadow-[0_0_10px_#ec4899] border border-white" />
+              </div>
             </div>
           </div>
+
+          <span className="text-[11px] font-bold text-slate-300 min-w-[28px] text-left font-mono drop-shadow">
+            {formatTime(duration)}
+          </span>
         </div>
       )}
 

@@ -291,7 +291,8 @@ public class EpisodeDownloadService extends Service {
             if (cachedSub != null && !cachedSub.isEmpty() && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
                 item.subtitleUrl = cachedSub;
             }
-        } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")) {
+        } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")
+                   && !item.streamUrl.contains("drive.google.com") && !item.streamUrl.contains("drive.usercontent.google.com") && !item.streamUrl.contains("export=download")) {
             // Check if streamUrl is an embed link already unpacked for the target audio language
             boolean isAlreadyUnpackedEmbed = item.streamUrl.contains("abyssplayer.com") ||
                                               item.streamUrl.contains("iqsmart") ||
@@ -318,7 +319,10 @@ public class EpisodeDownloadService extends Service {
 
             boolean isDirect = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".mp4")
                     || item.streamUrl.contains(".m4s") || item.streamUrl.contains(".m3u")
-                    || item.streamUrl.contains(".txt");
+                    || item.streamUrl.contains(".txt")
+                    || item.streamUrl.contains("drive.google.com")
+                    || item.streamUrl.contains("drive.usercontent.google.com")
+                    || item.streamUrl.contains("export=download");
             if (isDirect) {
                 item.isHls = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".m3u") || item.streamUrl.contains(".txt");
                 Log.i(TAG, "Direct stream URL — skipping VideoSniffer");
