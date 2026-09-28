@@ -39,8 +39,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.SystemClock;
-import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
@@ -64,12 +62,12 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
@@ -297,7 +295,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private double videoDuration = 0;
     private double currentVideoTime = 0;
     private OpEdSeekBarDrawable opEdSeekBarDrawable = null;
-    private Map<String, String> capturedServer2BSubtitles = new ConcurrentHashMap<>();
+    private final Map<String, String> capturedServer2BSubtitles = new ConcurrentHashMap<>();
 
     private class OpEdSeekBarDrawable extends Drawable {
         private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -699,7 +697,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
         loadCaptionSettingsFromPrefs();
         loadEpisodeSubOffset();
-        
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (isFullscreenMode) {
+                    toggleFullscreenInPlace();
+                    return;
+                }
+                NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                MainActivity.pendingBackToDetails = true;
+                if (navigationListener != null) {
+                    navigationListener.onBack();
+                }
+                finish();
+            }
+        });
+
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
         isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
@@ -3010,7 +3024,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 String reqUrl = request.getUrl().toString();
                 String lower = reqUrl.toLowerCase();
 
-                // Block any external hijack, ad redirect, youtube, social, or ad networks
+                // Block any external hijack, ad redirect, YouTube, social, or ad networks
                 if (lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("blinkit") ||
                     lower.contains("probationthimbledespite") || lower.contains("abyss.to") || lower.contains("decafeligiblyhad") ||
                     lower.contains("adsterra") || lower.contains("popads") || lower.contains("monetag") ||
@@ -3551,22 +3565,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
         }
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public void onBackPressed() {
-        if (isFullscreenMode) {
-            toggleFullscreenInPlace();
-            return;
-        }
-        NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        MainActivity.pendingBackToDetails = true;
-        if (navigationListener != null) {
-            navigationListener.onBack();
-        }
-        super.onBackPressed();
-        overridePendingTransition(0, 0);
     }
 
     @Override
