@@ -16,7 +16,8 @@ import {
   Crop,
   Heart,
   Camera,
-  Tag
+  Tag,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AnimeReel } from '../types';
@@ -34,8 +35,10 @@ import {
   fetchReelCloudMetadata,
   saveReelCloudMetadata,
   syncLiveGoogleDriveFolder,
+  sanitizeReelForStorage,
   EnrichedReelMetadata
 } from '../services/reelsService';
+import bundledReelsRaw from '../data/animeReels.json';
 import { reelMediaCache } from '../services/reelMediaCache';
 import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 
@@ -56,29 +59,33 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   initialFilterMode,
   refreshTrigger,
 }) => {
-  const [allReels, setAllReels] = useState<AnimeReel[]>(() => getBundledReels(false));
+  const [allReels, setAllReels] = useState<AnimeReel[]>(() => {
+    const list = getBundledReels(false);
+    return list.length > 0 ? list : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
+  });
+
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>(() => {
     const saved = getStoredSavedReels();
     const map: Record<string, boolean> = {};
     saved.forEach(r => { if (r?.id) map[r.id] = true; });
     return map;
   });
-  const [filterMode, setFilterMode] = useState<'all' | 'saved'>(() => {
-    if (initialFilterMode) return initialFilterMode;
-    const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    return session.filterMode || 'all';
-  });
+
+  const [filterMode, setFilterMode] = useState<'all' | 'saved'>(initialFilterMode || 'all');
 
   const [feedHistory, setFeedHistory] = useState<AnimeReel[]>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    return session.feed;
+    if (session.feed && session.feed.length > 0) return session.feed;
+    const fallback = getBundledReels(true);
+    return fallback.length > 0 ? fallback : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
   });
+
   const [historyIndex, setHistoryIndex] = useState<number>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    return session.index;
+    return session.index || 0;
   });
+
   const [slideDirection, setSlideDirection] = useState<number>(1);
-  
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,9 +94,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isFrameRendered, setIsFrameRendered] = useState(false);
+  const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
 
   // Scene Finder Modal & Cloud Enriched Metadata
   const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
@@ -97,9 +103,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('contain');
-
-  const [dragOffsetY, setDragOffsetY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -118,30 +121,56 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapTimeRef = useRef<number>(0);
+  const isManuallyPausedRef = useRef<boolean>(false);
+
+  // Handle Mode Switch ('all' vs 'saved')
+  useEffect(() => {
+    if (filterMode === 'saved') {
+      const saved = getStoredSavedReels();
+      setFeedHistory(saved);
+      setHistoryIndex(0);
+    } else {
+      const bundled = getBundledReels(true);
+      const fallback = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
+      setFeedHistory(fallback);
+      setHistoryIndex(0);
+    }
+  }, [filterMode]);
 
   const currentReel = feedHistory[historyIndex] || null;
 
   // Direct Google Drive CDN Video Source
   const activeVideoUrl = useMemo(() => {
+    if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
-  }, [currentReel?.id]);
+  }, [currentReel?.id, videoSrcOverride]);
 
-  // Live Auto-Sync: Scrapes Google Drive folder on mount to automatically discover new reels added in future
+  // Reset video source override on reel change
+  useEffect(() => {
+    setVideoSrcOverride(null);
+  }, [currentReel?.id, historyIndex]);
+
+  // Live Auto-Sync: Scrapes Google Drive folder on mount
   useEffect(() => {
     let isMounted = true;
     syncLiveGoogleDriveFolder('1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE').then(({ reels, newCount }) => {
-      if (isMounted && newCount > 0) {
-        setAllReels(reels);
-        if (onShowToast) {
+      if (isMounted) {
+        if (reels && reels.length > 0) {
+          setAllReels(reels);
+          if (filterMode === 'all' && feedHistory.length === 0) {
+            setFeedHistory(reels);
+          }
+        }
+        if (newCount > 0 && onShowToast) {
           onShowToast('success', `Synced ${newCount} new anime reels from Google Drive!`, 'Catalog Updated');
         }
       }
     });
     return () => { isMounted = false; };
-  }, [onShowToast]);
+  }, [filterMode, feedHistory.length, onShowToast]);
 
-  // Fetch enriched metadata from Cloud/Cache or trigger background trace.moe identification
+  // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
     if (!currentReel?.id) return;
     const reelId = currentReel.id;
@@ -158,7 +187,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [currentReel?.id]);
 
-  // Mark reel as watched in local storage after 3s of playback
+  // Mark reel as watched after 3s
   useEffect(() => {
     if (!currentReel?.id || !isPlaying) return;
     const timer = setTimeout(() => {
@@ -210,9 +239,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           setIsBuffering(false);
         });
     }
-  }, [historyIndex, currentReel, getActiveVideo]);
-
-  const isManuallyPausedRef = useRef<boolean>(false);
+  }, [historyIndex, currentReel, activeVideoUrl, getActiveVideo]);
 
   const goToNext = useCallback(() => {
     setSlideDirection(1);
@@ -311,6 +338,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [getActiveVideo, handleToggleSave, togglePlay]);
 
+  const handleVideoError = () => {
+    if (currentReel?.id && !videoSrcOverride) {
+      // Fallback to direct Google Drive export stream URL if LH3 CDN endpoint rejects
+      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}`);
+    }
+  };
+
   const isLandscape = videoAspectRatio > 1.1;
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
@@ -369,134 +403,176 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
       {/* Main Video Stage */}
       <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-        {currentReel && (
-          <div
-            onClick={handleCanvasInteraction}
-            className="relative w-full h-full flex items-center justify-center cursor-pointer"
-          >
-            {/* Background Ambient Poster */}
-            <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
-              <img
-                src={activeVideoUrl}
-                alt=""
-                className="w-full h-full object-cover blur-3xl opacity-30 scale-125"
-              />
+        {feedHistory.length === 0 ? (
+          /* Empty State */
+          <div className="flex flex-col items-center justify-center text-center p-8 space-y-4 z-20">
+            <div className="w-16 h-16 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-3xl border border-pink-500/30">
+              🔖
             </div>
-
-            {/* Video Element */}
-            <video
-              id="active-reel-video"
-              key={currentReel.id}
-              ref={el => { videoRef.current = el; }}
-              src={activeVideoUrl}
-              poster={activeVideoUrl}
-              autoPlay
-              playsInline
-              loop
-              muted={false}
-              className={`w-full h-full max-w-[420px] max-h-[92vh] ${
-                aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
-              }`}
-              onTimeUpdate={e => {
-                const el = e.currentTarget;
-                if (el.duration) {
-                  setProgress((el.currentTime / el.duration) * 100);
-                  setDuration(el.duration);
-                  setCurrentTime(el.currentTime);
-                }
-              }}
-              onLoadedMetadata={e => {
-                const el = e.currentTarget;
-                if (el.videoWidth && el.videoHeight) {
-                  setVideoAspectRatio(el.videoWidth / el.videoHeight);
-                }
-              }}
-            />
-
-            {/* Double Tap Heart Burst Animation */}
-            {showHeartBurst && (
-              <motion.div
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1.2, opacity: 1 }}
-                exit={{ scale: 0.5, opacity: 0 }}
-                className="absolute inset-0 flex items-center justify-center pointer-events-none z-40"
+            <h3 className="text-xl font-bold text-white">
+              {filterMode === 'saved' ? 'No Saved Reels Yet' : 'Loading Reels Catalog...'}
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xs">
+              {filterMode === 'saved'
+                ? 'Tap the bookmark button on any anime edit reel to save it to your collection.'
+                : 'Fetching latest anime edit reels from Google Drive.'}
+            </p>
+            {filterMode === 'saved' ? (
+              <button
+                onClick={() => setFilterMode('all')}
+                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
               >
-                <Heart className="w-28 h-28 text-pink-500 fill-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.8)]" />
-              </motion.div>
-            )}
-
-            {/* Play/Pause Overlay Feedback */}
-            {showPlayPauseFeedback && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                <div className="p-4 rounded-full bg-black/60 text-white backdrop-blur-md animate-ping">
-                  {showPlayPauseFeedback === 'play' ? <Play className="w-10 h-10 fill-white" /> : <Pause className="w-10 h-10 fill-white" />}
-                </div>
-              </div>
+                Explore All Reels
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  const bundled = getBundledReels(true);
+                  setFeedHistory(bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage));
+                  setHistoryIndex(0);
+                }}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Reload Catalog</span>
+              </button>
             )}
           </div>
+        ) : (
+          currentReel && (
+            <div
+              onClick={handleCanvasInteraction}
+              className="relative w-full h-full flex items-center justify-center cursor-pointer"
+            >
+              {/* Background Ambient Poster */}
+              <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
+                <img
+                  src={activeVideoUrl}
+                  alt=""
+                  className="w-full h-full object-cover blur-3xl opacity-30 scale-125"
+                />
+              </div>
+
+              {/* Video Element */}
+              <video
+                id="active-reel-video"
+                key={currentReel.id}
+                ref={el => { videoRef.current = el; }}
+                src={activeVideoUrl}
+                poster={activeVideoUrl}
+                autoPlay
+                playsInline
+                loop
+                muted={false}
+                onError={handleVideoError}
+                className={`w-full h-full max-w-[420px] max-h-[92vh] ${
+                  aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+                }`}
+                onTimeUpdate={e => {
+                  const el = e.currentTarget;
+                  if (el.duration) {
+                    setProgress((el.currentTime / el.duration) * 100);
+                    setDuration(el.duration);
+                    setCurrentTime(el.currentTime);
+                  }
+                }}
+                onLoadedMetadata={e => {
+                  const el = e.currentTarget;
+                  if (el.videoWidth && el.videoHeight) {
+                    setVideoAspectRatio(el.videoWidth / el.videoHeight);
+                  }
+                }}
+              />
+
+              {/* Double Tap Heart Burst Animation */}
+              {showHeartBurst && (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1.2, opacity: 1 }}
+                  exit={{ scale: 0.5, opacity: 0 }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-40"
+                >
+                  <Heart className="w-28 h-28 text-pink-500 fill-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.8)]" />
+                </motion.div>
+              )}
+
+              {/* Play/Pause Overlay Feedback */}
+              {showPlayPauseFeedback && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                  <div className="p-4 rounded-full bg-black/60 text-white backdrop-blur-md animate-ping">
+                    {showPlayPauseFeedback === 'play' ? <Play className="w-10 h-10 fill-white" /> : <Pause className="w-10 h-10 fill-white" />}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
         )}
 
         {/* Right Side Overlay Action Buttons */}
-        <div className="absolute right-4 bottom-24 z-30 flex flex-col items-center gap-5">
-          {/* Bookmark Button */}
-          <button
-            onClick={() => handleToggleSave()}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div className={`p-3 rounded-full backdrop-blur-md border transition-all ${
-              savedStatus[currentReel?.id || '']
-                ? 'bg-pink-600 text-white border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]'
-                : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
-            }`}>
-              <Bookmark className={`w-6 h-6 ${savedStatus[currentReel?.id || ''] ? 'fill-white' : ''}`} />
-            </div>
-            <span className="text-[10px] font-bold text-slate-200">Save</span>
-          </button>
+        {feedHistory.length > 0 && currentReel && (
+          <div className="absolute right-4 bottom-24 z-30 flex flex-col items-center gap-5">
+            {/* Bookmark Button */}
+            <button
+              onClick={() => handleToggleSave()}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className={`p-3 rounded-full backdrop-blur-md border transition-all ${
+                savedStatus[currentReel.id]
+                  ? 'bg-pink-600 text-white border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]'
+                  : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
+              }`}>
+                <Bookmark className={`w-6 h-6 ${savedStatus[currentReel.id] ? 'fill-white' : ''}`} />
+              </div>
+              <span className="text-[10px] font-bold text-slate-200">Save</span>
+            </button>
 
-          {/* Share Button */}
-          <button
-            onClick={handleShare}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-              <Share2 className="w-6 h-6" />
-            </div>
-            <span className="text-[10px] font-bold text-slate-200">Share</span>
-          </button>
+            {/* Share Button */}
+            <button
+              onClick={handleShare}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
+                <Share2 className="w-6 h-6" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-200">Share</span>
+            </button>
 
-          {/* Fit Mode Toggle */}
-          <button
-            onClick={() => setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-              <Crop className="w-6 h-6" />
-            </div>
-            <span className="text-[10px] font-bold text-slate-200">{aspectFitMode === 'contain' ? 'Fit' : 'Fill'}</span>
-          </button>
-        </div>
+            {/* Fit Mode Toggle */}
+            <button
+              onClick={() => setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain')}
+              className="flex flex-col items-center gap-1 group"
+            >
+              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
+                <Crop className="w-6 h-6" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-200">{aspectFitMode === 'contain' ? 'Fit' : 'Fill'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Bottom Metadata Info Card */}
-        <div className="absolute bottom-6 left-4 right-16 z-30 flex flex-col gap-1.5 pointer-events-auto">
-          {currentMeta && (
-            <div className="inline-flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 font-bold text-[10px] border border-pink-500/30">
-                Ep {currentMeta.episode || '1'} @ {currentMeta.timestamp || '0:00'}
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium">trace.moe verified</span>
+        {feedHistory.length > 0 && currentReel && (
+          <div className="absolute bottom-6 left-4 right-16 z-30 flex flex-col gap-1.5 pointer-events-auto">
+            {currentMeta && (
+              <div className="inline-flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 font-bold text-[10px] border border-pink-500/30">
+                  Ep {currentMeta.episode || '1'} @ {currentMeta.timestamp || '0:00'}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">trace.moe verified</span>
+              </div>
+            )}
+
+            <h3 className="text-white font-extrabold text-base leading-snug drop-shadow-md">
+              {displayTitle}
+            </h3>
+
+            <div className="flex items-center gap-2 text-xs text-slate-300 font-medium">
+              <span>🎬 Anime Edit</span>
+              <span>•</span>
+              <span className="text-pink-400">#AniLoveReels</span>
             </div>
-          )}
-
-          <h3 className="text-white font-extrabold text-base leading-snug drop-shadow-md">
-            {displayTitle}
-          </h3>
-
-          <div className="flex items-center gap-2 text-xs text-slate-300 font-medium">
-            <span>🎬 Anime Edit</span>
-            <span>•</span>
-            <span className="text-pink-400">#AniLoveReels</span>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Progress Bar */}
