@@ -575,7 +575,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
                 if (topBar != null) {
                     topBar.setVisibility(View.VISIBLE);
-                    int safeTopPadding = (int) (20 * getResources().getDisplayMetrics().density);
+                    int safeTopPadding = (int) (14 * getResources().getDisplayMetrics().density);
                     topBar.setPadding(topBar.getPaddingLeft(), safeTopPadding, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
@@ -623,7 +623,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
                 if (topBar != null) {
                     topBar.setVisibility(View.VISIBLE);
-                    topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
+                    int padTop = (int) (10 * getResources().getDisplayMetrics().density);
+                    topBar.setPadding(topBar.getPaddingLeft(), padTop, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
         } else {
@@ -670,7 +671,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
                 if (topBar != null) {
                     topBar.setVisibility(View.VISIBLE);
-                    topBar.setPadding(topBar.getPaddingLeft(), finalStatusBarHeight, topBar.getPaddingRight(), topBar.getPaddingBottom());
+                    int padTop = (int) (10 * getResources().getDisplayMetrics().density);
+                    topBar.setPadding(topBar.getPaddingLeft(), padTop, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
             });
         }

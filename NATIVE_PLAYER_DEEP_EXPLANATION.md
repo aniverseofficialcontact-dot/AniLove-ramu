@@ -76,9 +76,10 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
    - Removed `scrubberContainer.setTranslationY(40)` translation offset.
    - Added `layout_marginBottom="28dp"` with `@drawable/indicator_pill_bg` background pill.
    - The timestamp pill now floats high above the white seekbar thumb circle without any text overlap.
-2. **Top Bar Vertical Padding Adjustment (Problem 2)**:
-   - Reduced `paddingTop` from `28dp` to `12dp` in `@id/top_bar`.
-   - All top bar action buttons (PiP, Captions, Settings) and top-left title text now render 100% fully, crisp, and beautifully inside the visible player area without top edge clipping.
+2. **Top Bar Dynamic Height Adjustment (Problem 2)**:
+   - Fixed `topBar.setPadding()` in Java (`NativePlayerActivity.java`) where double status bar padding was being dynamically applied.
+   - Set clean padding in Java: `10dp` top padding in portrait mode (below `status_bar_filler`) and `14dp` top padding in fullscreen landscape mode.
+   - All top bar action buttons (PiP, Captions, Settings) and top-left title text now render comfortably lower down inside the visible player area with zero top-edge clipping.
 3. **Expandable Server Selector Dropdown Position (Problem 3)**:
    - Updated top margin to `mt-5 mb-2` in `WatchView.tsx`.
    - The `SERVERS` label and `Server 1 ▾` dropdown button now sit with clean clearance below the video player, matching the ideal UI layout in Image 4.
