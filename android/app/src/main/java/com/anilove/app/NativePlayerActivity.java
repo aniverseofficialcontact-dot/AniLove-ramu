@@ -42,6 +42,7 @@ import android.os.Message;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
+import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -1338,8 +1339,12 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void changeSubtitleTrack(String subTrack) {
         if (subTrack == null || subTrack.equalsIgnoreCase("Off")) {
             parsedVttCues.clear();
-            TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
-            if (textOverlay != null) textOverlay.setVisibility(View.GONE);
+            currentSelectedSubtitle = "Off";
+            saveCaptionSettingsToPrefs();
+            runOnUiThread(() -> {
+                TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+                if (textOverlay != null) textOverlay.setVisibility(View.GONE);
+            });
             return;
         }
 
@@ -1347,6 +1352,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (targetVttUrl != null && !targetVttUrl.isEmpty()) {
             subtitleUrl = targetVttUrl;
             subtitleLang = subTrack;
+            currentSelectedSubtitle = subTrack;
+            saveCaptionSettingsToPrefs();
             downloadAndParseVttFile(targetVttUrl);
             Log.i("CaptionSwitch", "Switched native subtitle track to: " + subTrack + " (" + targetVttUrl + ")");
         }
@@ -2019,6 +2026,66 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void applyCaptionStyle() {
+        runOnUiThread(() -> {
+            TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+            if (textOverlay != null) {
+                if (!isSubtitlesEnabled) {
+                    textOverlay.setVisibility(View.GONE);
+                } else {
+                    int textColor = Color.WHITE;
+                    try { textColor = Color.parseColor(captionColorHex); } catch (Exception ignored) {}
+                    textOverlay.setTextColor(textColor);
+
+                    if (captionWeight.equalsIgnoreCase("Bold")) {
+                        textOverlay.setTypeface(Typeface.DEFAULT_BOLD);
+                    } else {
+                        textOverlay.setTypeface(Typeface.DEFAULT);
+                    }
+
+                    float baseSizeSp = 18f;
+                    float scaledSizeSp = baseSizeSp * (captionFontSize / 100f);
+                    if (scaledSizeSp < 12f) scaledSizeSp = 12f;
+                    if (scaledSizeSp > 32f) scaledSizeSp = 32f;
+                    textOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp);
+
+                    float bgAlpha = 0f;
+                    if (!bgOpacity.equals("Off") && !bgOpacity.equals("0")) {
+                        try { bgAlpha = Integer.parseInt(bgOpacity.replace("%", "")) / 100f; } catch (Exception ignored) {}
+                    }
+                    if (bgAlpha > 0f) {
+                        int baseBgColor = Color.BLACK;
+                        if (bgColor.equalsIgnoreCase("Gray")) baseBgColor = Color.GRAY;
+                        else if (bgColor.equalsIgnoreCase("Navy")) baseBgColor = Color.parseColor("#000080");
+                        else if (bgColor.equalsIgnoreCase("White")) baseBgColor = Color.WHITE;
+
+                        int alphaInt = Math.round(bgAlpha * 255);
+                        int finalBgColor = Color.argb(alphaInt, Color.red(baseBgColor), Color.green(baseBgColor), Color.blue(baseBgColor));
+
+                        GradientDrawable shape = new GradientDrawable();
+                        shape.setColor(finalBgColor);
+                        shape.setCornerRadius(12f);
+                        textOverlay.setBackground(shape);
+                    } else {
+                        textOverlay.setBackground(null);
+                    }
+
+                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) textOverlay.getLayoutParams();
+                    if (lp != null) {
+                        if (captionPosition.equalsIgnoreCase("Top")) {
+                            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                            lp.topMargin = (int) (60 * getResources().getDisplayMetrics().density);
+                            lp.bottomMargin = 0;
+                        } else {
+                            lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                            lp.bottomMargin = (int) (42 * getResources().getDisplayMetrics().density);
+                            lp.topMargin = 0;
+                        }
+                        textOverlay.setLayoutParams(lp);
+                    }
+                }
+            }
+        });
+
         if (!isSubtitlesEnabled) return;
 
         float opacityVal = 0f;
@@ -2769,6 +2836,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             parsedVttCues.clear();
             parsedVttCues.addAll(newCues);
             Log.i("VttParser", "Successfully parsed " + newCues.size() + " WebVTT cues!");
+            runOnUiThread(() -> updateNativeSubtitleOverlay(currentVideoTime));
         }
     }
 
