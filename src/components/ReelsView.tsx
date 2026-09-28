@@ -33,6 +33,7 @@ import {
   markReelAsWatched,
   fetchReelCloudMetadata,
   saveReelCloudMetadata,
+  syncLiveGoogleDriveFolder,
   EnrichedReelMetadata
 } from '../services/reelsService';
 import { reelMediaCache } from '../services/reelMediaCache';
@@ -46,15 +47,6 @@ interface ReelsViewProps {
   initialFilterMode?: 'all' | 'saved';
   refreshTrigger?: number;
 }
-
-const CATEGORY_TAGS = [
-  { id: 'all', label: '✨ All Edits' },
-  { id: 'epic_fights', label: '⚔️ #EpicFights' },
-  { id: 'emotional', label: '😭 #Emotional' },
-  { id: 'action', label: '💥 #Action' },
-  { id: 'transformations', label: '🔥 #Transformations' },
-  { id: 'comedy', label: '😂 #Comedy' },
-];
 
 export const ReelsView: React.FC<ReelsViewProps> = ({
   onBack,
@@ -76,7 +68,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
     return session.filterMode || 'all';
   });
-  const [activeCategory, setActiveCategory] = useState<string>('all');
 
   const [feedHistory, setFeedHistory] = useState<AnimeReel[]>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
@@ -127,12 +118,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapTimeRef = useRef<number>(0);
-  const lastWheelTimeRef = useRef<number>(0);
-  const touchStartYRef = useRef<number | null>(null);
-  const touchStartXRef = useRef<number | null>(null);
-  const touchStartTimeRef = useRef<number>(0);
-  const hasMovedSignificantRef = useRef<boolean>(false);
-  const isManuallyPausedRef = useRef<boolean>(false);
 
   const currentReel = feedHistory[historyIndex] || null;
 
@@ -141,6 +126,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
   }, [currentReel?.id]);
+
+  // Live Auto-Sync: Scrapes Google Drive folder on mount to automatically discover new reels added in future
+  useEffect(() => {
+    let isMounted = true;
+    syncLiveGoogleDriveFolder('1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE').then(({ reels, newCount }) => {
+      if (isMounted && newCount > 0) {
+        setAllReels(reels);
+        if (onShowToast) {
+          onShowToast('success', `Synced ${newCount} new anime reels from Google Drive!`, 'Catalog Updated');
+        }
+      }
+    });
+    return () => { isMounted = false; };
+  }, [onShowToast]);
 
   // Fetch enriched metadata from Cloud/Cache or trigger background trace.moe identification
   useEffect(() => {
@@ -212,6 +211,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         });
     }
   }, [historyIndex, currentReel, getActiveVideo]);
+
+  const isManuallyPausedRef = useRef<boolean>(false);
 
   const goToNext = useCallback(() => {
     setSlideDirection(1);
