@@ -1364,6 +1364,24 @@ export function App() {
                     setTargetReelFilterMode(null);
                   }}
                   onNavigateToAccount={() => handleSelectTab('account')}
+                  onSelectAnimeForPlayback={async (anilistId, ep, start) => {
+                    try {
+                      const fetchedAnime = await fetchAnimeDetails(anilistId);
+                      if (fetchedAnime) {
+                        if (Capacitor.isNativePlatform()) {
+                          await launchNativePlayer({
+                            anime: fetchedAnime,
+                            episodeNumber: ep || 1,
+                            startTime: start || 0,
+                            audio: 'DUB',
+                            totalEpisodes: fetchedAnime.episodes,
+                          });
+                        } else {
+                          handleSelectAnime(fetchedAnime);
+                        }
+                      }
+                    } catch {}
+                  }}
                   onShowToast={showToast}
                   initialReelId={targetReelId || undefined}
                   initialFilterMode={targetReelFilterMode || 'all'}

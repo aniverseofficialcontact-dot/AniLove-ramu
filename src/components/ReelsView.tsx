@@ -37,6 +37,7 @@ import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 interface ReelsViewProps {
   onBack?: () => void;
   onNavigateToAccount?: () => void;
+  onSelectAnimeForPlayback?: (anilistId: number, episodeNumber?: number, startTime?: number) => void;
   onShowToast: (type: 'success' | 'info' | 'error' | 'sync', message: string, title?: string) => void;
   initialReelId?: string;
   initialFilterMode?: 'all' | 'saved';
@@ -46,7 +47,7 @@ interface ReelsViewProps {
 const DownloadPlugin = registerPlugin<any>('DownloadPlugin');
 
 // Global Unmuted Preference Flag across session
-let globalUserUnmutedPreference = false;
+let globalUserUnmutedPreference = true;
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -85,6 +86,7 @@ const slideVariants = {
 export const ReelsView: React.FC<ReelsViewProps> = ({
   onBack,
   onNavigateToAccount,
+  onSelectAnimeForPlayback,
   onShowToast,
   initialReelId,
   initialFilterMode,
@@ -113,7 +115,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(!globalUserUnmutedPreference);
+  const [isMuted, setIsMuted] = useState(false); // Unmuted by default
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -125,8 +127,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
   const [isScrubbing, setIsScrubbing] = useState(false);
 
-  // Scene Finder Modal & Cloud Enriched Metadata
+  // Scene Finder Modal & Clean Frame Snapshot
   const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
+  const [capturedFrameDataUrl, setCapturedFrameDataUrl] = useState<string | null>(null);
   const [enrichedMetadata, setEnrichedMetadata] = useState<Record<string, EnrichedReelMetadata>>({});
 
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('cover');
@@ -185,7 +188,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [getActiveVideo]);
 
-  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s) and forces resume
+  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s or Reel 1) and forces resume
   useEffect(() => {
     const interval = setInterval(() => {
       const video = getActiveVideo();
@@ -300,7 +303,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Instant Autoplay Loop
+  // Instant Autoplay Loop for Reel 1 and all reels
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
@@ -392,6 +395,30 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
+
+  // Capture Clean Video Frame Snapshot (NO UI toggles or seekbars) for trace.moe API
+  const handleIdentifySceneFromPause = () => {
+    const video = getActiveVideo();
+    if (video && video.videoWidth && video.videoHeight) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          setCapturedFrameDataUrl(cleanFrameDataUrl);
+          setIsSceneFinderOpen(true);
+          return;
+        }
+      } catch {
+        // silent fallback to poster
+      }
+    }
+    setCapturedFrameDataUrl(activePosterUrl);
+    setIsSceneFinderOpen(true);
+  };
 
   // Native Android & Web Download Handler
   const handleDownloadReel = () => {
@@ -830,13 +857,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   </motion.div>
                 )}
 
-                {/* PAUSE OVERLAY STACK (Matching Images 1, 2, 3) */}
+                {/* PAUSE OVERLAY STACK (Clean Transparent Background - NO BLUR!) */}
                 {(!isPlaying || isManuallyPausedRef.current) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-40 bg-black/35 backdrop-blur-[2px] transition-all pointer-events-auto">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-40 bg-transparent transition-all pointer-events-auto">
                     {/* 1. Mute/Unmute Circular Button (Above Play Symbol - Image 2 & 3) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl cursor-pointer active:scale-90 transition-all"
+                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-xl cursor-pointer active:scale-90 transition-all"
                       title={isMuted ? 'Unmute' : 'Mute'}
                     >
                       {isMuted ? <VolumeX className="w-6 h-6 text-pink-400" /> : <Volume2 className="w-6 h-6 text-emerald-400" />}
@@ -845,16 +872,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     {/* 2. Center Play Symbol (Image 1) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                      className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl cursor-pointer active:scale-95 transition-all"
+                      className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-2xl cursor-pointer active:scale-95 transition-all"
                       title="Resume Video"
                     >
                       <Play className="w-8 h-8 fill-white translate-x-0.5" />
                     </button>
 
-                    {/* 3. Identify Scene Button (Beneath Play Symbol) */}
+                    {/* 3. Identify Scene Button (Beneath Play Symbol - Sends Clean Frame Snapshot to API) */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); setIsSceneFinderOpen(true); }}
-                      className="px-4 py-2 rounded-full bg-black/60 hover:bg-black/80 text-pink-400 hover:text-white border border-pink-500/40 backdrop-blur-md text-xs font-bold flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition-all"
+                      onClick={(e) => { e.stopPropagation(); handleIdentifySceneFromPause(); }}
+                      className="px-4 py-2 rounded-full bg-black/60 hover:bg-black/80 text-pink-400 hover:text-white border border-pink-500/40 text-xs font-bold flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition-all"
                     >
                       <Camera className="w-4 h-4" />
                       <span>Identify Scene</span>
@@ -951,10 +978,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         )}
       </div>
 
-      {/* Interactive Bottom Seekbar with Current Time & Total Duration Timestamps */}
+      {/* Interactive Bottom Seekbar (Timestamps visible ONLY during dragging) */}
       {feedHistory.length > 0 && currentReel && (
         <div className="absolute bottom-2 left-4 right-4 z-30 flex items-center gap-2.5 select-none pointer-events-auto">
-          <span className="text-[11px] font-bold text-slate-300 min-w-[28px] text-right font-mono drop-shadow">
+          <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-right font-mono drop-shadow transition-opacity duration-200 ${
+            isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}>
             {formatTime(currentTime)}
           </span>
 
@@ -978,7 +1007,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             </div>
           </div>
 
-          <span className="text-[11px] font-bold text-slate-300 min-w-[28px] text-left font-mono drop-shadow">
+          <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-left font-mono drop-shadow transition-opacity duration-200 ${
+            isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}>
             {formatTime(duration)}
           </span>
         </div>
@@ -988,6 +1019,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       <AnimeSceneFinderModal
         isOpen={isSceneFinderOpen}
         onClose={() => setIsSceneFinderOpen(false)}
+        initialImageDataUrl={capturedFrameDataUrl}
+        onSelectAnime={(anilistId, ep, start) => {
+          if (onSelectAnimeForPlayback) {
+            onSelectAnimeForPlayback(anilistId, ep, start);
+          }
+        }}
         onShowToast={onShowToast}
       />
     </div>

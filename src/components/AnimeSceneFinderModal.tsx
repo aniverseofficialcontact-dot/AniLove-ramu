@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface TraceMoeResult {
   filename: string;
@@ -22,17 +22,19 @@ interface TraceMoeResult {
 interface AnimeSceneFinderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectAnime?: (animeId: number) => void;
+  initialImageDataUrl?: string | null;
+  onSelectAnime?: (animeId: number, episodeNumber?: number, startTime?: number) => void;
   onShowToast?: (type: 'info' | 'success' | 'warning' | 'sync', msg: string, title?: string) => void;
 }
 
 export const AnimeSceneFinderModal: React.FC<AnimeSceneFinderModalProps> = ({
   isOpen,
   onClose,
+  initialImageDataUrl,
   onSelectAnime,
   onShowToast,
 }) => {
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<TraceMoeResult | null>(null);
@@ -40,6 +42,25 @@ export const AnimeSceneFinderModal: React.FC<AnimeSceneFinderModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle auto-population from clean video frame snapshot
+  useEffect(() => {
+    if (isOpen && initialImageDataUrl) {
+      setImagePreview(initialImageDataUrl);
+      setResult(null);
+      setError(null);
+
+      // Convert Data URL to Blob
+      fetch(initialImageDataUrl)
+        .then(res => res.blob())
+        .then(blob => {
+          setSelectedImage(blob);
+          // Trigger trace.moe search automatically
+          triggerSearch(blob);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, initialImageDataUrl]);
 
   if (!isOpen) return null;
 
@@ -59,16 +80,14 @@ export const AnimeSceneFinderModal: React.FC<AnimeSceneFinderModalProps> = ({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const handleSearchTraceMoe = async () => {
-    if (!selectedImage) return;
-
+  const triggerSearch = async (imageBlob: File | Blob) => {
     setIsLoading(true);
     setError(null);
     setResult(null);
 
     try {
       const formData = new FormData();
-      formData.append('image', selectedImage);
+      formData.append('image', imageBlob);
 
       const res = await fetch('https://api.trace.moe/search?anilistInfo', {
         method: 'POST',
@@ -92,6 +111,12 @@ export const AnimeSceneFinderModal: React.FC<AnimeSceneFinderModalProps> = ({
       setError(err.message || 'Failed to search trace.moe. Check your network connection.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSearchTraceMoe = () => {
+    if (selectedImage) {
+      triggerSearch(selectedImage);
     }
   };
 
@@ -251,7 +276,11 @@ export const AnimeSceneFinderModal: React.FC<AnimeSceneFinderModalProps> = ({
                     {result.anilist?.id && (
                       <button
                         onClick={() => {
-                          if (onSelectAnime) onSelectAnime(result.anilist.id);
+                          if (onSelectAnime) {
+                            const ep = typeof result.episode === 'number' ? result.episode : parseInt(String(result.episode), 10) || 1;
+                            const start = Math.floor(result.from || 0);
+                            onSelectAnime(result.anilist.id, ep, start);
+                          }
                           onClose();
                         }}
                         className="w-full py-2.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition-all"
