@@ -38,23 +38,7 @@
                     android:id="@+id/player_webview"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:visibility="visible">
-
-                    <TextView
-                        android:id="@+id/video_title"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="12dp"
-                        android:layout_x="20dp"
-                        android:layout_y="33dp"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="Now Playing"
-                        android:textColor="@android:color/white"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-                </WebView>
+                    android:visibility="visible" />
 
                 <androidx.media3.ui.PlayerView
                     android:id="@+id/player_exoplayer"
@@ -181,17 +165,36 @@
                 android:id="@+id/top_bar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
-                android:paddingTop="12dp"
+                android:paddingHorizontal="14dp"
+                android:paddingTop="28dp"
                 android:paddingBottom="8dp">
+
+                <TextView
+                    android:id="@+id/video_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:layout_toStartOf="@id/btn_pip"
+                    android:layout_marginEnd="12dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="Now Playing"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:shadowColor="@android:color/black"
+                    android:shadowDx="1"
+                    android:shadowDy="1"
+                    android:shadowRadius="3" />
 
                 <ImageButton
                     android:id="@+id/btn_settings"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
-                    android:padding="8dp"
+                    android:padding="7dp"
                     android:scaleType="fitCenter"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_menu_preferences"
@@ -199,12 +202,12 @@
 
                 <ImageButton
                     android:id="@+id/btn_captions"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:layout_toStartOf="@id/btn_settings"
                     android:layout_centerVertical="true"
                     android:layout_marginEnd="2dp"
-                    android:padding="8dp"
+                    android:padding="7dp"
                     android:scaleType="fitCenter"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/ic_cc"
@@ -212,12 +215,12 @@
 
                 <ImageButton
                     android:id="@+id/btn_pip"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:layout_toStartOf="@id/btn_captions"
                     android:layout_centerVertical="true"
                     android:layout_marginEnd="2dp"
-                    android:padding="8dp"
+                    android:padding="7dp"
                     android:scaleType="fitCenter"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_menu_view"

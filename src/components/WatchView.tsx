@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Play,
   CheckCircle2,
   List,
@@ -118,6 +119,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const initialServer = settings?.preferredServers?.[0] || DEFAULT_STREAM_PROVIDER_ID;
   const [selectedServer, setSelectedServer] = useState<StreamServerId>(initialServer);
   const [selectedSubServer, setSelectedSubServer] = useState<string>('Server 1');
+  const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);
 
   // Derive initial audio preference (English DUB or Japanese SUB by default)
   const initialAudio: StreamLanguage = useMemo(() => {
@@ -418,47 +420,56 @@ export const WatchView: React.FC<WatchViewProps> = ({
           />
         </div>
 
-        {/* Quick Server & Language Selector Bar (Positioned right below video player controls and above description) */}
-        <section className="mx-3 sm:mx-0 rounded-2xl bg-[#0a0a0e] border border-neutral-800/80 p-3 sm:p-4 shadow-xl space-y-2.5">
-          <div className="flex items-center justify-between text-xs text-neutral-400 font-semibold px-1">
-            <span className="flex items-center gap-1.5 text-neutral-200 font-bold">
-              <Radio className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-              <span>Streaming Servers</span>
+        {/* Compact Right-Aligned Expandable Server Selector Dropdown */}
+        <div className="flex justify-end px-3 sm:px-0 my-2">
+          <div className="relative flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+              SERVERS
             </span>
-            <span className="text-[11px] text-neutral-500">Active Stream Servers</span>
-          </div>
+            <div className="relative">
+              <button
+                onClick={() => setIsServerMenuOpen(!isServerMenuOpen)}
+                className="bg-neutral-900/90 border border-neutral-800 hover:border-neutral-600 text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
+              >
+                <Server className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{selectedSubServer || 'Server 1'}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isServerMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Playback server options">
-            {/* Server 1, Server 1-B, and HiAnime Server 2-A & 2-B SUB/DUB Options */}
-            {[
-              'Server 1',
-              'Server 1-B',
-              'Server 2-A-SUB',
-              'Server 2-B-SUB',
-              'Server 2-A-DUB',
-              'Server 2-B-DUB',
-            ].map((srvName, idx) => {
-              const normSel = (selectedSubServer || 'Server 1').toLowerCase().trim();
-              const normSrv = srvName.toLowerCase().trim();
-              const isSelected = normSel === normSrv;
-
-              return (
-                <button
-                  key={`wv-srv-${idx}`}
-                  onClick={() => setSelectedSubServer(srvName)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-white text-black font-black shadow-lg shadow-white/10'
-                      : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-600 hover:text-white'
-                  }`}
-                >
-                  <Server className="w-3.5 h-3.5" />
-                  <span>{srvName}</span>
-                </button>
-              );
-            })}
+              {isServerMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 overflow-hidden py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
+                  {[
+                    'Server 1',
+                    'Server 1-B',
+                    'Server 2-A-SUB',
+                    'Server 2-B-SUB',
+                    'Server 2-A-DUB',
+                    'Server 2-B-DUB',
+                  ].map((srvName) => {
+                    const isSelected = (selectedSubServer || 'Server 1').toLowerCase().trim() === srvName.toLowerCase().trim();
+                    return (
+                      <button
+                        key={srvName}
+                        onClick={() => {
+                          setSelectedSubServer(srvName);
+                          setIsServerMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-600/20 text-indigo-300 font-bold'
+                            : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <span>{srvName}</span>
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        </section>
+        </div>
 
         {/* Episode metadata & Description with Background Banner Image */}
         <section className="relative mx-3 sm:mx-0 rounded-3xl overflow-hidden border border-neutral-800/80 shadow-2xl bg-[#08080b]">

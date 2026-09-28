@@ -34,12 +34,12 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, and top bar title alignment. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
 | `streamingProviders.ts` | Server Resolvers | 2-tier server resolver architecture (Tier 1 client generators + Tier 2 API fallbacks) with dynamic HLS quality resolution probing. |
-| `WatchView.tsx` | Web Component | Manages playback UI state, server selectors, audio toggles, episode switching, and player position sync. |
+| `WatchView.tsx` | Web Component | Manages playback UI state, server selectors, audio toggles, episode switching, expandable server dropdown, and player position sync. |
 | `StreamCache.java` | Native Utilities | Thread-safe memory cache storing pre-fetched stream URLs and subtitle tracks for instant zero-latency episode transitions. |
 
 ---
@@ -70,7 +70,21 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 🌐 3. Server Architecture & Multi-Tier Strategy
+## 🎨 3. UI Enhancements & Top Bar Synchronization
+
+1. **Top-Left Title Visibility Sync**:
+   - `video_title` ("Anime Name - Ep Number") moved inside `@id/top_bar` in `@id/controls_overlay`.
+   - Automatically hides when native player controls overlay fades out / hides.
+   - Vertically aligned in the exact same line as Settings, Captions, and PiP action buttons.
+   - Top bar vertical position lowered by ~5% (`paddingTop="28dp"`) for clean notch/edge clearance.
+2. **Expandable Server Selector Dropdown**:
+   - Removed the large card container box (`Streaming Servers - Active Stream Servers`).
+   - Replaced with a compact, right-aligned dropdown button showing `SERVERS` in subtle text above and `Server 1 ▾` (or `Server 2-B-SUB ▾`) as the active selector button.
+   - Tapping the selector button expands a sleek dropdown list containing all available servers (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-B-SUB`, `Server 2-A-DUB`, `Server 2-B-DUB`), allowing seamless server switching!
+
+---
+
+## 🌐 4. Server Architecture & Multi-Tier Strategy
 
 To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Server Strategy**:
 
@@ -96,18 +110,6 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 2. **Server 2-B (TryEmbed)**: Instant deterministic URL generator (`https://tryembed.us.cc/embed/anime/{anilistId}/{ep}/{sub|dub}`). Multi-language subtitle tracks supported.
 3. **Server 1 (AnimeWorld India / AbyssPlayer)**: High-speed server loaded directly in top-level frame.
 4. **Server 1-B (RubyStm)**: Strict inclusion rule — **included ONLY IF** resolved stream URL originates from `rubystm.com`. Otherwise filtered out to maintain quality.
-
----
-
-## ⚡ 4. Restored Server 1 Engine (Commit `713a1f8` Reference State)
-
-- **Pure Single WebView Architecture**:
-  - Restored `NativePlayerActivity` to the high-performance, 0ms latency Server 1 engine from commit `713a1f8`.
-  - Secondary `subSnifferWebView` and background subtitle fetching have been completely removed.
-  - Eliminates all C++ native thread crashes (`pthread_mutex_lock`), memory heap fragmentation (`Scudo ERROR`), and video freezing!
-- **Server 1 Native Playback**:
-  - Loads embed servers directly on top-level frame with proper `Referer` headers.
-  - `injectAdEraser()` cleans ad overlays, blocks popup windows, and sets up 0ms autoplay sweeps.
 
 ---
 
