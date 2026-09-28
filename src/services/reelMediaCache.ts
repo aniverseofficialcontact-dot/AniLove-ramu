@@ -1,18 +1,10 @@
 /**
  * High-Performance Client-Side Media Cache for Anime Reels
- * 
- * Features:
- * 1. Cache Storage API integration for persistent cross-session reel caching
- * 2. In-memory Blob & Object URL LRU cache for 0ms instant playback
- * 3. Priority-based background prefetching
- * 4. Automatic memory reclamation & Object URL revoking
+ * Direct Google Drive Edge CDN integration with immediate memory cleanup.
  */
 
-import { API_BASE, apiFetch, apiUrl } from './api';
-
 const CACHE_NAME = 'anime-reels-media-v1';
-const MAX_MEMORY_OBJECT_URLS = 25; // Keep up to 25 reels in instant RAM (~75-100MB)
-const MAX_PERSISTENT_ENTRIES = 50; // Cache Storage limit
+const MAX_MEMORY_OBJECT_URLS = 10; // Keep up to 10 reels in RAM (~30MB)
 
 interface CacheEntry {
   objectUrl: string;
@@ -27,109 +19,53 @@ class ReelMediaCache {
   private isCacheStorageSupported = typeof window !== 'undefined' && 'caches' in window;
 
   /**
-   * Get direct playable URL for a reel.
-   * Returns in-memory Object URL if available, or Cache Storage URL, or falls back to stream endpoint.
+   * Get direct playable Google Drive CDN URL for a reel.
    */
   async getReelVideoUrl(reelId: string): Promise<string> {
     if (!reelId) return '';
 
-    // 1. Check in-memory Object URL cache (fastest: 0ms RAM lookup)
+    // 1. Check in-memory Object URL cache
     const mem = this.memoryCache.get(reelId);
     if (mem) {
       mem.lastAccessed = Date.now();
       return mem.objectUrl;
     }
 
-    // 2. Check Browser Cache Storage API
-    if (this.isCacheStorageSupported) {
-      try {
-        const cache = await caches.open(CACHE_NAME);
-        const cacheKey = apiUrl(`/api/reels/stream/${reelId}`);
-        const match = await cache.match(cacheKey);
-        if (match && match.ok) {
-          const blob = await match.blob();
-          if (blob.size > 1000) {
-            const objectUrl = URL.createObjectURL(blob);
-            this.setMemoryCache(reelId, objectUrl, blob);
-            return objectUrl;
-          }
-        }
-      } catch (err) {
-        console.warn('[ReelCache] Cache Storage lookup failed:', err);
-      }
-    }
-
-    // 3. Fallback to direct streaming endpoint
-    return apiUrl(`/api/reels/stream/${reelId}`);
+    // 2. Direct Google Drive Edge CDN URL
+    return `https://lh3.googleusercontent.com/d/${reelId}`;
   }
 
   /**
-   * Preload a reel into local cache in the background
+   * Preload a reel into local memory cache in the background
    */
   async preloadReel(reelId: string, priority: 'high' | 'low' = 'low'): Promise<string | null> {
     if (!reelId) return null;
 
-    // Check if already in memory
     const mem = this.memoryCache.get(reelId);
     if (mem) {
       mem.lastAccessed = Date.now();
       return mem.objectUrl;
     }
 
-    // Check in-flight fetches
     if (this.inFlightFetches.has(reelId)) {
       return this.inFlightFetches.get(reelId)!;
     }
 
     const fetchPromise = (async () => {
       try {
-        const streamUrl = apiUrl(`/api/reels/stream/${reelId}`);
+        const streamUrl = `https://lh3.googleusercontent.com/d/${reelId}`;
 
-        // Check persistent Cache Storage first
-        if (this.isCacheStorageSupported) {
-          try {
-            const cache = await caches.open(CACHE_NAME);
-            const match = await cache.match(streamUrl);
-            if (match && match.ok) {
-              const blob = await match.blob();
-              if (blob.size > 1000) {
-                const objectUrl = URL.createObjectURL(blob);
-                this.setMemoryCache(reelId, objectUrl, blob);
-                return objectUrl;
-              }
-            }
-          } catch {
-            // continue to fetch
-          }
-        }
-
-        // Fetch over network
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        const response = await apiFetch(streamUrl, {
+        const response = await fetch(streamUrl, {
           signal: controller.signal,
-          headers: {
-            'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8'
-          },
-          // @ts-ignore
-          priority: priority === 'high' ? 'high' : 'low'
+          headers: { 'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8' },
         });
         clearTimeout(timeoutId);
 
         if (!response.ok && response.status !== 206) {
           return null;
-        }
-
-        // Clone response to put into Cache Storage
-        if (this.isCacheStorageSupported) {
-          try {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(streamUrl, response.clone()).catch(() => {});
-            this.pruneCacheStorage(cache).catch(() => {});
-          } catch {
-            // silent
-          }
         }
 
         const blob = await response.blob();
@@ -139,7 +75,6 @@ class ReelMediaCache {
         this.setMemoryCache(reelId, objectUrl, blob);
         return objectUrl;
       } catch {
-        // Silent recovery: direct stream route handles it on demand with fallback endpoints
         return null;
       } finally {
         this.inFlightFetches.delete(reelId);
@@ -150,50 +85,13 @@ class ReelMediaCache {
     return fetchPromise;
   }
 
-  /**
-   * Preload a list of reels with high priority for the next 2 reels
-   */
   async preloadBatch(reelIds: string[]): Promise<void> {
     if (!reelIds || reelIds.length === 0) return;
-    
-    // The active and next 2 reels get high priority in parallel
-    const highPriorityBatch = reelIds.slice(0, 3);
-    const lowPriorityBatch = reelIds.slice(3);
-
-    // Launch high priority downloads simultaneously for instant next-reel readiness
-    await Promise.allSettled(
-      highPriorityBatch.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null)))
-    );
-
-    // Launch low priority downloads sequentially in background
-    for (const id of lowPriorityBatch) {
-      if (id) {
-        this.preloadReel(id, 'low').catch(() => {});
-      }
-    }
-  }
-
-  /**
-   * Check if a reel is already cached in memory
-   */
-  isMemoryCached(reelId: string): boolean {
-    return this.memoryCache.has(reelId);
-  }
-
-  /**
-   * Get cached object URL synchronously if available
-   */
-  getSynchronousObjectUrl(reelId: string): string | null {
-    const mem = this.memoryCache.get(reelId);
-    if (mem) {
-      mem.lastAccessed = Date.now();
-      return mem.objectUrl;
-    }
-    return null;
+    const top2 = reelIds.slice(0, 2);
+    await Promise.allSettled(top2.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
   }
 
   private setMemoryCache(reelId: string, objectUrl: string, blob: Blob) {
-    // Evict oldest if memory cache is full
     if (this.memoryCache.size >= MAX_MEMORY_OBJECT_URLS) {
       let oldestKey = '';
       let oldestTime = Infinity;
@@ -221,25 +119,11 @@ class ReelMediaCache {
     });
   }
 
-  private async pruneCacheStorage(cache: Cache) {
-    try {
-      const requests = await cache.keys();
-      if (requests.length > MAX_PERSISTENT_ENTRIES) {
-        // Delete oldest entries
-        const toDelete = requests.slice(0, requests.length - MAX_PERSISTENT_ENTRIES);
-        for (const req of toDelete) {
-          await cache.delete(req);
-        }
-      }
-    } catch {
-      // silent
-    }
-  }
-
   /**
-   * Clear all active memory object URLs when unmounting or leaving view
+   * Complete eviction & purge: Revokes all Blob Object URLs and deletes CacheStorage.
+   * Executed automatically on app hide / close / recent tabs removal.
    */
-  cleanup() {
+  async cleanupAllMediaCache(): Promise<void> {
     for (const entry of this.memoryCache.values()) {
       try {
         URL.revokeObjectURL(entry.objectUrl);
@@ -249,7 +133,30 @@ class ReelMediaCache {
     }
     this.memoryCache.clear();
     this.inFlightFetches.clear();
+
+    if (this.isCacheStorageSupported) {
+      try {
+        await caches.delete(CACHE_NAME);
+      } catch {
+        // silent
+      }
+    }
   }
 }
 
 export const reelMediaCache = new ReelMediaCache();
+
+// Register global app lifecycle listeners to wipe video media cache when app is hidden / closed
+if (typeof window !== 'undefined') {
+  const wipeCache = () => {
+    reelMediaCache.cleanupAllMediaCache().catch(() => {});
+  };
+
+  window.addEventListener('beforeunload', wipeCache);
+  window.addEventListener('pagehide', wipeCache);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      wipeCache();
+    }
+  });
+}
