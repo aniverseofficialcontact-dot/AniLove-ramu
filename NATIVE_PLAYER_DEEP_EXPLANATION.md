@@ -45,15 +45,27 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 💬 2. Clean Subtitle Rendering, Sequence Number Filtering & Web Track Suppression
+## 🛡️ 2. Permanent Ad Eraser & Security Check Sweeper
 
-- **SRT Sequence Number Filtering**: `parseVttContent` filters out pure numeric lines (`line.matches("^\\d+$")`), removing sequential numbers (`1`, `2`, `3`, `60`, `61`...) from SubtitleCat (`English 2`) captions.
-- **Suppression of Double/Blinking Web Tracks**: Disables WebView's internal `<video>` text tracks (`track.mode = 'disabled'`) and applies CSS `display: none !important; opacity: 0 !important` to embed caption elements (`.art-subtitle`, `.jw-captions`), ensuring ONLY `text_native_subtitle_overlay` Native Android `TextView` renders the clean, selected track.
-- **Media Stream Protection & Error 233011 Fix**: Updated `isAdUrl()` so `.m3u8`, `.mp4`, `.ts`, and `.m4s` media streams are **NEVER blocked**, resolving JWPlayer Error Code 233011 on Server 1 and Server 1-B.
+- **DOM Text-Sweeper**: Scans DOM nodes on 0ms for text containing `"verify you are human"`, `"are you human"`, `"human verification"`, `"security check"`, or `"one quick check"`, instantly removing those popup elements before they can display.
+- **Prototype-Level Lock**: Locked `window.open` at prototype level (`writable: false, configurable: false`).
+- **Touch-Trap Deactivation**: Applied `pointer-events: none !important; z-index: -9999 !important` to ad overlays (`.art-mask`, `#overlay`, `#playback`, `.jw-controls`), leaving ONLY `<video>` touchable.
+- **Media Stream Protection**: `.m3u8`, `.mp4`, `.ts`, and `.m4s` streams are **NEVER blocked**, resolving JWPlayer Error Code 233011.
 
 ---
 
-## 📺 3. Playback Modes & Window Mechanics
+## 💬 3. Subtitle Appearance Styling & Priority Ordering
+
+- **Caption Stream Ordering**: `"English"` is ALWAYS placed #1 and `"English 2"` is ALWAYS placed #2 at the front of the track list in the Captions menu.
+- **Native Subtitle Overlay Styling Sync**:
+  - `applyCaptionStyle()` applies styles directly to `text_native_subtitle_overlay`:
+    - **Bottom Margin**: Dynamic bottom margin calculation (`(int) (12 + (bmPercentage * 2.2f)) * density`) with `requestLayout()` / `invalidate()`.
+    - **Outline / Shadow**: Sets `textOverlay.setShadowLayer()` based on `"Shadow"`, `"Outline"`, or `"None"`.
+    - **Regular / Bold**: Sets `Typeface.create(Typeface.DEFAULT, Typeface.BOLD)` + `setFakeBoldText(true)` for `"Bold"`.
+
+---
+
+## 📺 4. Playback Modes & Window Mechanics
 
 `NativePlayerActivity` operates in **three primary modes**:
 
@@ -79,7 +91,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 🌐 4. Server Architecture & Multi-Tier Strategy
+## 🌐 5. Server Architecture & Multi-Tier Strategy
 
 To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Server Strategy**:
 
@@ -108,7 +120,7 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## ⏩ 5. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
+## ⏩ 6. AniSkip Integration, OP/ED Skip Buttons & Permanent Yellow Seekbar Highlights
 
 - **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved the `HTTP 400 Bad Request` error, returning `HTTP 200 OK` with exact OP/ED skip intervals!
 - **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
@@ -122,14 +134,14 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## ⏱️ 6. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
+## ⏱️ 7. 2-Minutes-Remaining Stream Pre-Fetching Pipeline
 
 - **Trigger Rule**: When video playback reaches **2 minutes remaining** (`duration - current <= 120` seconds), `NativePlayerActivity` automatically pre-fetches the stream URL for Episode $N+1$ in the background.
 - **Cache Storage**: Resolved stream URLs are stored in `StreamCache`. When tapping "Next Episode", playback begins instantly with **0ms API latency**.
 
 ---
 
-## 💾 7. 500 MB LRU Disk Segment Cache
+## 💾 8. 500 MB LRU Disk Segment Cache
 
 - **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB limit** (`media_lru_cache`).
 - **WebView Storage**: Enables HTML5 IndexedDB, DOM Storage, and HTTP disk caching (`LOAD_DEFAULT`).
@@ -137,7 +149,7 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 📦 8. Bundle Optimization & Dynamic View Code-Splitting
+## 📦 9. Bundle Optimization & Dynamic View Code-Splitting
 
 - **React Lazy Loading (`App.tsx`)**: Replaced static imports with `React.lazy()` for heavy secondary views:
   - `ReelsView` (~23 KB chunk)
@@ -148,7 +160,7 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ---
 
-## 🛠️ 9. Maintenance & Troubleshooting Checklist for Developers
+## 🛠️ 10. Maintenance & Troubleshooting Checklist for Developers
 
 When updating or adding new servers or player features, verify:
 1. **Never use `el.remove()` on embed elements**: Always use CSS `display: none !important` to hide elements without crashing JS player event listeners.

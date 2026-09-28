@@ -1793,8 +1793,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             Set<String> subSet = new LinkedHashSet<>();
             subSet.add("Off");
 
+            // Always put English at front (#1), then English 2 second (#2) if available
+            if (capturedServer2BSubtitles.containsKey("English")) {
+                subSet.add("English");
+            }
+            if (capturedServer2BSubtitles.containsKey("English 2")) {
+                subSet.add("English 2");
+            }
+
             for (String lang : capturedServer2BSubtitles.keySet()) {
-                if (lang != null && !lang.trim().isEmpty()) {
+                if (lang != null && !lang.trim().isEmpty() && !lang.equalsIgnoreCase("Off") && !lang.equalsIgnoreCase("ID3 Metadata")) {
                     subSet.add(lang);
                 }
             }
@@ -2028,62 +2036,92 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void applyCaptionStyle() {
         runOnUiThread(() -> {
             TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
-            if (textOverlay != null) {
-                if (!isSubtitlesEnabled) {
-                    textOverlay.setVisibility(View.GONE);
-                } else {
-                    int textColor = Color.WHITE;
-                    try { textColor = Color.parseColor(captionColorHex); } catch (Exception ignored) {}
-                    textOverlay.setTextColor(textColor);
+            if (textOverlay == null) return;
 
-                    if (captionWeight.equalsIgnoreCase("Bold")) {
-                        textOverlay.setTypeface(Typeface.DEFAULT_BOLD);
-                    } else {
-                        textOverlay.setTypeface(Typeface.DEFAULT);
-                    }
-
-                    float baseSizeSp = 18f;
-                    float scaledSizeSp = baseSizeSp * (captionFontSize / 100f);
-                    if (scaledSizeSp < 12f) scaledSizeSp = 12f;
-                    if (scaledSizeSp > 32f) scaledSizeSp = 32f;
-                    textOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp);
-
-                    float bgAlpha = 0f;
-                    if (!bgOpacity.equals("Off") && !bgOpacity.equals("0")) {
-                        try { bgAlpha = Integer.parseInt(bgOpacity.replace("%", "")) / 100f; } catch (Exception ignored) {}
-                    }
-                    if (bgAlpha > 0f) {
-                        int baseBgColor = Color.BLACK;
-                        if (bgColor.equalsIgnoreCase("Gray")) baseBgColor = Color.GRAY;
-                        else if (bgColor.equalsIgnoreCase("Navy")) baseBgColor = Color.parseColor("#000080");
-                        else if (bgColor.equalsIgnoreCase("White")) baseBgColor = Color.WHITE;
-
-                        int alphaInt = Math.round(bgAlpha * 255);
-                        int finalBgColor = Color.argb(alphaInt, Color.red(baseBgColor), Color.green(baseBgColor), Color.blue(baseBgColor));
-
-                        GradientDrawable shape = new GradientDrawable();
-                        shape.setColor(finalBgColor);
-                        shape.setCornerRadius(12f);
-                        textOverlay.setBackground(shape);
-                    } else {
-                        textOverlay.setBackground(null);
-                    }
-
-                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) textOverlay.getLayoutParams();
-                    if (lp != null) {
-                        if (captionPosition.equalsIgnoreCase("Top")) {
-                            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-                            lp.topMargin = (int) (60 * getResources().getDisplayMetrics().density);
-                            lp.bottomMargin = 0;
-                        } else {
-                            lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-                            lp.bottomMargin = (int) (42 * getResources().getDisplayMetrics().density);
-                            lp.topMargin = 0;
-                        }
-                        textOverlay.setLayoutParams(lp);
-                    }
-                }
+            if (!isSubtitlesEnabled) {
+                textOverlay.setVisibility(View.GONE);
+                return;
             }
+
+            // 1. Text Color
+            int textColor = Color.WHITE;
+            try {
+                if (captionColorHex != null && !captionColorHex.isEmpty()) {
+                    textColor = Color.parseColor(captionColorHex);
+                }
+            } catch (Exception ignored) {}
+            textOverlay.setTextColor(textColor);
+
+            // 2. Text Weight (Regular / Bold)
+            if ("Bold".equalsIgnoreCase(captionWeight)) {
+                textOverlay.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                textOverlay.getPaint().setFakeBoldText(true);
+            } else {
+                textOverlay.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
+                textOverlay.getPaint().setFakeBoldText(false);
+            }
+
+            // 3. Text Size
+            float baseSizeSp = 18f;
+            float scaledSizeSp = baseSizeSp * (captionFontSize / 100f);
+            if (scaledSizeSp < 12f) scaledSizeSp = 12f;
+            if (scaledSizeSp > 36f) scaledSizeSp = 36f;
+            textOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, scaledSizeSp);
+
+            // 4. Outline / Shadow (edgeStyle)
+            if ("Shadow".equalsIgnoreCase(edgeStyle)) {
+                textOverlay.setShadowLayer(8f, 3f, 3f, Color.BLACK);
+            } else if ("Outline".equalsIgnoreCase(edgeStyle)) {
+                textOverlay.setShadowLayer(6f, 0f, 0f, Color.BLACK);
+            } else {
+                textOverlay.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
+            }
+
+            // 5. Background Color & Opacity
+            float bgAlpha = 0f;
+            if (bgOpacity != null && !bgOpacity.equalsIgnoreCase("Off") && !bgOpacity.equals("0")) {
+                try {
+                    bgAlpha = Integer.parseInt(bgOpacity.replace("%", "").trim()) / 100f;
+                } catch (Exception ignored) {}
+            }
+
+            if (bgAlpha > 0f) {
+                int baseBgColor = Color.BLACK;
+                if ("Gray".equalsIgnoreCase(bgColor)) baseBgColor = Color.GRAY;
+                else if ("Navy".equalsIgnoreCase(bgColor)) baseBgColor = Color.parseColor("#000080");
+                else if ("White".equalsIgnoreCase(bgColor)) baseBgColor = Color.WHITE;
+
+                int alphaInt = Math.round(bgAlpha * 255);
+                int finalBgColor = Color.argb(alphaInt, Color.red(baseBgColor), Color.green(baseBgColor), Color.blue(baseBgColor));
+
+                GradientDrawable shape = new GradientDrawable();
+                shape.setColor(finalBgColor);
+                shape.setCornerRadius(12f);
+                textOverlay.setBackground(shape);
+            } else {
+                textOverlay.setBackground(null);
+            }
+
+            // 6. Bottom Margin & Position (Top vs Bottom)
+            int bmPercentage = bottomMargin;
+            int marginDp = (int) (12 + (bmPercentage * 2.2f));
+
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) textOverlay.getLayoutParams();
+            if (lp != null) {
+                if ("Top".equalsIgnoreCase(captionPosition)) {
+                    lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                    lp.topMargin = (int) ((40 + marginDp) * getResources().getDisplayMetrics().density);
+                    lp.bottomMargin = 0;
+                } else {
+                    lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                    lp.bottomMargin = (int) (marginDp * getResources().getDisplayMetrics().density);
+                    lp.topMargin = 0;
+                }
+                textOverlay.setLayoutParams(lp);
+            }
+
+            textOverlay.requestLayout();
+            textOverlay.invalidate();
         });
 
         if (!isSubtitlesEnabled) return;
@@ -3469,6 +3507,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "      var doc = win.document; " +
                 "      var junkOverlays = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
                 "      junkOverlays.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
+                "      try { " +
+                "        var allEls = doc.querySelectorAll('div, section, dialog, iframe, a'); " +
+                "        allEls.forEach(function(el) { " +
+                "          if (el.tagName !== 'VIDEO') { " +
+                "            var txt = (el.innerText || el.textContent || '').toLowerCase(); " +
+                "            if (txt.indexOf('verify you are human') !== -1 || txt.indexOf('are you human') !== -1 || txt.indexOf('human verification') !== -1 || txt.indexOf('security check') !== -1 || txt.indexOf('one quick check') !== -1) { " +
+                "              try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); } " +
+                "            } " +
+                "          } " +
+                "        }); " +
+                "      } catch(e){} " +
                 "      var form = doc.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
                 "      if (form && !form.hasAttribute('data-auto-sub')) { " +
                 "        form.setAttribute('data-auto-sub', 'true'); " +
