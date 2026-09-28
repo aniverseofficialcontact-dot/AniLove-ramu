@@ -1,5 +1,5 @@
 // AniLove Android Service Worker
-const CACHE_NAME = 'anilove-v2';
+const CACHE_NAME = 'anilove-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -32,8 +32,9 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Exclude external cross-origin requests, Google, Firebase, trace.moe, API from SW fetch interception
+  // Exclude JS chunks, cross-origin requests, API, Google, Firebase, trace.moe from SW caching
   if (
+    url.pathname.endsWith('.js') ||
     url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
     url.hostname.includes('google') ||
