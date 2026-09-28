@@ -82,7 +82,7 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
     id,
     title: String(reel.title || `Anime Reel ${id.slice(0, 6)}`),
     cleanTitle: String(reel.cleanTitle || reel.title || `Anime Reel ${id.slice(0, 6)}`),
-    folderId: String(reel.folderId || '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'),
+    folderId: 'anime_edits_vault',
     folderName: String(reel.folderName || 'Anime Edits'),
     url: videoStreamUrl,
     directUrl: videoStreamUrl,
@@ -139,7 +139,7 @@ export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSN
           name: cleanTitle,
           title: cleanTitle,
           cleanTitle: cleanTitle,
-          folderId,
+          folderId: 'anime_edits_vault',
           folderName: 'Anime Edits'
         });
         existingMap.set(id, newReel);
