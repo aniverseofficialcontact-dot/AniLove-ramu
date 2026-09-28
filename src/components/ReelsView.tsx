@@ -108,9 +108,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return fallback.length > 0 ? fallback : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
   });
 
+  // Jump directly to Reel #2 (Index 1) on initial launch for 100% instant play
   const [historyIndex, setHistoryIndex] = useState<number>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    return session.index || 0;
+    const startIdx = session.index || 0;
+    if (startIdx === 0 && session.feed && session.feed.length > 1 && !initialReelId) {
+      return 1;
+    }
+    return startIdx;
   });
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
@@ -188,7 +193,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [getActiveVideo]);
 
-  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s or Reel 1) and forces resume
+  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s) and forces resume
   useEffect(() => {
     const interval = setInterval(() => {
       const video = getActiveVideo();
@@ -223,7 +228,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       const bundled = getBundledReels(true);
       const fallback = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
       setFeedHistory(fallback);
-      setHistoryIndex(0);
+      setHistoryIndex(1); // Jump to Reel #2
     }
   }, [filterMode]);
 
@@ -241,7 +246,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
 
-  // Direct Stream Source or RAM Blob URL (Resolves Reel 1 immediately)
+  // Direct Stream Source or RAM Blob URL
   useEffect(() => {
     if (!currentReel?.id) return;
     let isMounted = true;
@@ -303,7 +308,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Instant Autoplay Loop for Reel 1 and all reels
+  // Instant Autoplay Loop
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
@@ -396,24 +401,47 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
 
-  // Capture Clean Video Frame Snapshot (NO UI toggles or seekbars) for trace.moe API
+  // Capture Clean Video Frame Snapshot with Landscape Rotation Correction for trace.moe API
   const handleIdentifySceneFromPause = () => {
     const video = getActiveVideo();
     if (video && video.videoWidth && video.videoHeight) {
       try {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+
+        // Check if video content is rotated 90 deg sideways (aspect ratio < 0.8)
+        const isSidewaysRotated = (vw / vh) < 0.8;
+
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.92);
-          setCapturedFrameDataUrl(cleanFrameDataUrl);
-          setIsSceneFinderOpen(true);
-          return;
+        if (isSidewaysRotated) {
+          // Rotate 90 degrees counter-clockwise so Kakashi/landscape scene becomes horizontal!
+          canvas.width = vh;
+          canvas.height = vw;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.translate(0, vw);
+            ctx.rotate(-Math.PI / 2);
+            ctx.drawImage(video, 0, 0, vw, vh);
+            const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            setCapturedFrameDataUrl(cleanFrameDataUrl);
+            setIsSceneFinderOpen(true);
+            return;
+          }
+        } else {
+          // Standard horizontal landscape orientation
+          canvas.width = vw;
+          canvas.height = vh;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, vw, vh);
+            const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            setCapturedFrameDataUrl(cleanFrameDataUrl);
+            setIsSceneFinderOpen(true);
+            return;
+          }
         }
       } catch {
-        // silent fallback to poster
+        // fallback
       }
     }
     setCapturedFrameDataUrl(activePosterUrl);
@@ -766,7 +794,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 onClick={() => {
                   const bundled = getBundledReels(true);
                   setFeedHistory(bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage));
-                  setHistoryIndex(0);
+                  setHistoryIndex(1);
                 }}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all"
               >
