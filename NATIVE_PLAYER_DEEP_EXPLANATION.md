@@ -70,17 +70,18 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 🎨 3. UI Enhancements & Top Bar Synchronization
+## 🎨 3. UI Enhancements & Layout Adjustments
 
-1. **Top-Left Title Visibility Sync**:
-   - `video_title` ("Anime Name - Ep Number") moved inside `@id/top_bar` in `@id/controls_overlay`.
-   - Automatically hides when native player controls overlay fades out / hides.
-   - Vertically aligned in the exact same line as Settings, Captions, and PiP action buttons.
-   - Top bar vertical position lowered by ~5% (`paddingTop="28dp"`) for clean notch/edge clearance.
-2. **Expandable Server Selector Dropdown**:
-   - Removed the large card container box (`Streaming Servers - Active Stream Servers`).
-   - Replaced with a compact, right-aligned dropdown button showing `SERVERS` in subtle text above and `Server 1 ▾` (or `Server 2-B-SUB ▾`) as the active selector button.
-   - Tapping the selector button expands a sleek dropdown list containing all available servers (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-B-SUB`, `Server 2-A-DUB`, `Server 2-B-DUB`), allowing seamless server switching!
+1. **Floating Seek Preview Timestamp Pill (Problem 1)**:
+   - Removed `scrubberContainer.setTranslationY(40)` translation offset.
+   - Added `layout_marginBottom="28dp"` with `@drawable/indicator_pill_bg` background pill.
+   - The timestamp pill now floats high above the white seekbar thumb circle without any text overlap.
+2. **Top Bar Vertical Padding Adjustment (Problem 2)**:
+   - Reduced `paddingTop` from `28dp` to `12dp` in `@id/top_bar`.
+   - All top bar action buttons (PiP, Captions, Settings) and top-left title text now render 100% fully, crisp, and beautifully inside the visible player area without top edge clipping.
+3. **Expandable Server Selector Dropdown Position (Problem 3)**:
+   - Updated top margin to `mt-5 mb-2` in `WatchView.tsx`.
+   - The `SERVERS` label and `Server 1 ▾` dropdown button now sit with clean clearance below the video player, matching the ideal UI layout in Image 4.
 
 ---
 
@@ -136,7 +137,7 @@ To ensure 100% uptime and instant stream loading, AniLove utilizes a **2-Tier Se
 
 ## 💾 7. 500 MB LRU Disk Segment Cache
 
-- **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB disk limit** (`media_lru_cache`).
+- **ExoPlayer & HLS LRU Cache**: Configured `LeastRecentlyUsedCacheEvictor` with a **500 MB limit** (`media_lru_cache`).
 - **WebView Storage**: Enables HTML5 IndexedDB, DOM Storage, and HTTP disk caching (`LOAD_DEFAULT`).
 - **Benefit**: Seeking backwards or re-watching scenes loads segment chunks instantly from local disk without re-downloading data over the network.
 

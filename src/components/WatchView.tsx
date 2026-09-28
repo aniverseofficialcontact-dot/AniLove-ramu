@@ -421,7 +421,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
         </div>
 
         {/* Compact Right-Aligned Expandable Server Selector Dropdown */}
-        <div className="flex justify-end px-3 sm:px-0 my-2">
+        <div className="flex justify-end px-3 sm:px-0 mt-5 mb-2">
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
               SERVERS

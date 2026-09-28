@@ -1021,7 +1021,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (finalX < 10) finalX = 10;
         if (finalX > screenWidth - scrubberContainer.getWidth() - 10) finalX = screenWidth - scrubberContainer.getWidth() - 10;
         scrubberContainer.setX(finalX);
-        scrubberContainer.setTranslationY(40);
+        scrubberContainer.setTranslationY(0);
     }
 
     public class ScrubberInterface {
