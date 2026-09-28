@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   Crop,
   Heart,
-  Camera,
   Volume2,
   VolumeX,
   Download,
@@ -32,12 +31,10 @@ import {
 } from '../services/reelsService';
 import bundledReelsRaw from '../data/animeReels.json';
 import { reelMediaCache } from '../services/reelMediaCache';
-import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 
 interface ReelsViewProps {
   onBack?: () => void;
   onNavigateToAccount?: () => void;
-  onSelectAnimeForPlayback?: (anilistId: number, episodeNumber?: number, startTime?: number) => void;
   onShowToast: (type: 'success' | 'info' | 'error' | 'sync', message: string, title?: string) => void;
   initialReelId?: string;
   initialFilterMode?: 'all' | 'saved';
@@ -86,7 +83,6 @@ const slideVariants = {
 export const ReelsView: React.FC<ReelsViewProps> = ({
   onBack,
   onNavigateToAccount,
-  onSelectAnimeForPlayback,
   onShowToast,
   initialReelId,
   initialFilterMode,
@@ -108,14 +104,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return fallback.length > 0 ? fallback : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
   });
 
-  // Jump directly to Reel #2 (Index 1) on initial launch for 100% instant play
   const [historyIndex, setHistoryIndex] = useState<number>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    const startIdx = session.index || 0;
-    if (startIdx === 0 && session.feed && session.feed.length > 1 && !initialReelId) {
-      return 1;
-    }
-    return startIdx;
+    return session.index || 0;
   });
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
@@ -132,11 +123,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
   const [isScrubbing, setIsScrubbing] = useState(false);
 
-  // Scene Finder Modal & Clean Frame Snapshot
-  const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
-  const [capturedFrameDataUrl, setCapturedFrameDataUrl] = useState<string | null>(null);
   const [enrichedMetadata, setEnrichedMetadata] = useState<Record<string, EnrichedReelMetadata>>({});
-
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('cover');
 
   // Drag Physics State
@@ -173,6 +160,21 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return null;
   }, []);
 
+  // Post-mount micro-reconnect trigger: Ensures Reel 1 loads & plays 100% instantly after tab layout transition
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const video = getActiveVideo();
+      if (video && !isManuallyPausedRef.current) {
+        video.load();
+        video.play().then(() => setIsPlaying(true)).catch(() => {
+          video.muted = true;
+          video.play().then(() => setIsPlaying(true)).catch(() => {});
+        });
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [getActiveVideo]);
+
   // First Touch Unmutes Audio permanently across all reels
   useEffect(() => {
     const handleFirstTouch = () => {
@@ -193,7 +195,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [getActiveVideo]);
 
-  // Stall Watchdog: Detects if video gets stuck at any timestamp (e.g. 2s) and forces resume
+  // Stall Watchdog: Detects if video gets stuck at any timestamp and forces resume
   useEffect(() => {
     const interval = setInterval(() => {
       const video = getActiveVideo();
@@ -228,7 +230,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       const bundled = getBundledReels(true);
       const fallback = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
       setFeedHistory(fallback);
-      setHistoryIndex(1); // Jump to Reel #2
+      setHistoryIndex(0);
     }
   }, [filterMode]);
 
@@ -400,53 +402,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
   const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
-
-  // Capture Clean Video Frame Snapshot with Landscape Rotation Correction for trace.moe API
-  const handleIdentifySceneFromPause = () => {
-    const video = getActiveVideo();
-    if (video && video.videoWidth && video.videoHeight) {
-      try {
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-
-        // Check if video content is rotated 90 deg sideways (aspect ratio < 0.8)
-        const isSidewaysRotated = (vw / vh) < 0.8;
-
-        const canvas = document.createElement('canvas');
-        if (isSidewaysRotated) {
-          // Rotate 90 degrees counter-clockwise so Kakashi/landscape scene becomes horizontal!
-          canvas.width = vh;
-          canvas.height = vw;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.translate(0, vw);
-            ctx.rotate(-Math.PI / 2);
-            ctx.drawImage(video, 0, 0, vw, vh);
-            const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            setCapturedFrameDataUrl(cleanFrameDataUrl);
-            setIsSceneFinderOpen(true);
-            return;
-          }
-        } else {
-          // Standard horizontal landscape orientation
-          canvas.width = vw;
-          canvas.height = vh;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, vw, vh);
-            const cleanFrameDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            setCapturedFrameDataUrl(cleanFrameDataUrl);
-            setIsSceneFinderOpen(true);
-            return;
-          }
-        }
-      } catch {
-        // fallback
-      }
-    }
-    setCapturedFrameDataUrl(activePosterUrl);
-    setIsSceneFinderOpen(true);
-  };
 
   // Native Android & Web Download Handler
   const handleDownloadReel = () => {
@@ -794,7 +749,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 onClick={() => {
                   const bundled = getBundledReels(true);
                   setFeedHistory(bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage));
-                  setHistoryIndex(1);
+                  setHistoryIndex(0);
                 }}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all"
               >
@@ -905,15 +860,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     >
                       <Play className="w-8 h-8 fill-white translate-x-0.5" />
                     </button>
-
-                    {/* 3. Identify Scene Button (Beneath Play Symbol - Sends Clean Frame Snapshot to API) */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleIdentifySceneFromPause(); }}
-                      className="px-4 py-2 rounded-full bg-black/60 hover:bg-black/80 text-pink-400 hover:text-white border border-pink-500/40 text-xs font-bold flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition-all"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Identify Scene</span>
-                    </button>
                   </div>
                 )}
               </motion.div>
@@ -984,15 +930,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         {/* Bottom Metadata Info Card */}
         {feedHistory.length > 0 && currentReel && (
           <div className="absolute bottom-10 left-4 right-20 z-30 flex flex-col gap-1.5 pointer-events-auto">
-            {currentMeta && (
-              <div className="inline-flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-400 font-bold text-[10px] border border-pink-500/30">
-                  Ep {currentMeta.episode || '1'} @ {currentMeta.timestamp || '0:00'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium">trace.moe verified</span>
-              </div>
-            )}
-
             <h3 className="text-white font-extrabold text-base leading-snug drop-shadow-md">
               {displayTitle}
             </h3>
@@ -1042,19 +979,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           </span>
         </div>
       )}
-
-      {/* Trace.moe Scene Finder Modal */}
-      <AnimeSceneFinderModal
-        isOpen={isSceneFinderOpen}
-        onClose={() => setIsSceneFinderOpen(false)}
-        initialImageDataUrl={capturedFrameDataUrl}
-        onSelectAnime={(anilistId, ep, start) => {
-          if (onSelectAnimeForPlayback) {
-            onSelectAnimeForPlayback(anilistId, ep, start);
-          }
-        }}
-        onShowToast={onShowToast}
-      />
     </div>
   );
 };
