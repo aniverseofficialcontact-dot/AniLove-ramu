@@ -106,6 +106,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isInitialMountRef = useRef<boolean>(true);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -123,8 +124,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const lastTapTimeRef = useRef<number>(0);
   const isManuallyPausedRef = useRef<boolean>(false);
 
-  // Handle Mode Switch ('all' vs 'saved')
+  // Handle Mode Switch ('all' vs 'saved') - Skips initial mount to prevent flashing/resetting initial reel
   useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+
     if (filterMode === 'saved') {
       const saved = getStoredSavedReels();
       setFeedHistory(saved);
@@ -151,16 +157,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     setVideoSrcOverride(null);
   }, [currentReel?.id, historyIndex]);
 
-  // Live Auto-Sync: Scrapes Google Drive folder on mount
+  // Live Auto-Sync: Background check for new reels added to Google Drive
   useEffect(() => {
     let isMounted = true;
     syncLiveGoogleDriveFolder('1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE').then(({ reels, newCount }) => {
       if (isMounted) {
         if (reels && reels.length > 0) {
           setAllReels(reels);
-          if (filterMode === 'all' && feedHistory.length === 0) {
-            setFeedHistory(reels);
-          }
         }
         if (newCount > 0 && onShowToast) {
           onShowToast('success', `Synced ${newCount} new anime reels from Google Drive!`, 'Catalog Updated');
@@ -168,7 +171,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       }
     });
     return () => { isMounted = false; };
-  }, [filterMode, feedHistory.length, onShowToast]);
+  }, [onShowToast]);
 
   // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
@@ -340,7 +343,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleVideoError = () => {
     if (currentReel?.id && !videoSrcOverride) {
-      // Fallback to direct Google Drive export stream URL if LH3 CDN endpoint rejects
       setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}`);
     }
   };
