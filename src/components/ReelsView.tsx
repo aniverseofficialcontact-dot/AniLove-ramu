@@ -103,7 +103,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true); // Muted by default for instant autoplay
+  const [isMuted, setIsMuted] = useState(true); // Muted by default for instant autoplay compliance
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -112,7 +112,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [is2xSpeed, setIs2xSpeed] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
-  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
 
   // Scene Finder Modal & Cloud Enriched Metadata
   const [isSceneFinderOpen, setIsSceneFinderOpen] = useState(false);
@@ -171,36 +170,26 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Resolve playable video URL (RAM Blob URL or raw MP4 stream)
-  useEffect(() => {
-    if (!currentReel?.id) return;
-    let isMounted = true;
-
-    setVideoSrcOverride(null);
-    setIs2xSpeed(false);
-    setIsVideoLoaded(false);
-
-    reelMediaCache.getReelVideoUrl(currentReel.id).then(url => {
-      if (isMounted) {
-        setResolvedVideoUrl(url);
-      }
-    });
-
-    return () => { isMounted = false; };
-  }, [currentReel?.id, historyIndex]);
-
-  const activeVideoSrc = useMemo(() => {
+  // Direct Google Drive Inline Stream Source
+  const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
-    if (resolvedVideoUrl) return resolvedVideoUrl;
     if (!currentReel?.id) return '';
-    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
-  }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
+    const syncBlob = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
+    if (syncBlob) return syncBlob;
+    return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
+  }, [currentReel?.id, videoSrcOverride]);
 
   // Poster Image Source
   const activePosterUrl = useMemo(() => {
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
   }, [currentReel?.id]);
+
+  useEffect(() => {
+    setVideoSrcOverride(null);
+    setIs2xSpeed(false);
+    setIsVideoLoaded(false);
+  }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
@@ -240,8 +229,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (!video || !currentReel) return;
 
     video.playbackRate = is2xSpeed ? 2.0 : 1.0;
-    video.currentTime = 0;
-    setProgress(0);
 
     const playVideo = async () => {
       try {
@@ -261,7 +248,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
 
     playVideo();
-  }, [historyIndex, currentReel?.id, activeVideoSrc, getActiveVideo]);
+  }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo]);
 
   const goToNext = useCallback(() => {
     setDragOffsetY(0);
@@ -339,7 +326,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             id: `reel_${currentReel.id}`,
             anilistId: 0,
             animeTitle: 'Anime Reels',
-            episodeNumber: 1,
+            episodeNumber: historyIndex + 1,
+            streamUrl: downloadUrl,
+            pageUrl: downloadUrl,
             audio: 'SUB',
             quality: '1080p',
             serverName: 'GoogleDrive',
@@ -350,9 +339,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             localFilePath: '',
             localSubPath: '',
             thumbnail: activePosterUrl,
-            speed: '',
-            error: '',
-            downloadUrl: downloadUrl,
             title: displayTitle,
           }
         }).catch(() => {
@@ -559,7 +545,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleVideoError = () => {
     if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`);
+      setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
     }
   };
 
@@ -726,7 +712,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 <video
                   id="active-reel-video"
                   ref={el => { videoRef.current = el; }}
-                  src={activeVideoSrc}
+                  src={activeVideoUrl}
                   poster={activePosterUrl}
                   autoPlay
                   playsInline
@@ -739,6 +725,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   className={`w-full h-full ${
                     aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
                   }`}
+                  onCanPlay={e => {
+                    e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                  }}
                   onTimeUpdate={e => {
                     const el = e.currentTarget;
                     if (el.duration) {
