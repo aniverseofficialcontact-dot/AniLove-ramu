@@ -471,6 +471,35 @@ public class NativePlayerActivity extends AppCompatActivity {
         subtitleUrl = intent.getStringExtra("subtitleUrl");
         subtitleLang = intent.getStringExtra("subtitleLang");
         if (subtitleLang == null || subtitleLang.isEmpty()) subtitleLang = "English";
+
+        String allSubtitlesJson = intent.getStringExtra("allSubtitles");
+        if (allSubtitlesJson != null && !allSubtitlesJson.isEmpty()) {
+            try {
+                JSONArray arr = new JSONArray(allSubtitlesJson);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    String label = obj.optString("displayLabel", obj.optString("language", ""));
+                    String url = obj.optString("url", "");
+                    if (!label.isEmpty() && !url.isEmpty()) {
+                        capturedServer2BSubtitles.put(label, url);
+                        if (!detectedSubtitles.contains(label)) {
+                            detectedSubtitles.add(label);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("AniLove", "Error parsing allSubtitles JSON: " + e.getMessage());
+            }
+        }
+
+        if (subtitleUrl != null && !subtitleUrl.isEmpty()) {
+            capturedServer2BSubtitles.put(subtitleLang, subtitleUrl);
+            if (!detectedSubtitles.contains(subtitleLang)) {
+                detectedSubtitles.add(subtitleLang);
+            }
+            downloadAndParseVttFile(subtitleUrl);
+        }
+
         String audio = intent.getStringExtra("audio");
         if (audio == null || audio.isEmpty()) audio = "DUB";
 

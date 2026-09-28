@@ -15,12 +15,16 @@ import {
   StreamSource,
   SUPPORTED_LANGUAGES,
 } from '../services/streamingProviders';
+import { fetchUnifiedSubtitles, anonymizeAndSortSubtitleTracks } from '../services/subtitleService';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
 interface NativePlayerPlugin {
   play(options: {
     url: string;
     title: string;
+    subtitleUrl?: string;
+    subtitleLang?: string;
+    allSubtitles?: string;
     hasNext?: boolean;
     hasPrev?: boolean;
     startFullscreen?: boolean;
@@ -632,22 +636,49 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         if (onClosePlayer) onClosePlayer();
       });
 
-      NativePlayer.play({
-        url: streamSource.url,
-        subtitleUrl: streamSource.subtitleUrl,
-        subtitleLang: streamSource.subtitleLang,
-        title: `${dTitle} - Ep ${episodeNumber}`,
-        hasNext: episodesList.length > episodeNumber,
-        hasPrev: episodeNumber > 1,
-        startFullscreen: false,
-        yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
-        anilistId: anime.id,
-        idMal: anime.idMal || 0,
-        episodeNumber: Number(episodeNumber),
-        audio: audioMode,
-        advancePlayer: settings?.advancePlayerEnabled ?? false,
-        startTime: initialTime || 0,
-      }).catch(() => {});
+      let activeSubUrl = streamSource.subtitleUrl;
+      let activeSubLang = streamSource.subtitleLang || 'English';
+      let allSubtitlesJson = '';
+
+      async function launchNativePlayerWithSubtitles() {
+        try {
+          const rawTracks = await fetchUnifiedSubtitles(anime.id, currentEpNum);
+          if (rawTracks && rawTracks.length > 0) {
+            const formatted = anonymizeAndSortSubtitleTracks(
+              rawTracks,
+              settings?.primarySubtitleLang || 'English',
+              settings?.secondarySubtitleLang || 'English 2'
+            );
+            if (formatted && formatted.length > 0) {
+              activeSubUrl = formatted[0].url;
+              activeSubLang = formatted[0].displayLabel;
+              allSubtitlesJson = JSON.stringify(formatted);
+            }
+          }
+        } catch (e) {
+          console.warn('Error fetching unified subtitles in ProVideoPlayer:', e);
+        }
+
+        NativePlayer.play({
+          url: streamSource.url,
+          subtitleUrl: activeSubUrl,
+          subtitleLang: activeSubLang,
+          allSubtitles: allSubtitlesJson,
+          title: `${dTitle} - Ep ${episodeNumber}`,
+          hasNext: episodesList.length > episodeNumber,
+          hasPrev: episodeNumber > 1,
+          startFullscreen: false,
+          yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
+          anilistId: anime.id,
+          idMal: anime.idMal || 0,
+          episodeNumber: Number(episodeNumber),
+          audio: audioMode,
+          advancePlayer: settings?.advancePlayerEnabled ?? false,
+          startTime: initialTime || 0,
+        }).catch(() => {});
+      }
+
+      launchNativePlayerWithSubtitles();
     }
   }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
 
