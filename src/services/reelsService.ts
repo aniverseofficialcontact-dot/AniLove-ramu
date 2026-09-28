@@ -1,6 +1,8 @@
 import { AnimeReel } from '../types';
 import { reelMediaCache } from './reelMediaCache';
 import bundledReelsRaw from '../data/animeReels.json';
+import { db } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const SAVED_REELS_STORAGE_KEY = 'anilove_saved_anime_reels';
 const WATCHED_REELS_IDS_KEY = 'anilove_reels_watched_ids';
@@ -25,13 +27,8 @@ export interface ReelsSessionState {
 }
 
 let inMemoryReelsSession: ReelsSessionState | null = null;
-
-// Temporary in-memory RAM cache for active session (100% trace.moe API based - zero Firebase)
 const cloudMetadataCache = new Map<string, EnrichedReelMetadata>();
 
-/**
- * Fetch enriched metadata for a reel from active RAM session memory
- */
 export async function fetchReelCloudMetadata(reelId: string): Promise<EnrichedReelMetadata | null> {
   if (!reelId) return null;
   if (cloudMetadataCache.has(reelId)) {
@@ -40,17 +37,11 @@ export async function fetchReelCloudMetadata(reelId: string): Promise<EnrichedRe
   return null;
 }
 
-/**
- * Save enriched reel metadata (identified via trace.moe) in active session RAM
- */
 export async function saveReelCloudMetadata(reelId: string, metadata: EnrichedReelMetadata): Promise<void> {
   if (!reelId || !metadata) return;
   cloudMetadataCache.set(reelId, metadata);
 }
 
-/**
- * Watched Reels Registry Management (Anti-Repetition Engine)
- */
 export function getWatchedReelIds(): Set<string> {
   try {
     const raw = localStorage.getItem(WATCHED_REELS_IDS_KEY);
@@ -85,8 +76,9 @@ export function clearWatchedReelIds(): void {
 
 export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
   const id = String(reel.id || '').trim();
-  const directCdnUrl = `https://lh3.googleusercontent.com/d/${id}`;
-  const downloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;
+  const videoStreamUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download`;
+  const fallbackDownloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;
+  const posterImageUrl = `https://lh3.googleusercontent.com/d/${id}`;
 
   return {
     id,
@@ -94,19 +86,16 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
     cleanTitle: String(reel.cleanTitle || reel.title || `Anime Reel ${id.slice(0, 6)}`),
     folderId: String(reel.folderId || '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'),
     folderName: String(reel.folderName || 'Anime Edits'),
-    url: directCdnUrl,
-    directUrl: directCdnUrl,
-    thumbnailUrl: directCdnUrl,
-    streamProxyUrl: directCdnUrl,
-    downloadProxyUrl: downloadUrl,
+    url: videoStreamUrl,
+    directUrl: videoStreamUrl,
+    thumbnailUrl: posterImageUrl,
+    streamProxyUrl: videoStreamUrl,
+    downloadProxyUrl: fallbackDownloadUrl,
     size: reel.size ? String(reel.size) : 'HD Video',
     mimeType: String(reel.mimeType || 'video/mp4')
   };
 }
 
-/**
- * Auto-Sync Engine: Safely handles live Google Drive folder checks
- */
 export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'): Promise<{ reels: AnimeReel[]; newCount: number }> {
   try {
     const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -172,9 +161,6 @@ export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSN
   }
 }
 
-/**
- * Returns candidate reels, combining bundled asset reels + any live dynamically discovered Google Drive reels
- */
 export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
   let list = Array.isArray(bundledReelsRaw) ? bundledReelsRaw.map(sanitizeReelForStorage) : [];
 
