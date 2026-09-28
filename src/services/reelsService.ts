@@ -74,7 +74,7 @@ export function clearWatchedReelIds(): void {
 
 export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
   const id = String(reel.id || '').trim();
-  const rawStreamUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`;
+  const videoStreamUrl = `https://drive.google.com/uc?export=view&id=${id}`;
   const fallbackDownloadUrl = `https://drive.google.com/uc?export=download&id=${id}&confirm=t`;
   const posterImageUrl = `https://lh3.googleusercontent.com/d/${id}`;
 
@@ -84,10 +84,10 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
     cleanTitle: String(reel.cleanTitle || reel.title || `Anime Reel ${id.slice(0, 6)}`),
     folderId: 'anime_edits_vault',
     folderName: String(reel.folderName || 'Anime Edits'),
-    url: rawStreamUrl,
-    directUrl: rawStreamUrl,
+    url: videoStreamUrl,
+    directUrl: videoStreamUrl,
     thumbnailUrl: posterImageUrl,
-    streamProxyUrl: rawStreamUrl,
+    streamProxyUrl: videoStreamUrl,
     downloadProxyUrl: fallbackDownloadUrl,
     size: reel.size ? String(reel.size) : 'HD Video',
     mimeType: String(reel.mimeType || 'video/mp4')
@@ -300,6 +300,7 @@ export function getStartingReelsFeed(
   index: number;
   filterMode: 'all' | 'saved';
 } {
+  const existingSession = getStoredReelsSession();
   const bundled = getBundledReels(true);
   const savedReels = getStoredSavedReels();
 
@@ -330,6 +331,16 @@ export function getStartingReelsFeed(
     return {
       feed,
       index: 0,
+      filterMode: 'all',
+    };
+  }
+
+  // Restore active session when switching tabs in app
+  if (existingSession && existingSession.feedHistory && existingSession.feedHistory.length > 0 && existingSession.filterMode !== 'saved') {
+    let resumeIndex = Math.max(0, Math.min(existingSession.historyIndex, existingSession.feedHistory.length - 1));
+    return {
+      feed: existingSession.feedHistory,
+      index: resumeIndex,
       filterMode: 'all',
     };
   }

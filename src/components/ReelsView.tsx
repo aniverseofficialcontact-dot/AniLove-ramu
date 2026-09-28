@@ -6,15 +6,14 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
-  Share2,
   Crop,
   Heart,
   Camera,
-  FastForward,
   Volume2,
   VolumeX,
   Download,
-  RefreshCw
+  RefreshCw,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { registerPlugin, Capacitor } from '@capacitor/core';
@@ -28,6 +27,7 @@ import {
   markReelAsWatched,
   fetchReelCloudMetadata,
   sanitizeReelForStorage,
+  saveStoredReelsSession,
   EnrichedReelMetadata
 } from '../services/reelsService';
 import bundledReelsRaw from '../data/animeReels.json';
@@ -50,23 +50,23 @@ const slideVariants = {
   enter: (direction: number) => ({
     y: direction > 0 ? '100%' : '-100%',
     opacity: 0,
-    scale: 0.96,
+    scale: 0.97,
   }),
   center: {
     y: 0,
     opacity: 1,
     scale: 1,
     transition: {
-      y: { type: 'spring', stiffness: 320, damping: 32 },
+      y: { type: 'spring', stiffness: 350, damping: 30 },
       opacity: { duration: 0.2 },
     },
   },
   exit: (direction: number) => ({
     y: direction < 0 ? '100%' : '-100%',
     opacity: 0,
-    scale: 0.96,
+    scale: 0.97,
     transition: {
-      y: { type: 'spring', stiffness: 320, damping: 32 },
+      y: { type: 'spring', stiffness: 350, damping: 30 },
       opacity: { duration: 0.2 },
     },
   }),
@@ -103,7 +103,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true); // Muted by default for instant autoplay compliance
+  const [isMuted, setIsMuted] = useState(false); // Unmuted audio by default as requested
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -170,7 +170,19 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Direct Google Drive Inline Stream Source
+  // Save session state to restore position when switching tabs in app
+  useEffect(() => {
+    if (feedHistory.length > 0 && currentReel) {
+      saveStoredReelsSession({
+        feedHistory,
+        historyIndex,
+        filterMode,
+        lastWatchedReelId: currentReel.id
+      });
+    }
+  }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
+
+  // Direct Stream Source or RAM Blob URL
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
@@ -233,6 +245,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const playVideo = async () => {
       try {
         video.muted = isMuted;
+        video.volume = 1.0;
         await video.play();
         setIsPlaying(true);
       } catch {
@@ -379,7 +392,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
-  // Tap & Double Tap (Unmutes sound on first tap)
+  // Tap & Double Tap
   const handleCanvasInteraction = useCallback(() => {
     const video = getActiveVideo();
     if (video && video.muted) {
@@ -616,16 +629,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         </div>
       </div>
 
-      {/* 2x Fast Forward Pill Indicator */}
+      {/* 2x Fast Forward Small White Text Badge Indicator */}
       <AnimatePresence>
         {is2xSpeed && (
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            initial={{ opacity: 0, y: -15, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-1.5 rounded-full bg-pink-600/90 text-white font-black text-xs backdrop-blur-md shadow-[0_0_20px_rgba(236,72,153,0.6)] flex items-center gap-1.5 border border-pink-400/50 pointer-events-none"
+            exit={{ opacity: 0, y: -15, scale: 0.9 }}
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-black/60 text-white font-extrabold text-xs backdrop-blur-md border border-white/20 shadow-lg flex items-center gap-1.5 pointer-events-none"
           >
-            <FastForward className="w-4 h-4 animate-pulse" />
             <span>2x Speed</span>
           </motion.div>
         )}
@@ -750,12 +762,17 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   </motion.div>
                 )}
 
-                {/* Play/Pause Overlay Feedback */}
+                {/* Play/Pause Glassmorphism Overlay Feedback */}
                 {showPlayPauseFeedback && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                    <div className="p-4 rounded-full bg-black/60 text-white backdrop-blur-md animate-ping">
-                      {showPlayPauseFeedback === 'play' ? <Play className="w-10 h-10 fill-white" /> : <Pause className="w-10 h-10 fill-white" />}
-                    </div>
+                    <motion.div
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1.1, opacity: 1 }}
+                      exit={{ scale: 0.6, opacity: 0 }}
+                      className="p-5 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 shadow-2xl"
+                    >
+                      {showPlayPauseFeedback === 'play' ? <Play className="w-12 h-12 fill-white" /> : <Pause className="w-12 h-12 fill-white" />}
+                    </motion.div>
                   </div>
                 )}
               </motion.div>
@@ -763,74 +780,62 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           )
         )}
 
-        {/* Right Side Floating Action Buttons & Navigation Chevrons */}
+        {/* Right Side Floating Action Column (Matching Image 2: Clean Transparent Line Icons) */}
         {feedHistory.length > 0 && currentReel && (
-          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-3.5 pointer-events-auto">
-            {/* Scroll Up Button */}
+          <div className="absolute right-4 bottom-20 z-30 flex flex-col items-center gap-6 pointer-events-auto">
+            {/* 1. Share / Send Icon */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleShare(); }}
+              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
+              title="Share Reel"
+            >
+              <Send className="w-6 h-6 -rotate-45" />
+            </button>
+
+            {/* 2. Bookmark / Save Icon */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
+              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
+              title="Save Reel"
+            >
+              <Bookmark className={`w-6 h-6 ${savedStatus[currentReel.id] ? 'fill-white text-white' : ''}`} />
+            </button>
+
+            {/* 3. Crop / Fit Mode Icon */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
+              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
+              title="Fit / Fill Aspect Ratio"
+            >
+              <Crop className="w-6 h-6" />
+            </button>
+
+            {/* 4. Download Icon */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDownloadReel(); }}
+              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
+              title="Download Reel"
+            >
+              <Download className="w-6 h-6" />
+            </button>
+
+            {/* 5. Chevron Up Icon */}
             <button
               onClick={(e) => { e.stopPropagation(); goToPrev(); }}
               disabled={historyIndex === 0}
-              className="p-3 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 hover:bg-pink-600 disabled:opacity-30 transition-all cursor-pointer shadow-lg"
+              className="p-1.5 text-white/90 hover:text-white disabled:opacity-30 transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
               title="Previous Reel"
             >
-              <ChevronUp className="w-5 h-5" />
+              <ChevronUp className="w-6 h-6" />
             </button>
 
-            {/* Bookmark / Save Button */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-              className="flex flex-col items-center gap-1 group cursor-pointer"
-            >
-              <div className={`p-3 rounded-full backdrop-blur-md border transition-all ${
-                savedStatus[currentReel.id]
-                  ? 'bg-pink-600 text-white border-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.5)]'
-                  : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
-              }`}>
-                <Bookmark className={`w-5 h-5 ${savedStatus[currentReel.id] ? 'fill-white' : ''}`} />
-              </div>
-              <span className="text-[10px] font-bold text-slate-200">Save</span>
-            </button>
-
-            {/* Download Reel Button */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDownloadReel(); }}
-              className="flex flex-col items-center gap-1 group cursor-pointer"
-            >
-              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-pink-600 hover:border-pink-500 transition-all">
-                <Download className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-bold text-slate-200">Download</span>
-            </button>
-
-            {/* Share Button */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleShare(); }}
-              className="flex flex-col items-center gap-1 group cursor-pointer"
-            >
-              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-                <Share2 className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-bold text-slate-200">Share</span>
-            </button>
-
-            {/* Fit / Cover Mode Toggle */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
-              className="flex flex-col items-center gap-1 group cursor-pointer"
-            >
-              <div className="p-3 rounded-full bg-black/40 text-white backdrop-blur-md border border-white/20 hover:bg-black/60 transition-all">
-                <Crop className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-bold text-slate-200">{aspectFitMode === 'contain' ? 'Fit' : 'Fill'}</span>
-            </button>
-
-            {/* Scroll Down Button */}
+            {/* 6. Chevron Down Icon */}
             <button
               onClick={(e) => { e.stopPropagation(); goToNext(); }}
-              className="p-3 rounded-full bg-pink-600 text-white backdrop-blur-md border border-pink-400 hover:bg-pink-500 transition-all cursor-pointer shadow-lg animate-pulse"
+              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
               title="Next Reel"
             >
-              <ChevronDown className="w-5 h-5" />
+              <ChevronDown className="w-6 h-6" />
             </button>
           </div>
         )}

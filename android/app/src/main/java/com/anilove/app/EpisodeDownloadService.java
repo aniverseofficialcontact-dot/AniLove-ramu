@@ -670,25 +670,43 @@ public class EpisodeDownloadService extends Service {
     }
 
     private HttpURLConnection openConnectionWithHeaders(String urlStr, String referer) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-        conn.setRequestProperty("Accept", "*/*");
-        conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+        String currentUrl = urlStr;
+        HttpURLConnection conn = null;
 
-        String effectiveReferer = referer;
-        if (effectiveReferer == null || effectiveReferer.isEmpty() || "https://google.com/".equals(effectiveReferer)) {
-            effectiveReferer = getRefererForUrl(urlStr, null);
+        for (int hop = 0; hop < 6; hop++) {
+            conn = (HttpURLConnection) new URL(currentUrl).openConnection();
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+
+            String effectiveReferer = referer;
+            if (effectiveReferer == null || effectiveReferer.isEmpty() || "https://google.com/".equals(effectiveReferer)) {
+                effectiveReferer = getRefererForUrl(currentUrl, null);
+            }
+
+            conn.setRequestProperty("Referer", effectiveReferer);
+            try {
+                URL u = new URL(effectiveReferer);
+                conn.setRequestProperty("Origin", u.getProtocol() + "://" + u.getHost());
+            } catch (Exception ignored) {}
+
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(25000);
+
+            int code = conn.getResponseCode();
+            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP
+                    || code == HttpURLConnection.HTTP_SEE_OTHER || code == 307 || code == 308) {
+                String loc = conn.getHeaderField("Location");
+                if (loc != null && !loc.isEmpty()) {
+                    currentUrl = loc;
+                    conn.disconnect();
+                    continue;
+                }
+            }
+            break;
         }
 
-        conn.setRequestProperty("Referer", effectiveReferer);
-        try {
-            URL u = new URL(effectiveReferer);
-            conn.setRequestProperty("Origin", u.getProtocol() + "://" + u.getHost());
-        } catch (Exception ignored) {}
-
-        conn.setConnectTimeout(15000);
-        conn.setReadTimeout(25000);
         return conn;
     }
 
