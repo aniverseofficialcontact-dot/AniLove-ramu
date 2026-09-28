@@ -171,7 +171,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           video.play().then(() => setIsPlaying(true)).catch(() => {});
         });
       }
-    }, 80);
+    }, 60);
     return () => clearTimeout(timer);
   }, [getActiveVideo]);
 
@@ -195,7 +195,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [getActiveVideo]);
 
-  // Stall Watchdog: Detects if video gets stuck at any timestamp and forces resume
+  // Stall Watchdog & Auto-Reconnect Engine: Detects if video gets stuck at any timestamp (e.g. 2s) and forces auto-reconnect
   useEffect(() => {
     const interval = setInterval(() => {
       const video = getActiveVideo();
@@ -203,17 +203,21 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
       const now = Date.now();
       if (video.currentTime === lastCurrentTimeRef.current) {
-        if (now - lastTimeUpdateRef.current > 1200) {
+        if (now - lastTimeUpdateRef.current > 800) {
+          // Auto-reconnect kick
           video.play().catch(() => {});
+          if (now - lastTimeUpdateRef.current > 2000 && currentReel?.id && !videoSrcOverride) {
+            setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
+          }
         }
       } else {
         lastCurrentTimeRef.current = video.currentTime;
         lastTimeUpdateRef.current = now;
       }
-    }, 500);
+    }, 400);
 
     return () => clearInterval(interval);
-  }, [getActiveVideo]);
+  }, [getActiveVideo, currentReel?.id, videoSrcOverride]);
 
   // Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
@@ -303,10 +307,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => clearTimeout(timer);
   }, [currentReel?.id, isPlaying]);
 
-  // Preload upcoming reels
+  // Preload upcoming 4 reels in parallel background RAM for 0ms seamless scrolling
   useEffect(() => {
     if (!currentReel) return;
-    const upcoming = feedHistory.slice(historyIndex + 1, historyIndex + 4).map(r => r.id);
+    const upcoming = feedHistory.slice(historyIndex + 1, historyIndex + 5).map(r => r.id);
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
@@ -810,6 +814,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   muted={isMuted}
                   referrerPolicy="no-referrer"
                   onError={handleVideoError}
+                  onStalled={() => {
+                    const v = getActiveVideo();
+                    if (v && !isManuallyPausedRef.current) v.play().catch(() => {});
+                  }}
+                  onWaiting={() => {
+                    const v = getActiveVideo();
+                    if (v && !isManuallyPausedRef.current) v.play().catch(() => {});
+                  }}
                   onPlaying={() => setIsVideoLoaded(true)}
                   onLoadedData={() => setIsVideoLoaded(true)}
                   className={`w-full h-full ${
@@ -843,7 +855,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 {/* PAUSE OVERLAY STACK (Clean Transparent Background - NO BLUR!) */}
                 {(!isPlaying || isManuallyPausedRef.current) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-40 bg-transparent transition-all pointer-events-auto">
-                    {/* 1. Mute/Unmute Circular Button (Above Play Symbol - Image 2 & 3) */}
+                    {/* 1. Mute/Unmute Circular Button (Above Play Symbol) */}
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                       className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-xl cursor-pointer active:scale-90 transition-all"
@@ -852,7 +864,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                       {isMuted ? <VolumeX className="w-6 h-6 text-pink-400" /> : <Volume2 className="w-6 h-6 text-emerald-400" />}
                     </button>
 
-                    {/* 2. Center Play Symbol (Image 1) */}
+                    {/* 2. Center Play Symbol */}
                     <button
                       onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                       className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-2xl cursor-pointer active:scale-95 transition-all"

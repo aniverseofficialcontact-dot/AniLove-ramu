@@ -1,10 +1,10 @@
 /**
  * High-Performance RAM Blob URL Cache for Anime Reels
- * Bypasses Google Drive player iframe completely and converts raw MP4 streams into 0ms RAM Blob URLs.
+ * Pre-buffers next 4 upcoming reels in device RAM (~60MB) for 0ms seamless scrolling.
  */
 
-const CACHE_NAME = 'anime-reels-media-v2';
-const MAX_MEMORY_OBJECT_URLS = 12; // Keep up to 12 reels in instant RAM (~45MB)
+const CACHE_NAME = 'anime-reels-media-v3';
+const MAX_MEMORY_OBJECT_URLS = 16; // Keep up to 16 reels in instant RAM (~60MB)
 
 interface CacheEntry {
   objectUrl: string;
@@ -32,7 +32,10 @@ class ReelMediaCache {
       return mem.objectUrl;
     }
 
-    // 2. Direct raw MP4 binary stream with &confirm=t flag (Bypasses Google Drive virus scan warning)
+    // 2. Trigger background pre-fetch into RAM
+    this.preloadReel(reelId, 'high').catch(() => {});
+
+    // 3. Direct raw MP4 binary stream with &confirm=t flag
     return `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`;
   }
 
@@ -57,9 +60,9 @@ class ReelMediaCache {
         const rawStreamUrl = `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`;
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 18000);
 
-        const response = await fetch(rawStreamUrl, {
+        let response = await fetch(rawStreamUrl, {
           signal: controller.signal,
           headers: {
             'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8',
@@ -67,6 +70,14 @@ class ReelMediaCache {
           },
         });
         clearTimeout(timeoutId);
+
+        if (!response.ok && response.status !== 206) {
+          // Fallback endpoint
+          const fallbackUrl = `https://drive.google.com/uc?export=download&id=${reelId}&confirm=t`;
+          response = await fetch(fallbackUrl, {
+            headers: { 'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8' }
+          });
+        }
 
         if (!response.ok && response.status !== 206) {
           return null;
@@ -90,12 +101,12 @@ class ReelMediaCache {
   }
 
   /**
-   * Preload active reel + next 2 reels in background RAM
+   * Preload active reel + next 4 upcoming reels in parallel background RAM
    */
   async preloadBatch(reelIds: string[]): Promise<void> {
     if (!reelIds || reelIds.length === 0) return;
-    const top3 = reelIds.slice(0, 3);
-    await Promise.allSettled(top3.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
+    const top4 = reelIds.slice(0, 4);
+    await Promise.allSettled(top4.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
   }
 
   /**
