@@ -1,8 +1,6 @@
 import { AnimeReel } from '../types';
 import { reelMediaCache } from './reelMediaCache';
 import bundledReelsRaw from '../data/animeReels.json';
-import { db } from '../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const SAVED_REELS_STORAGE_KEY = 'anilove_saved_anime_reels';
 const WATCHED_REELS_IDS_KEY = 'anilove_reels_watched_ids';
@@ -28,54 +26,26 @@ export interface ReelsSessionState {
 
 let inMemoryReelsSession: ReelsSessionState | null = null;
 
-// Temporary in-memory RAM cache for active session
+// Temporary in-memory RAM cache for active session (100% trace.moe API based - zero Firebase)
 const cloudMetadataCache = new Map<string, EnrichedReelMetadata>();
 
 /**
- * Fetch enriched metadata for a reel (Firebase Firestore with RAM lookup)
+ * Fetch enriched metadata for a reel from active RAM session memory
  */
 export async function fetchReelCloudMetadata(reelId: string): Promise<EnrichedReelMetadata | null> {
   if (!reelId) return null;
-
   if (cloudMetadataCache.has(reelId)) {
     return cloudMetadataCache.get(reelId)!;
   }
-
-  try {
-    const docRef = doc(db, 'reels_metadata', reelId);
-    const snap = await Promise.race([
-      getDoc(docRef),
-      new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Firebase timeout')), 2000))
-    ]);
-
-    if (snap && snap.exists()) {
-      const data = snap.data() as EnrichedReelMetadata;
-      cloudMetadataCache.set(reelId, data);
-      return data;
-    }
-  } catch (err) {
-    // Silent recovery on network issues
-  }
-
   return null;
 }
 
 /**
- * Save enriched reel metadata (Firebase Firestore only)
+ * Save enriched reel metadata (identified via trace.moe) in active session RAM
  */
 export async function saveReelCloudMetadata(reelId: string, metadata: EnrichedReelMetadata): Promise<void> {
   if (!reelId || !metadata) return;
   cloudMetadataCache.set(reelId, metadata);
-
-  try {
-    const docRef = doc(db, 'reels_metadata', reelId);
-    await setDoc(docRef, {
-      ...metadata,
-      identifiedAt: Date.now()
-    }, { merge: true });
-  } catch (err) {
-    // silent
-  }
 }
 
 /**
@@ -135,14 +105,13 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
 }
 
 /**
- * Auto-Sync Engine: Safely handles live Google Drive folder checks without CORS noise
+ * Auto-Sync Engine: Safely handles live Google Drive folder checks
  */
 export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'): Promise<{ reels: AnimeReel[]; newCount: number }> {
   try {
     const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     const isCapacitor = typeof window !== 'undefined' && Boolean((window as any).Capacitor);
 
-    // Bypasses browser CORS policy errors on local Capacitor WebView while retaining local dataset
     if (isLocalhost || isCapacitor) {
       return { reels: getBundledReels(false), newCount: 0 };
     }
@@ -209,7 +178,6 @@ export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSN
 export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
   let list = Array.isArray(bundledReelsRaw) ? bundledReelsRaw.map(sanitizeReelForStorage) : [];
 
-  // Merge any dynamically synced live reels from local cache
   try {
     const rawDynamic = localStorage.getItem(DYNAMIC_REELS_STORAGE_KEY);
     if (rawDynamic) {
