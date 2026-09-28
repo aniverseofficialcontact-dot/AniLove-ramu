@@ -2804,6 +2804,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         for (String rawLine : lines) {
             String line = rawLine.trim();
+            if (line.matches("^\\d+$")) continue; // Filter out SRT sequence numbers (1, 2, 3, 424...)
+
             if (line.contains("-->")) {
                 if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
                     String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
@@ -3029,6 +3031,9 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private boolean isAdUrl(String lower) {
         if (lower == null) return false;
+        if (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".ts") || lower.contains(".m4s")) {
+            return false;
+        }
         return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
                lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
                lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||

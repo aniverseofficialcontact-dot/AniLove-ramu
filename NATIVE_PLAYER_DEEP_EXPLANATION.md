@@ -45,20 +45,11 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 💬 2. Direct Native Subtitle Fetching, Appearance Sync & Timing Correction
+## 💬 2. Clean Subtitle Rendering, Sequence Number Filtering & Web Track Suppression
 
-- **Direct Native Java Subtitle Fetcher (`fetchUnifiedSubtitlesJava`)**:
-  - `NativePlayerActivity.java` executes `fetchUnifiedSubtitlesJava(anilistId, episodeNumber)` directly on a Java background thread upon episode load.
-  - Queries `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId={anilistId}&ep={epNum}` and parses all 20+ tracks (`"English"`, `"English 2"`, `"Spanish"`, `"Spanish 2"`, `"French"`, `"German"`, `"Russian"`, `"Arabic"`, `"Japanese"`, etc.), populating `capturedServer2BSubtitles` and `detectedSubtitles` automatically.
-  - All tracks display cleanly as interactive pills under `SUBTITLE TRACK` in the Captions menu.
-- **Caption Appearance Customization Sync**:
-  - Updated `applyCaptionStyle()`:
-    - **Bottom Margin**: Parses `bottomMargin` (`"0%"` to `"25%"`) and sets dynamic bottom margin on `text_native_subtitle_overlay`.
-    - **Outline / Shadow**: Sets `textOverlay.setShadowLayer()` based on `edgeStyle` (`"Shadow"`, `"Outline"`, `"None"`).
-    - **Regular / Bold**: Sets `Typeface.DEFAULT_BOLD` vs `Typeface.DEFAULT` based on `captionWeight`.
-- **Corrected Timing Stepper Direction**:
-  - In `updateNativeSubtitleOverlay(double currentSec)`, updated `currentMs` formula to `(currentSec - subtitleTimingOffset)`.
-  - Adding `+1.0s` now correctly delays subtitles to appear at 11 seconds (instead of 9s), and `-1.0s` advances subtitles to appear earlier at 9 seconds.
+- **SRT Sequence Number Filtering**: `parseVttContent` filters out pure numeric lines (`line.matches("^\\d+$")`), removing sequential numbers (`1`, `2`, `3`, `60`, `61`...) from SubtitleCat (`English 2`) captions.
+- **Suppression of Double/Blinking Web Tracks**: Disables WebView's internal `<video>` text tracks (`track.mode = 'disabled'`) and applies CSS `display: none !important; opacity: 0 !important` to embed caption elements (`.art-subtitle`, `.jw-captions`), ensuring ONLY `text_native_subtitle_overlay` Native Android `TextView` renders the clean, selected track.
+- **Media Stream Protection & Error 233011 Fix**: Updated `isAdUrl()` so `.m3u8`, `.mp4`, `.ts`, and `.m4s` media streams are **NEVER blocked**, resolving JWPlayer Error Code 233011 on Server 1 and Server 1-B.
 
 ---
 
