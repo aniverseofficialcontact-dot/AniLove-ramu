@@ -32,11 +32,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Exclude API, Firebase, and streaming video chunks from aggressive caching
+  // Exclude external cross-origin requests, Google, Firebase, trace.moe, API from SW fetch interception
   if (
+    url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
+    url.hostname.includes('google') ||
     url.hostname.includes('firebase') ||
-    url.hostname.includes('googleapis') ||
+    url.hostname.includes('trace.moe') ||
     url.hostname.includes('anilist.co') ||
     url.pathname.endsWith('.m3u8') ||
     url.pathname.endsWith('.ts')
@@ -46,7 +48,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
+      return fetch(event.request)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             const responseToCache = networkResponse.clone();
@@ -56,9 +58,9 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => cached);
-
-      return cached || fetchPromise;
+        .catch(() => {
+          return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
     })
   );
 });

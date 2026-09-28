@@ -124,7 +124,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const lastTapTimeRef = useRef<number>(0);
   const isManuallyPausedRef = useRef<boolean>(false);
 
-  // Handle Mode Switch ('all' vs 'saved') - Skips initial mount to prevent flashing/resetting initial reel
+  // Handle Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -199,13 +199,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => clearTimeout(timer);
   }, [currentReel?.id, isPlaying]);
 
-  // Keep URL path clean
+  // Keep URL path clean (Skipped on Capacitor Android to prevent https://localhost/reel/... asset errors)
   useEffect(() => {
     if (currentReel?.id && typeof window !== 'undefined') {
       try {
-        const cleanPath = `/reel/${encodeURIComponent(currentReel.id)}`;
-        if (window.location.pathname !== cleanPath) {
-          window.history.replaceState(null, '', cleanPath);
+        const isCapacitor = Boolean((window as any).Capacitor);
+        if (!isCapacitor) {
+          const cleanPath = `/reel/${encodeURIComponent(currentReel.id)}`;
+          if (window.location.pathname !== cleanPath) {
+            window.history.replaceState(null, '', cleanPath);
+          }
         }
       } catch {}
     }
