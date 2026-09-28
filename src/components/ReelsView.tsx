@@ -145,12 +145,18 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Direct Google Drive CDN Video Source
+  // Direct Google Drive MP4 Video Source
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
-    return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
+    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`;
   }, [currentReel?.id, videoSrcOverride]);
+
+  // Direct Google Drive JPEG Poster Image Source
+  const activePosterUrl = useMemo(() => {
+    if (!currentReel?.id) return '';
+    return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
+  }, [currentReel?.id]);
 
   // Reset video source override on reel change
   useEffect(() => {
@@ -199,7 +205,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => clearTimeout(timer);
   }, [currentReel?.id, isPlaying]);
 
-  // Keep URL path clean (Skipped on Capacitor Android to prevent https://localhost/reel/... asset errors)
+  // Keep URL path clean (Skipped on Capacitor Android)
   useEffect(() => {
     if (currentReel?.id && typeof window !== 'undefined') {
       try {
@@ -449,10 +455,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               onClick={handleCanvasInteraction}
               className="relative w-full h-full flex items-center justify-center cursor-pointer"
             >
-              {/* Background Ambient Poster */}
+              {/* Background Ambient Poster Image (Using activePosterUrl) */}
               <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
                 <img
-                  src={activeVideoUrl}
+                  src={activePosterUrl}
                   alt=""
                   className="w-full h-full object-cover blur-3xl opacity-30 scale-125"
                 />
@@ -464,11 +470,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 key={currentReel.id}
                 ref={el => { videoRef.current = el; }}
                 src={activeVideoUrl}
-                poster={activeVideoUrl}
+                poster={activePosterUrl}
                 autoPlay
                 playsInline
                 loop
                 muted={false}
+                referrerPolicy="no-referrer"
                 onError={handleVideoError}
                 className={`w-full h-full max-w-[420px] max-h-[92vh] ${
                   aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
