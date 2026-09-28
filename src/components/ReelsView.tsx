@@ -165,19 +165,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const currentReel = feedHistory[historyIndex] || null;
 
-  // Video Stream Source with Fail-Safe Fallbacks
+  // Direct Google Drive Inline MP4 Stream Source (Content-Disposition: inline)
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
     if (!currentReel?.id) return '';
-    return `https://drive.google.com/uc?export=download&id=${currentReel.id}`;
+    return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
   }, [currentReel?.id, videoSrcOverride]);
 
-  // Poster Image Source
+  // Direct Google Drive JPEG Poster Image Source
   const activePosterUrl = useMemo(() => {
     if (!currentReel?.id) return '';
     return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
   }, [currentReel?.id]);
 
+  // Reset video source override on reel change
   useEffect(() => {
     setVideoSrcOverride(null);
     setIs2xSpeed(false);
@@ -305,6 +306,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const handleDownloadReel = () => {
     if (!currentReel) return;
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}`;
+    const displayTitle = currentMeta?.animeTitle || currentReel.cleanTitle || 'Anime Reel';
+
+    if (onShowToast) {
+      onShowToast('success', `Starting download: ${displayTitle}...`, 'Reel Download');
+    }
 
     try {
       const a = document.createElement('a');
@@ -314,13 +320,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      if (onShowToast) {
-        onShowToast('success', `Downloading ${currentReel.cleanTitle || 'Reel'}...`, 'Reel Download');
-      }
     } catch {
-      if (onShowToast) {
-        onShowToast('info', 'Opening download link...', 'Reel Download');
-      }
       window.open(downloadUrl, '_blank');
     }
   };
@@ -500,7 +500,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleVideoError = () => {
     if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download`);
+      setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
     }
   };
 
