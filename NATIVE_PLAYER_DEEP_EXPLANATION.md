@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, and top bar title alignment. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting video rendering, gesture overlays, floating layout, AdEraser engine, PiP mode, AniSkip skip buttons, permanent yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
 | `subtitleService.ts` | Subtitle Pipeline | Unified API fetching (`subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `setCaptionOffset`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
@@ -45,13 +45,14 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 💬 2. Unified Subtitle Pipeline & Smart 3-Day Cache
+## 💬 2. Independent Subtitle Overlay & Multi-Language Switching
 
-- **API Endpoint**: `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId={anilistId}&ep={epNum}`
-- **3-Day Local Cache**: Caches subtitle tracks in `anilove_subtitle_cache_{anilistId}_{epNum}` for 72 hours.
-- **Eviction Triggers**: Auto-evicted after 72 hours, or when the episode is marked **Watched / Completed**, or when removed from **Watch History**.
-- **Anonymization & Sorting**: Provider brand names (`HiAnime`, `SubtitleCat`) are **100% hidden**. Primary English $\rightarrow$ `"English"`, Secondary English $\rightarrow$ `"English 2"`. Sorted by user Primary/Secondary settings, then Spanish, German, Russian, Arabic, and other languages.
-- **Pre-Download Pre-Check**: Validates subtitle availability across all target episodes before initiating batch downloads. Halts download with a clear error toast if any episode lacks the requested subtitle language.
+- **Independent Subtitle Overlay (`text_native_subtitle_overlay`)**:
+  - `text_native_subtitle_overlay` is positioned directly in `video_root_container` (`layout_gravity="bottom|center_horizontal"`), **outside `controls_overlay`**.
+  - When native player controls fade out and hide after 5 seconds, native captions **remain 100% VISIBLE ON SCREEN** during video playback.
+- **Interactive Multi-Language Switching**:
+  - Captions Menu displays all anonymized, priority-sorted tracks (`"Off"`, `"English"`, `"English 2"`, `"Spanish"`, `"French"`, `"German"`, `"Russian"`, `"Arabic"`).
+  - Tapping any language pill downloads that language's WebVTT file and updates the native subtitle overlay on screen with 100% frame sync.
 
 ---
 

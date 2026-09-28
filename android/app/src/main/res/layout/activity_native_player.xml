@@ -318,26 +318,6 @@
                     android:shadowRadius="3" />
             </LinearLayout>
 
-            <!-- Server 2-B Native Subtitle Overlay -->
-            <TextView
-                android:id="@+id/text_native_subtitle_overlay"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_above="@id/bottom_bar"
-                android:layout_centerHorizontal="true"
-                android:layout_marginBottom="12dp"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="5dp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:shadowColor="@android:color/black"
-                android:shadowDx="2"
-                android:shadowDy="2"
-                android:shadowRadius="4"
-                android:visibility="gone" />
-
             <!-- Bottom bar -->
             <LinearLayout
                 android:id="@+id/bottom_bar"
@@ -439,6 +419,27 @@
             android:focusable="true"
             android:elevation="20dp"
             android:translationZ="20dp"
+            android:visibility="gone" />
+
+        <!-- Native Subtitle Overlay (Outside controls_overlay so captions stay visible when controls hide) -->
+        <TextView
+            android:id="@+id/text_native_subtitle_overlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="42dp"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="5dp"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:shadowColor="@android:color/black"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:elevation="10dp"
+            android:translationZ="10dp"
             android:visibility="gone" />
 
         <ProgressBar
