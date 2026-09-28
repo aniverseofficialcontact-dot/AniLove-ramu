@@ -2663,100 +2663,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private String fetchUrlContentWithRedirects(String urlStr, int maxRedirects) {
-        if (maxRedirects <= 0 || urlStr == null || urlStr.isEmpty()) return "";
-        try {
-            URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
-            conn.setInstanceFollowRedirects(true);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            conn.setRequestProperty("Referer", "https://tryembed.us.cc/");
-            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-
-            int status = conn.getResponseCode();
-            if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                String newUrl = conn.getHeaderField("Location");
-                if (newUrl != null && !newUrl.isEmpty()) {
-                    if (newUrl.startsWith("/")) {
-                        newUrl = url.getProtocol() + "://" + url.getHost() + newUrl;
-                    }
-                    return fetchUrlContentWithRedirects(newUrl, maxRedirects - 1);
-                }
-            }
-
-            if (status == 200) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder content = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) {
-                    content.append(line).append("\n");
-                }
-                in.close();
-                return content.toString();
-            }
-        } catch (Exception e) {
-            Log.d("SubSniffer", "Error fetching redirect content: " + e.getMessage());
-        }
-        return "";
-    }
-
-    private void parseAndAttachVttFromHtml(String html) {
-        if (html == null || html.isEmpty()) return;
-        Pattern pattern1 = Pattern.compile("<track[^>]+src=[\"']([^\"']+\\.vtt[^\"']*)[\"'][^>]*label=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-        Matcher matcher1 = pattern1.matcher(html);
-        boolean foundAny = false;
-        while (matcher1.find()) {
-            String vttUrl = matcher1.group(1);
-            String label = matcher1.group(2);
-            if (vttUrl != null && !vttUrl.isEmpty()) {
-                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                final String finalVtt = vttUrl;
-                final String finalLabel = label != null ? label : "English";
-                foundAny = true;
-                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-            }
-        }
-
-        Pattern patternJson = Pattern.compile("[\"']?(?:file|url|src)[\"']?\\s*:\\s*[\"']([^\"']+\\.vtt[^\"']*)[\"'][^}]*[\"']?(?:label|lang|language)[\"']?\\s*:\\s*[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-        Matcher matcherJson = patternJson.matcher(html);
-        while (matcherJson.find()) {
-            String vttUrl = matcherJson.group(1);
-            String label = matcherJson.group(2);
-            if (vttUrl != null && !vttUrl.isEmpty()) {
-                if (!vttUrl.startsWith("http")) vttUrl = "https://tryembed.us.cc" + (vttUrl.startsWith("/") ? "" : "/") + vttUrl;
-                final String finalVtt = vttUrl;
-                final String finalLabel = label != null ? label : "English";
-                runOnUiThread(() -> attachCapturedVttTrack(finalVtt, finalLabel));
-            }
-        }
-    }
-
-    private void startServer2BSubSniffer(int anilistId, int episodeNumber) {
-        if (anilistId <= 0 || episodeNumber <= 0) return;
-
-        Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                String tryEmbedUrl = "https://tryembed.us.cc/embed/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                String html = fetchUrlContentWithRedirects(tryEmbedUrl, 5);
-                if (html != null && !html.isEmpty()) {
-                    parseAndAttachVttFromHtml(html);
-                }
-                if (parsedVttCues.isEmpty()) {
-                    String vidnestUrl = "https://vidnest.fun/anime/" + anilistId + "/" + episodeNumber + "/sub";
-                    String vHtml = fetchUrlContentWithRedirects(vidnestUrl, 5);
-                    if (vHtml != null && !vHtml.isEmpty()) {
-                        parseAndAttachVttFromHtml(vHtml);
-                    }
-                }
-            } catch (Exception e) {
-                Log.d("SubSniffer", "HTTP redirect fetch exception: " + e.getMessage());
-            }
-        });
-    }
-
     public static class VttCue {
         public long startMs;
         public long endMs;
@@ -2839,9 +2745,19 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (vttUrl == null || vttUrl.isEmpty()) return;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                String content = fetchUrlContentWithRedirects(vttUrl, 5);
-                if (content != null && !content.isEmpty()) {
-                    parseVttContent(content);
+                URL url = new URL(vttUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = in.readLine()) != null) sb.append(line).append("\n");
+                    in.close();
+                    parseVttContent(sb.toString());
                 }
             } catch (Exception e) {
                 Log.e("VttParser", "Failed to download VTT file: " + e.getMessage());
@@ -2969,7 +2885,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (anilistId > 0 && episodeNumber > 0) {
             detectedSubtitles.clear();
             capturedServer2BSubtitles.clear();
-            startServer2BSubSniffer(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
             fetchAniSkipIntervals(idMal, episodeNumber);
