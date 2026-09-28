@@ -7,9 +7,15 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
+    cleartext: true,
     allowNavigation: [
       '*',
     ],
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 };
 
