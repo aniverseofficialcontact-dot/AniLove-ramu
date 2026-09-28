@@ -11,7 +11,6 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -111,6 +110,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 import androidx.media3.ui.PlayerView;
 
+@SuppressWarnings({"deprecation", "RedundantSuppression", "SpellCheckingInspection", "Convert2Lambda", "NullableProblems", "UnusedDeclaration"})
 public class NativePlayerActivity extends AppCompatActivity {
     public interface PlayerNavigationListener {
         void onNavigate(boolean next);
@@ -1471,27 +1471,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void resetHideTimer() { stopHideTimer(); if (isPlaying && isControlsVisible && !isDragging) { hideHandler.postDelayed(() -> { if (isControlsVisible && isPlaying) { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); } }, 5000); } }
     private void stopHideTimer() { hideHandler.removeCallbacksAndMessages(null); }
 
-    private void simulateTouch(View view) {
-        if (view == null) return;
-        view.post(() -> {
-            try {
-                int width = view.getWidth();
-                int height = view.getHeight();
-                if (width <= 0 || height <= 0) return;
-                float x = width / 2.0f;
-                float y = height / 2.0f;
-                long downTime = SystemClock.uptimeMillis();
-                long eventTime = SystemClock.uptimeMillis();
-                MotionEvent down = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, x, y, 0);
-                MotionEvent up = MotionEvent.obtain(downTime, eventTime + 50, MotionEvent.ACTION_UP, x, y, 0);
-                view.dispatchTouchEvent(down);
-                view.dispatchTouchEvent(up);
-                down.recycle();
-                up.recycle();
-            } catch (Exception ignored) {}
-        });
-    }
-
     private void enterPipMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
@@ -2575,9 +2554,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 "})();", null);
     }
 
-    private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", (seconds < 0 ? 0 : seconds) / 60, (seconds < 0 ? 0 : seconds) % 60); }
+    private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", Math.max(0, seconds) / 60, Math.max(0, seconds) % 60); }
     private boolean isDirectHls = false;
-    private Map<String, String> multiLanguageSubtitles = new ConcurrentHashMap<>();
 
     private double aniSkipOpStart = -1, aniSkipOpEnd = -1;
     private double aniSkipEdStart = -1, aniSkipEdEnd = -1;
@@ -3576,6 +3554,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (isFullscreenMode) {
             toggleFullscreenInPlace();
