@@ -2873,7 +2873,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             return;
         }
 
-        long currentMs = (long) ((currentSec + subtitleTimingOffset) * 1000L);
+        long currentMs = (long) ((currentSec - subtitleTimingOffset) * 1000L);
         VttCue activeCue = null;
         for (VttCue cue : parsedVttCues) {
             if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
@@ -2888,6 +2888,74 @@ public class NativePlayerActivity extends AppCompatActivity {
         } else {
             textOverlay.setVisibility(View.GONE);
         }
+    }
+
+    private void fetchUnifiedSubtitlesJava(int anilistId, int episodeNumber) {
+        if (anilistId <= 0 || episodeNumber <= 0) return;
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String reqUrl = "https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=" + anilistId + "&ep=" + episodeNumber;
+                URL url = new URL(reqUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = in.readLine()) != null) sb.append(line);
+                    in.close();
+
+                    JSONObject json = new JSONObject(sb.toString());
+                    if (json.optBoolean("success", false)) {
+                        JSONArray tracks = json.optJSONArray("subtitles");
+                        if (tracks != null && tracks.length() > 0) {
+                            Map<String, Integer> langCounts = new HashMap<>();
+                            String primaryUrl = null;
+                            String primaryLabel = null;
+
+                            for (int i = 0; i < tracks.length(); i++) {
+                                JSONObject t = tracks.optJSONObject(i);
+                                if (t == null) continue;
+                                String baseLang = t.optString("language", "English");
+                                if (baseLang.isEmpty()) baseLang = "English";
+
+                                int count = langCounts.getOrDefault(baseLang, 0) + 1;
+                                langCounts.put(baseLang, count);
+
+                                String displayLabel = count == 1 ? baseLang : baseLang + " " + count;
+                                String subUrl = t.optString("url", "");
+
+                                if (!subUrl.isEmpty()) {
+                                    capturedServer2BSubtitles.put(displayLabel, subUrl);
+                                    if (!detectedSubtitles.contains(displayLabel)) {
+                                        detectedSubtitles.add(displayLabel);
+                                    }
+                                    if (primaryUrl == null || t.optBoolean("isDefault", false)) {
+                                        primaryUrl = subUrl;
+                                        primaryLabel = displayLabel;
+                                    }
+                                }
+                            }
+
+                            if (parsedVttCues.isEmpty() && primaryUrl != null) {
+                                subtitleUrl = primaryUrl;
+                                subtitleLang = primaryLabel;
+                                currentSelectedSubtitle = primaryLabel;
+                                downloadAndParseVttFile(primaryUrl);
+                                Log.i("SubServiceJava", "Loaded primary subtitle track: " + primaryLabel + " (" + primaryUrl + ")");
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.d("SubServiceJava", "Java subtitle fetch exception: " + e.getMessage());
+            }
+        });
     }
 
     private String detectLanguageFromVttUrl(String url) {
@@ -2984,6 +3052,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (anilistId > 0 && episodeNumber > 0) {
             detectedSubtitles.clear();
             capturedServer2BSubtitles.clear();
+            fetchUnifiedSubtitlesJava(anilistId, episodeNumber);
         }
         if (idMal > 0 && episodeNumber > 0) {
             fetchAniSkipIntervals(idMal, episodeNumber);

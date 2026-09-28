@@ -45,14 +45,20 @@ AniLove is built as a hybrid **Capacitor + Native Android** application. While t
 
 ---
 
-## 💬 2. Independent Subtitle Overlay & Multi-Language Switching
+## 💬 2. Direct Native Subtitle Fetching, Appearance Sync & Timing Correction
 
-- **Independent Subtitle Overlay (`text_native_subtitle_overlay`)**:
-  - `text_native_subtitle_overlay` is positioned directly in `video_root_container` (`layout_gravity="bottom|center_horizontal"`), **outside `controls_overlay`**.
-  - When native player controls fade out and hide after 5 seconds, native captions **remain 100% VISIBLE ON SCREEN** during video playback.
-- **Interactive Multi-Language Switching**:
-  - Captions Menu displays all anonymized, priority-sorted tracks (`"Off"`, `"English"`, `"English 2"`, `"Spanish"`, `"French"`, `"German"`, `"Russian"`, `"Arabic"`).
-  - Tapping any language pill downloads that language's WebVTT file and updates the native subtitle overlay on screen with 100% frame sync.
+- **Direct Native Java Subtitle Fetcher (`fetchUnifiedSubtitlesJava`)**:
+  - `NativePlayerActivity.java` executes `fetchUnifiedSubtitlesJava(anilistId, episodeNumber)` directly on a Java background thread upon episode load.
+  - Queries `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId={anilistId}&ep={epNum}` and parses all 20+ tracks (`"English"`, `"English 2"`, `"Spanish"`, `"Spanish 2"`, `"French"`, `"German"`, `"Russian"`, `"Arabic"`, `"Japanese"`, etc.), populating `capturedServer2BSubtitles` and `detectedSubtitles` automatically.
+  - All tracks display cleanly as interactive pills under `SUBTITLE TRACK` in the Captions menu.
+- **Caption Appearance Customization Sync**:
+  - Updated `applyCaptionStyle()`:
+    - **Bottom Margin**: Parses `bottomMargin` (`"0%"` to `"25%"`) and sets dynamic bottom margin on `text_native_subtitle_overlay`.
+    - **Outline / Shadow**: Sets `textOverlay.setShadowLayer()` based on `edgeStyle` (`"Shadow"`, `"Outline"`, `"None"`).
+    - **Regular / Bold**: Sets `Typeface.DEFAULT_BOLD` vs `Typeface.DEFAULT` based on `captionWeight`.
+- **Corrected Timing Stepper Direction**:
+  - In `updateNativeSubtitleOverlay(double currentSec)`, updated `currentMs` formula to `(currentSec - subtitleTimingOffset)`.
+  - Adding `+1.0s` now correctly delays subtitles to appear at 11 seconds (instead of 9s), and `-1.0s` advances subtitles to appear earlier at 9 seconds.
 
 ---
 
