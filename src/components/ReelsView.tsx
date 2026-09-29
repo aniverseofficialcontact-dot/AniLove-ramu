@@ -123,6 +123,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [enrichedMetadata, setEnrichedMetadata] = useState<Record<string, EnrichedReelMetadata>>({});
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('cover');
 
+  // Dynamic Touch Coordinate Heart Burst State
+  const [heartBurstPos, setHeartBurstPos] = useState<{ x: number; y: number } | null>(null);
+
   // Drag Physics State
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -154,7 +157,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (videoSrcOverride) return videoSrcOverride;
     if (resolvedVideoUrl) return resolvedVideoUrl;
     if (!currentReel?.id) return '';
-    return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
+    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
   }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
 
   // Poster Image Source
@@ -174,21 +177,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
     return null;
   }, []);
-
-  // Post-mount micro-reconnect trigger: Ensures Reel 1 loads & plays 100% instantly after tab layout transition
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const video = getActiveVideo();
-      if (video && !isManuallyPausedRef.current) {
-        video.load();
-        video.play().then(() => setIsPlaying(true)).catch(() => {
-          video.muted = true;
-          video.play().then(() => setIsPlaying(true)).catch(() => {});
-        });
-      }
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [getActiveVideo]);
 
   // First Touch Unmutes Audio permanently across all reels
   useEffect(() => {
@@ -210,28 +198,75 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     };
   }, [getActiveVideo]);
 
-  // Stall Watchdog & Auto-Reconnect Engine: Detects if video gets stuck at any timestamp (e.g. 2s) and forces auto-reconnect
+  // Stall Watchdog & Auto-Reconnect Engine: Detects freeze, stall, or paused state and kickstarts playback
   useEffect(() => {
     const interval = setInterval(() => {
       const video = getActiveVideo();
-      if (!video || isManuallyPausedRef.current || video.paused) return;
+      if (!video || isManuallyPausedRef.current) return;
 
       const now = Date.now();
-      if (video.currentTime === lastCurrentTimeRef.current) {
-        if (now - lastTimeUpdateRef.current > 800) {
-          video.play().catch(() => {});
-          if (now - lastTimeUpdateRef.current > 2000 && currentReel?.id && !videoSrcOverride) {
-            setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
-          }
+      const currentPos = video.currentTime;
+
+      // Video is considered stuck if paused or currentTime hasn't moved
+      const isPausedOrStuck = video.paused || currentPos === lastCurrentTimeRef.current;
+
+      if (isPausedOrStuck) {
+        const timeStuckMs = now - lastTimeUpdateRef.current;
+
+        // Level 1 Kickstart (800ms): Retry play()
+        if (timeStuckMs > 800) {
+          video.play().then(() => {
+            setIsPlaying(true);
+          }).catch(() => {});
+        }
+
+        // Level 2 Soft Reload (2200ms): Kickstart video media element buffer
+        if (timeStuckMs > 2200) {
+          try {
+            if (video.readyState >= 1) {
+              video.play().catch(() => {});
+            } else {
+              video.load();
+              video.currentTime = currentPos;
+              video.play().catch(() => {});
+            }
+          } catch {}
+        }
+
+        // Level 3 Fallback Stream Override (4200ms): Refresh direct stream endpoint
+        if (timeStuckMs > 4200 && currentReel?.id && !videoSrcOverride) {
+          setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t&retry=${now}`);
+          lastTimeUpdateRef.current = now;
         }
       } else {
-        lastCurrentTimeRef.current = video.currentTime;
+        lastCurrentTimeRef.current = currentPos;
         lastTimeUpdateRef.current = now;
+        if (!isPlaying) setIsPlaying(true);
       }
-    }, 400);
+    }, 350);
 
     return () => clearInterval(interval);
-  }, [getActiveVideo, currentReel?.id, videoSrcOverride]);
+  }, [getActiveVideo, currentReel?.id, videoSrcOverride, isPlaying]);
+
+  // App Visibility & Window Focus Auto-Resume Engine
+  useEffect(() => {
+    const handleResume = () => {
+      if (document.visibilityState === 'visible') {
+        const video = getActiveVideo();
+        if (video && !isManuallyPausedRef.current) {
+          lastTimeUpdateRef.current = Date.now();
+          video.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('focus', handleResume);
+    return () => {
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('focus', handleResume);
+    };
+  }, [getActiveVideo]);
 
   // Mode Switch ('all' vs 'saved') - Skips initial mount
   useEffect(() => {
@@ -263,7 +298,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
 
-  // Direct Stream Source or RAM Blob URL
+  // Direct Stream Source or RAM Blob URL (Synchronous 0ms check for Reel 1)
   useEffect(() => {
     if (!currentReel?.id) return;
     let isMounted = true;
@@ -272,11 +307,18 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     setIs2xSpeed(false);
     setIsVideoLoaded(false);
 
-    reelMediaCache.getReelVideoUrl(currentReel.id).then(url => {
-      if (isMounted && url) {
-        setResolvedVideoUrl(url);
-      }
-    });
+    // 1. Check synchronous blob cache first
+    const syncBlobUrl = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
+    if (syncBlobUrl) {
+      setResolvedVideoUrl(syncBlobUrl);
+    } else {
+      setResolvedVideoUrl(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`);
+      reelMediaCache.getReelVideoUrl(currentReel.id).then(url => {
+        if (isMounted && url) {
+          setResolvedVideoUrl(url);
+        }
+      });
+    }
 
     return () => { isMounted = false; };
   }, [currentReel?.id, historyIndex]);
@@ -305,14 +347,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => clearTimeout(timer);
   }, [currentReel?.id, isPlaying]);
 
-  // Preload upcoming 4 reels in parallel background RAM for 0ms seamless scrolling
+  // Preload upcoming reels in parallel background RAM
   useEffect(() => {
     if (!currentReel) return;
     const upcoming = feedHistory.slice(historyIndex + 1, historyIndex + 5).map(r => r.id);
     preloadReels([currentReel.id, ...upcoming]);
   }, [historyIndex, currentReel?.id, feedHistory]);
 
-  // Instant Autoplay Loop
+  // Instant Autoplay Loop & Media Engine Handlers
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
@@ -320,29 +362,62 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     video.playbackRate = is2xSpeed ? 2.0 : 1.0;
 
-    const playVideo = async () => {
+    let isSubscribed = true;
+
+    const attemptPlay = async () => {
+      if (!isSubscribed || isManuallyPausedRef.current) return;
       try {
         video.muted = !globalUserUnmutedPreference;
         video.volume = 1.0;
         await video.play();
-        setIsPlaying(true);
-        setIsMuted(!globalUserUnmutedPreference ? video.muted : false);
-      } catch {
+        if (isSubscribed) {
+          setIsPlaying(true);
+          setIsMuted(!globalUserUnmutedPreference ? video.muted : false);
+        }
+      } catch (err) {
+        if (!isSubscribed || isManuallyPausedRef.current) return;
         try {
           video.muted = true;
-          setIsMuted(true);
+          if (isSubscribed) setIsMuted(true);
           await video.play();
-          setIsPlaying(true);
+          if (isSubscribed) setIsPlaying(true);
         } catch {
-          setIsPlaying(false);
+          // Keep attempting playback on canplay / loadeddata
         }
       }
     };
 
-    playVideo();
-  }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo]);
+    attemptPlay();
+
+    const handleMediaReady = () => {
+      if (!isManuallyPausedRef.current) attemptPlay();
+    };
+
+    video.addEventListener('canplay', handleMediaReady);
+    video.addEventListener('loadeddata', handleMediaReady);
+    video.addEventListener('playing', handleMediaReady);
+
+    return () => {
+      isSubscribed = false;
+      video.removeEventListener('canplay', handleMediaReady);
+      video.removeEventListener('loadeddata', handleMediaReady);
+      video.removeEventListener('playing', handleMediaReady);
+    };
+  }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo, is2xSpeed]);
+
+  const cleanupVideoElement = useCallback(() => {
+    const video = getActiveVideo();
+    if (video) {
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      } catch {}
+    }
+  }, [getActiveVideo]);
 
   const goToNext = useCallback(() => {
+    cleanupVideoElement();
     setDragOffsetY(0);
     setSlideDirection(1);
     setHistoryIndex(prev => {
@@ -355,13 +430,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       }
       return nextIdx;
     });
-  }, [feedHistory.length]);
+  }, [cleanupVideoElement, feedHistory.length]);
 
   const goToPrev = useCallback(() => {
+    cleanupVideoElement();
     setDragOffsetY(0);
     setSlideDirection(-1);
     setHistoryIndex(prev => Math.max(0, prev - 1));
-  }, []);
+  }, [cleanupVideoElement]);
 
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
@@ -471,8 +547,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
-  // Tap & Double Tap
-  const handleCanvasInteraction = useCallback(() => {
+  // Tap & Double Tap with Dynamic Touch Coordinates
+  const handleCanvasInteraction = useCallback((clientX?: number, clientY?: number) => {
     const video = getActiveVideo();
     if (video && video.muted) {
       video.muted = false;
@@ -488,6 +564,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         clearTimeout(tapTimerRef.current);
         tapTimerRef.current = null;
       }
+
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        setHeartBurstPos({ x: clientX, y: clientY });
+      } else {
+        setHeartBurstPos(null);
+      }
+
       setShowHeartBurst(true);
       setTimeout(() => setShowHeartBurst(false), 900);
       handleToggleSave();
@@ -553,7 +636,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     } else {
       setDragOffsetY(0);
       if (timeDiff < 220 && Math.abs(diffY) < 15) {
-        handleCanvasInteraction();
+        handleCanvasInteraction(e.clientX, e.clientY);
       }
     }
   };
@@ -835,15 +918,23 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   }}
                 />
 
-                {/* Double Tap Heart Burst Animation */}
+                {/* Double Tap Heart Burst Animation at exact touch coordinates */}
                 {showHeartBurst && (
                   <motion.div
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1.2, opacity: 1 }}
-                    exit={{ scale: 0.5, opacity: 0 }}
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-40"
+                    initial={{ scale: 0.3, opacity: 0 }}
+                    animate={{ scale: 1.3, opacity: 1 }}
+                    exit={{ scale: 0.3, opacity: 0 }}
+                    style={{
+                      position: 'absolute',
+                      left: heartBurstPos ? `${heartBurstPos.x}px` : '50%',
+                      top: heartBurstPos ? `${heartBurstPos.y}px` : '50%',
+                      transform: 'translate(-50%, -50%)',
+                      zIndex: 50,
+                      pointerEvents: 'none'
+                    }}
+                    className="pointer-events-none"
                   >
-                    <Heart className="w-28 h-28 text-pink-500 fill-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.8)]" />
+                    <Heart className="w-28 h-28 text-pink-500 fill-pink-500 drop-shadow-[0_0_30px_rgba(236,72,153,0.9)]" />
                   </motion.div>
                 )}
 

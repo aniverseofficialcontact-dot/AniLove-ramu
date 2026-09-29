@@ -105,8 +105,18 @@ class ReelMediaCache {
    */
   async preloadBatch(reelIds: string[]): Promise<void> {
     if (!reelIds || reelIds.length === 0) return;
-    const top4 = reelIds.slice(0, 4);
-    await Promise.allSettled(top4.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
+
+    // Network bandwidth check for adaptive pre-buffering
+    let preloadCount = 4;
+    if (typeof navigator !== 'undefined' && (navigator as any).connection) {
+      const conn = (navigator as any).connection;
+      if (conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === '3g') {
+        preloadCount = 1;
+      }
+    }
+
+    const topToPreload = reelIds.slice(0, preloadCount);
+    await Promise.allSettled(topToPreload.map(id => (id ? this.preloadReel(id, 'high') : Promise.resolve(null))));
   }
 
   /**
