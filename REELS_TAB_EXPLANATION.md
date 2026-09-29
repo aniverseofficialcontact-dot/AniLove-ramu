@@ -1,21 +1,23 @@
 # AniLove - Reels Tab Architecture & Technical Guide
 
-This document provides a comprehensive, simple, and detailed technical walkthrough of the **Anime Reels** feature in AniLove. It is designed to help any developer, teammate, or contributor understand exactly how the Reels system works under the hood.
+This document provides a comprehensive, complete, and up-to-date technical guide for the **Anime Reels** tab in AniLove. It is designed so that any new developer, contributor, or maintainer can read this single file to understand every detail of how the Reels architecture, buffering, gesture controls, and auto-recovery systems work under the hood.
 
 ---
 
 ## 1. Executive Summary & Overview
 
-The **Reels Tab** in AniLove is a 100% serverless, high-performance vertical video feed powering 2,049+ anime edit clips directly from Google Drive Edge CDN. 
+The **Reels Tab** in AniLove is a serverless, ultra-fast vertical video feed powering 2,049+ anime edit clips streamed directly from Google Drive Edge CDN.
 
-Key Highlights:
-- **No Heavy Backend Required:** Streams MP4 clips directly via Google Drive Edge CDN without needing custom streaming server infrastructure.
-- **0ms Instant RAM Caching (Next 4 Reels Parallel Pre-load):** Pre-buffers the next 4 upcoming reels in parallel directly into phone RAM using `Blob` Object URLs (`URL.createObjectURL(blob)`).
-- **Auto-Reconnect Watchdog:** Detects any network stall or 2-second timestamp freeze and soft-reconnects playback automatically.
-- **Zero CORS / WebView Restrictions:** Bypasses browser cross-origin blocks and redirects using direct stream endpoints (`&confirm=t`) and native HTTP routing (`CapacitorHttp`).
-- **Native Android Downloading:** Integrates directly with Android's native `DownloadManager` background service (`EpisodeDownloadService`) to save reels directly to device storage.
-- **Anti-Repetition Engine:** Tracks watched reel IDs in `localStorage` so unseen clips are prioritized across sessions.
-- **Smart Session Persistence:** Remembers the user's exact scroll position (e.g. 10th reel) when switching between app tabs during the session, and clears automatically when the app is removed from recent apps.
+### Key Features & Architectural Highlights
+- **Direct Edge CDN Streaming (No Custom Video Server):** Streams MP4 clips directly via Google Drive Edge CDN (`https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`) without requiring expensive streaming server infrastructure.
+- **0ms Instant Reel #1 Startup:** Checks in-memory Blob Object URLs synchronously on initial render pass so Reel #1 plays instantly without black-screen delay or source swaps.
+- **Adaptive Network RAM Caching:** Pre-buffers upcoming reels in parallel directly into phone RAM using Blob Object URLs (`blob:https://...`). Dynamically adjusts pre-buffer depth (4 reels on 4G/Wi-Fi vs. 1 reel on 2G/3G/Data Saver).
+- **3-Tier Automatic Stall & Resume Watchdog:** Continuously monitors playback every 350ms. If network drops or WebView auto-pauses the video, the watchdog recovers and resumes playback automatically within <1 second without forcing the user to scroll away and back.
+- **App Foreground & Visibility Auto-Resume:** Listens to `visibilitychange` and `focus` events to seamlessly resume video playback from the exact same timestamp when returning from backgrounding or tab switches.
+- **Hardware Decoder Memory Cleanup:** Explicitly strips `src` attributes and reloads the video pipeline on swipe transitions to prevent V8/WebView RAM leaks and GPU decoder exhaustion.
+- **Dynamic Touch-Coordinate Heart Burst:** Double-tapping anywhere on the video stage captures exact `(clientX, clientY)` coordinates and animates a floating heart burst directly under the user's finger.
+- **Native Android Downloading:** Integrates directly with Android's native `DownloadManager` background service (`EpisodeDownloadService`) with notification progress tracking and offline storage.
+- **Anti-Repetition & Smart Session Persistence:** Tracks watched reel IDs in `localStorage` so unseen clips are prioritized across sessions, while preserving active scroll position in `sessionStorage` during tab switches.
 
 ---
 
@@ -25,68 +27,72 @@ Key Highlights:
 [ Google Drive Vault (2,049 Reels) ]
               │
               ▼
-[ reelsService.ts / animeReels.json ] ─── (Sanitizes URLs & Metadata)
+[ reelsService.ts / animeReels.json ] ─── (Sanitizes URLs, Folder Obfuscation & Metadata)
               │
               ▼
-[ reelMediaCache.ts (RAM Blob Caching) ] ─── (Pre-fetches Reel #1 + Next 4 Reels in Parallel)
+[ reelMediaCache.ts (Adaptive RAM Caching) ] ─── (Synchronous 0ms RAM Lookup + Network-Aware Preload)
               │
               ▼
-[ ReelsView.tsx (HTML5 Video Stage) ] ─── (Zero-Flash Poster Masking & Unmuted Playback)
+[ ReelsView.tsx (Pure HTML5 Video Stage) ] ─── (Zero-Flash Poster Masking & Autoplay Engine)
               │
+              ├──► [ 3-Tier Watchdog & Visibility Resume Engine ]
+              ├──► [ Interactive Gestures & Dynamic Heart Burst ]
               ├──► [ Action Bar (Share, Save, Crop, Download, Chevrons) ]
-              └──► [ Native DownloadManager Service ]
+              └──► [ Native DownloadManager Background Service ]
 ```
 
 ---
 
-## 3. Core Components Breakdown
+## 3. Detailed Technical Components
 
 ### A. Dataset & Folder Protection (`src/data/animeReels.json` & `src/services/reelsService.ts`)
-- **Folder Obfuscation:** The parent Google Drive folder ID/URL is hidden and set to `"anime_edits_vault"`. Users can never inspect or leak the original parent folder.
-- **Endpoint URL Structure:**
-  - Stream Endpoint: `https://drive.google.com/uc?export=view&id=${reelId}`
-  - Fallback Direct Stream: `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`
+- **Folder Obfuscation:** The original Google Drive parent folder ID is obfuscated to `"anime_edits_vault"`.
+- **Direct Stream Endpoint Structure:**
+  - Direct MP4 Stream: `https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`
+  - Fallback Stream: `https://drive.google.com/uc?export=download&id=${reelId}&confirm=t`
   - Poster Image: `https://lh3.googleusercontent.com/d/${reelId}`
-  - **`&confirm=t` Flag:** Automatically bypasses Google Drive's "can't scan file for viruses" HTML warning page and forces Google Drive to return raw MP4 bytes.
+- **`&confirm=t` Parameter:** Bypasses Google Drive's "file cannot be scanned for viruses" HTML warning page and forces Google Drive to serve raw MP4 byte streams directly to the `<video>` element.
 
-### B. Pre-Warming & RAM Caching Engine (`src/services/reelMediaCache.ts`)
-- **Pre-Warming Reel #1:** On app launch, `prewarmInitialReelsOnAppStart()` pre-fetches Reel #1's MP4 stream into RAM before the user opens the Reels tab.
-- **RAM Blob Object URLs:**
-  - Fetches raw MP4 bytes in the background for the next 4 upcoming reels in parallel.
-  - Converts response bytes into in-memory Blob Object URLs (`blob:https://...`).
-  - Stored in a LRU (Least Recently Used) map with a limit of 16 reels (~60MB RAM).
-  - When the user swipes to a reel, the video plays out of local RAM with 0ms buffering delay.
-- **Instant Eviction on Close:** Listens to `visibilitychange` (hidden state), `pagehide`, and `beforeunload`. When the app is closed or removed from recent apps, `cleanupAllMediaCache()` revokes all Object URLs and purges RAM memory.
+### B. Adaptive RAM Caching Engine (`src/services/reelMediaCache.ts`)
+- **Synchronous RAM Lookup (`getSynchronousBlobUrl`):** Checks if an in-memory Blob Object URL (`blob:https://...`) is already cached in RAM during the first render pass.
+- **Network Bandwidth Awareness:** Checks `navigator.connection` (`effectiveType`, `saveData`).
+  - **4G / Wi-Fi:** Pre-buffers 4 upcoming reels in parallel (~60MB RAM).
+  - **2G / 3G / Data Saver:** Pre-buffers 1 upcoming reel to save mobile data and prevent buffer starvation.
+- **LRU Eviction Policy:** Maintains up to 16 Blob Object URLs in memory. When capacity is reached, the oldest unused Blob URL is revoked via `URL.revokeObjectURL()`.
+- **App Teardown Cleanup (`cleanupAllMediaCache`):** Listens to `visibilitychange` (hidden state), `pagehide`, and `beforeunload`. When the app is closed or removed from recent apps, all Blob Object URLs are revoked to release phone RAM completely.
 
-### C. UI & Gesture Controls (`src/components/ReelsView.tsx`)
-- **Pure HTML5 Video Stage:** Control-less borderless `<video>` element (NO `iframe`, NO Google Drive web controls).
-- **Zero-Flash Poster Mask:** Keeps the high-res poster image layered over the video stage until `onPlaying` / `onLoadedData` fires, preventing black box flashes.
-- **Audio & Autoplay:** Plays unmuted (`muted={false}`, `volume={1.0}`) by default.
-- **Interactive Gestures:**
-  - Single Tap: Toggle Play / Pause with transparent pause overlay (Mute toggle on top, Center Play symbol).
-  - Double Tap: Heart burst animation + saves/bookmarks reel.
-  - Hold / Long-press: Smooth 2x speed playback with a subtle white `"2x Speed"` badge.
-  - Vertical Drag / Flick: Instagram/Shorts style Framer Motion spring slide transitions between reels.
-- **Seekbar Timestamps:** Current time (`0:05`) and total duration (`0:15`) stay hidden during playback and appear ONLY while the user is actively dragging/scrubbing the seekbar.
-- **6 Transparent Minimal Line Icons (Action Bar):**
-  1. **Paperplane / Share (`<Send />`):** Copies share link or opens native Android Share sheet.
-  2. **Bookmark (`<Bookmark />`):** Saves reel to local bookmarks collection.
-  3. **Fit / Fill (`<Crop />`):** Toggles video aspect ratio between `object-cover` and `object-contain`.
-  4. **Download (`<Download />`):** Invokes native Android background download service.
-  5. **Chevron Up (`<ChevronUp />`):** Scrolls to previous reel.
-  6. **Chevron Down (`<ChevronDown />`):** Scrolls to next reel.
+### C. Video Stage & Autoplay Engine (`src/components/ReelsView.tsx`)
+- **Pure HTML5 Video Stage:** Control-less borderless `<video>` element (NO `iframe`, NO embedded Google web controls).
+- **Zero-Flash Poster Masking:** Keeps a high-res poster image layered over the video stage until `onPlaying` / `onLoadedData` fires, preventing black screen flashes.
+- **Strict Declaration Ordering:** All states, refs, callbacks (`getActiveVideo`), and derived values (`currentReel`, `currentMeta`, `displayTitle`, `activeVideoUrl`, `activePosterUrl`) are declared **above** all `useEffect` hooks to prevent JavaScript Temporal Dead Zone (`ReferenceError: Cannot access 's' before initialization`) runtime errors.
+- **Media Event Attachment:** Listens to `canplay`, `loadeddata`, and `playing` events to automatically trigger `video.play()` as soon as media bytes become ready.
 
-### D. Native Android Download Service (`android/.../EpisodeDownloadService.java`)
-- **Invocation:** `DownloadPlugin.startDownload({ item: { streamUrl, pageUrl, ... } })`.
-- **Cross-Domain Redirect Handler:** Handles HTTP 301/302/303/307 redirects in a Java loop in `openConnectionWithHeaders`, resolving Google Drive redirects to direct download URLs.
-- **Direct Video Stream Bypass:** Recognizes Google Drive URLs (`drive.google.com` / `export=download`) as direct video streams, bypassing anime server extraction.
-- **Foreground Service:** Runs in Android's background service with notification bar progress tracking, saving the downloaded MP4 directly into the device's Downloads directory and listing it in AniLove's **Downloads Tab**.
+### D. 3-Tier Auto-Reconnect Watchdog & Resume Engine
+The watchdog runs an interval every 350ms to detect if the video is frozen, stalled, or auto-paused by WebView while `isManuallyPausedRef.current` is `false`:
+
+1. **Level 1 Kickstart (800ms):** If the video is paused or `currentTime` hasn't advanced for >800ms, calls `video.play()`.
+2. **Level 2 Soft Reload (2,200ms):** If stuck for >2.2 seconds, reloads the video media element pipeline (`video.load()`, restoring `video.currentTime`) to kickstart stuck decoders.
+3. **Level 3 Stream Fallback (4,200ms):** Swaps the source override endpoint with a fresh timestamp parameter (`&retry=${now}`) to bypass temporary CDN stalls.
+4. **App Resume Listener:** Listens to `visibilitychange` and window `focus` events. Returning from backgrounding instantly triggers `video.play()`.
+
+### E. Gesture Controls & Dynamic UI
+- **Single Tap:** Toggles Play / Pause with transparent feedback overlay.
+- **Double Tap:** Captures exact touch `(clientX, clientY)` coordinates, animates a floating heart burst directly under the user's finger, and toggles reel bookmarking.
+- **Hold / Long-Press:** Accelerates video playback speed smoothly to 2.0x with a white `"2x Speed"` badge.
+- **Vertical Drag / Flick:** Framer Motion spring slide transitions between reels.
+- **Hardware Memory Cleanup:** `cleanupVideoElement()` pauses the current video, removes its `src` attribute, and calls `.load()` on every swipe to release GPU decoders.
+- **Interactive Seekbar:** Seekbar timestamps (`0:05` / `0:15`) stay hidden during normal playback and appear ONLY while the user is actively scrubbing the seekbar.
+
+### F. Native Android Download Service (`android/.../EpisodeDownloadService.java`)
+- **Invocation:** Triggered via `DownloadPlugin.startDownload({ item: { streamUrl, pageUrl, ... } })`.
+- **Redirect Handler:** Bypasses Google Drive 302/307 redirects in a native Java HTTP loop in `openConnectionWithHeaders`.
+- **Foreground Download Service:** Runs in Android's background service with notification bar progress tracking, saving downloaded MP4 files directly to the device's Downloads folder.
 
 ---
 
-## 4. Key Developer Tips for Future Maintainers
+## 4. Developer Guidelines for Future Contributors
 
-1. **Do NOT re-introduce `<iframe>` or embed links:** HTML5 `<video>` with direct MP4 streams and RAM Blob URLs is the only approach that guarantees custom UI gestures without clunky Google Drive web controls.
-2. **Single Owner of Dataset:** `reelsService.ts` is the single owner importing `animeReels.json`. Do not import `animeReels.json` directly in `ReelsView.tsx` to prevent Rollup module hoisting ReferenceErrors.
-3. **Keep `streamUrl` and `pageUrl` in `DownloadPlugin` calls:** Android's `EpisodeDownloadService` requires `streamUrl` in the JSON payload to parse download targets correctly.
-4. **Session Persistence:** `saveStoredReelsSession()` uses `sessionStorage` so the active feed position persists during tab switches and clears when the app is removed from recent apps.
+1. **Never Re-introduce `<iframe>` Embeds:** HTML5 `<video>` with direct MP4 streams and RAM Blob URLs is required for smooth gesture controls, custom speed handling, and control-less UI.
+2. **Always Keep Derived Variables Above Hooks:** Maintain `const currentReel = feedHistory[historyIndex] || null;` and `activeVideoUrl` above all `useEffect` hooks in `ReelsView.tsx` to avoid TDZ errors.
+3. **Do Not Bypass `cleanupVideoElement()`:** Always invoke `cleanupVideoElement()` before changing `historyIndex` to prevent GPU memory leaks on low-end Android devices.
+4. **Keep `sessionStorage` for Session State:** `saveStoredReelsSession()` uses `sessionStorage` so active scroll position persists during tab switches and clears when the app is removed from recent apps.
