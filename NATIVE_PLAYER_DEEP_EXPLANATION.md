@@ -34,10 +34,10 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), dynamic domain `Referer`/`Origin` header resolution, HTTP 403 automatic retry, background VideoSniffer stream extraction for embed URLs, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
-| `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams to extract direct `.m3u8` / `.mp4` video links and `.vtt` subtitles from 3rd-party embed servers without rendering web players. |
-| `subtitleService.ts` | Subtitle Pipeline | Unified API fetching (`subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
-| `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`) to React. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), real-time TrackSelectionParameters for video resolution and audio language changing, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention via VideoSniffer lifecycle cleanup, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams with static instance tracking (`cancelActiveSniffers()`) to extract direct `.m3u8` / `.mp4` video links and prevent duplicate background audio playback. |
+| `subtitleService.ts` | Subtitle Pipeline | Dedicated Subtitle API fetching (`subtitles-l8cm.onrender.com/subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
+| `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `notifyLanguageChange`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, `#EXT-X-STREAM-INF` master playlist resolution parsing for 1080p / 720p / 480p quality selection, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
 | `streamingProviders.ts` | Server Resolvers | 2-tier server resolver architecture (Tier 1 client generators + Tier 2 API fallbacks) with dynamic HLS quality resolution probing. |
@@ -46,24 +46,29 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ---
 
-## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine & HTTP 403 Resolution
+## ⚡ 2. Real-Time Settings Sync & Dual Audio Prevention
 
-The web-based WebView video player has been **completely removed** and replaced entirely with **AndroidX Media3 ExoPlayer**:
-- **Hardware-Accelerated GPU Decoding**: Direct communication with Android `MediaCodec` C++ decoders, delivering 60fps playback with **30-40% lower battery usage** and zero web worker overhead.
-- **Dynamic Referer & Origin Domain Matching (`getBestRefererForUrl`)**: Resolves the exact parent domain (e.g. `https://vidnest.fun/`, `https://tryembed.us.cc/`, `https://rubystm.com/`, `https://vidlink.pro/`, `https://vidsrc.cc/`, `https://piratexplay.cc/`) for every stream segment request, populating both `Referer` and `Origin` HTTP headers in `DefaultHttpDataSource.Factory` to bypass CDN hotlink protection and resolve **HTTP 403 Forbidden** errors.
-- **Automatic Background Embed Stream Extraction**: When an embed webpage URL is loaded, `NativePlayerActivity` detects `!isDirectMediaStream(url)` and automatically triggers `VideoSniffer` in the background to capture the real `.m3u8` or `.mp4` stream, feeding the extracted direct link into `DefaultMediaSourceFactory` with correct headers.
-- **HTTP 403 Auto-Retry**: If ExoPlayer encounters an `HttpDataSource.InvalidResponseCodeException` with Response Code 403/401, `onPlayerError` catches it and automatically re-sniffs the parent embed page with updated headers before retrying playback.
+### Real-Time Video Quality & Audio Language Selector
+- **ExoPlayer TrackSelectionParameters**: Changing video quality (1080p, 720p, 480p, 360p) or audio language (Hindi, English Dub, Japanese Sub, Tamil, Telugu) in `NativePlayerActivity` dynamically invokes `exoPlayer.setTrackSelectionParameters()`:
+  - Video Quality: `builder.setMaxVideoSize(1920, targetHeight)`.
+  - Audio Language: `builder.setPreferredAudioLanguage(targetLangCode)`.
+- **ExoPlayer Track Extraction (`populateTracksFromExoPlayer`)**: When ExoPlayer reaches `Player.STATE_READY`, it inspects `exoPlayer.getCurrentTracks()` and populates available resolutions and audio languages directly from the active HLS stream into the settings sheet.
+
+### Dual Audio Prevention Mechanics
+- **Active Sniffer Lifecycle (`VideoSniffer.cancelActiveSniffers()`)**: Whenever `NativePlayerActivity` launches a new stream or switches servers (Server 1 $\leftrightarrow$ Server 2), `VideoSniffer.cancelActiveSniffers()` halts and destroys all running background sniffers, muting and pausing their WebViews to eliminate duplicate background audio playback.
+- **ExoPlayer Instance Release**: `setupExoPlayerOnlineDirect` and `onNewIntent` call `exoPlayer.stop()` and `exoPlayer.release()` before initializing a new stream, guaranteeing only 1 single audio/video instance runs at any time.
 
 ---
 
-## 💬 3. Subtitle Appearance Styling & Priority Ordering
+## 💬 3. Dedicated Subtitle API Integration (`subtitles.php`)
 
-- **Caption Stream Ordering**: `"English"` is ALWAYS placed #1 and `"English 2"` is ALWAYS placed #2 at the front of the track list in the Captions menu.
-- **Native Subtitle Overlay Styling Sync**:
-  - `applyCaptionStyle()` applies styles directly to `text_native_subtitle_overlay`:
-    - **Bottom Margin**: Dynamic bottom margin calculation (`(int) (12 + (bmPercentage * 2.2f)) * density`) with `requestLayout()` / `invalidate()`.
+- **Dedicated API Priority**: `fetchUnifiedSubtitlesJava(anilistId, episodeNumber)` queries `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=...&ep=...`.
+- **Protected Subtitle Track**: VideoSniffer is explicitly prevented from overwriting `subtitleUrl` if a track from the dedicated Subtitle API is already loaded.
+- **VTT/SRT Cue Reset (`downloadAndParseVttFile`)**: `parsedVttCues.clear()` is called immediately before downloading new `.vtt` / `.srt` files to ensure stale cues from previous episodes or servers do not persist.
+- **Native Overlay Styling Sync**:
+  - `applyCaptionStyle()` applies custom styles to `text_native_subtitle_overlay`:
+    - **Bottom Margin**: Dynamic bottom margin calculation (`(int) (12 + (bmPercentage * 2.2f)) * density`).
     - **Outline / Shadow**: Sets `textOverlay.setShadowLayer()` based on `"Shadow"`, `"Outline"`, or `"None"`.
-    - **Regular / Bold**: Sets `Typeface.create(Typeface.DEFAULT, Typeface.BOLD)` + `setFakeBoldText(true)` for `"Bold"`.
 
 ---
 
@@ -79,12 +84,9 @@ The web-based WebView video player has been **completely removed** and replaced 
 
 ### Mode 2: Fullscreen Sensor Landscape & Smooth Scale Transition
 - **Shared-Element Scale Transition**: When toggling fullscreen landscape (`toggleFullscreenInPlace()`), `video_root_container` animates its scale smoothly (`1.04x` scale bounce) before adjusting orientation and layout params, creating a polished native app transition.
-- **Display Cutout**: Utilizes `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` so video extends edge-to-edge around notch/camera cutouts.
-- **System Insets**: Standard system bars (Status & Navigation) are hidden automatically.
 
 ### Mode 3: Offline Download Playback
 - Uses **AndroidX Media3 ExoPlayer** to render downloaded `.mp4` video files alongside local `.vtt` / `.srt` subtitle files.
-- Operates with constant-bitrate seeking enabled for smooth scrubbing over local storage.
 
 ---
 
@@ -93,30 +95,13 @@ The web-based WebView video player has been **completely removed** and replaced 
 - **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved `HTTP 400 Bad Request` errors, returning exact OP/ED skip intervals.
 - **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
   - Draws a vibrant **yellow highlight bar** (`#FFD700`) on the seekbar track across the exact Opening (`aniSkipOpStart` to `aniSkipOpEnd`) and Ending (`aniSkipEdStart` to `aniSkipEdEnd`) intervals.
-  - Drawn **ON TOP** of the progress bar so the yellow highlight remains permanent on the seekbar even after current progress passes over it.
-- **Independent Skip Buttons**:
-  - Automatically displays `"⏭️ Skip Intro"` during Opening (OP) scenes and `"⏭️ Skip Ending"` during Ending (ED) scenes, remaining 100% visible on screen even when player controls hide.
 - **Auto-Next Episode Countdown Toast (`layout_auto_next_toast`)**:
-  - When `duration - position <= 10s` (10 seconds remaining), a non-intrusive pill toast appears at the bottom overlay:
-    - Text: `"Next in X s"` with active circular progress indicator.
-    - Buttons: `"Play Now"` (triggers instant episode transition) and `"✕ Cancel"` (dismisses toast and cancels auto-next trigger for current episode).
-    - When countdown reaches `0s`, `navigateEpisode(true)` triggers automatically.
+  - When `duration - position <= 10s` (10 seconds remaining), a non-intrusive pill toast appears with `"Next in X s"`, `"Play Now"`, and `"✕ Cancel"` buttons.
 
 ---
 
-## 💾 6. Multi-Quality HLS Downloader & 500 MB LRU Disk Cache
+## 🛠️ 6. Maintenance Checklist for Developers
 
-### Multi-Quality HLS Variant Parser (`EpisodeDownloadService.java`)
-- When downloading `.m3u8` streams, `EpisodeDownloadService` fetches the master playlist and scans `#EXT-X-STREAM-INF` entries for `RESOLUTION` and `BANDWIDTH`.
-- **Quality Resolution Matching**:
-  - `"1080p"`: Selects variant with height $\ge 1000$ (e.g. 1920x1080).
-  - `"720p"`: Selects variant with height $700 \le h < 1000$ (e.g. 1280x720).
-  - `"480p"` / `"360p"`: Selects variant with height $360 \le h < 700$ (e.g. 854x480).
-- **Multi-Threaded 10-Worker Parallel Downloader**: Downloads segment chunks concurrently for maximum 5G/Wi-Fi speed, saving final video as `ep_X.mp4`.
-
----
-
-## 🛠️ 7. Maintenance & Troubleshooting Checklist for Developers
-
-1. **ExoPlayer Cleanup**: Always release ExoPlayer instances in `onPause()`, `onStop()`, and `onDestroy()` to prevent background ghost audio or memory leaks.
-2. **HTTP 403 & Header Resolution**: Ensure `getBestRefererForUrl` includes any new streaming domains. ExoPlayer automatically populates `Referer` and `Origin` headers to bypass CDN anti-hotlinking.
+1. **Dual Audio Prevention**: Always call `VideoSniffer.cancelActiveSniffers()` and release `exoPlayer` before starting new streams.
+2. **Subtitles**: The dedicated Subtitle API (`subtitles-l8cm.onrender.com/subtitles.php`) is the primary subtitle provider. Do not allow VideoSniffer to overwrite `subtitleUrl` when dedicated API subtitles are loaded.
+3. **ExoPlayer Tracks**: Use `exoPlayer.setTrackSelectionParameters()` to update video quality and audio language dynamically at runtime.

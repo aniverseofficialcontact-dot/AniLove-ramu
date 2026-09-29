@@ -1,11 +1,13 @@
 package com.anilove.app;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -20,6 +22,17 @@ import java.util.Map;
 
 public class VideoSniffer {
     private static final String TAG = "VideoSniffer";
+    private static VideoSniffer activeSniffer;
+
+    public static void cancelActiveSniffers() {
+        if (activeSniffer != null) {
+            try {
+                activeSniffer.cleanup();
+            } catch (Exception ignored) {}
+            activeSniffer = null;
+        }
+    }
+
     private WebView webView;
     private OnVideoFoundListener listener;
     private boolean found = false;
@@ -99,7 +112,7 @@ public class VideoSniffer {
             }
 
             @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 injectRequestSniffer(view);
             }
@@ -112,7 +125,7 @@ public class VideoSniffer {
         });
 
         webView.addJavascriptInterface(new Object() {
-            @android.webkit.JavascriptInterface
+            @JavascriptInterface
             public void onUrlFound(String url) {
                 if (url == null) return;
                 String lower = url.toLowerCase();
@@ -245,6 +258,8 @@ public class VideoSniffer {
     }
 
     public void sniff(String pageUrl, OnVideoFoundListener listener) {
+        cancelActiveSniffers();
+        activeSniffer = this;
         this.listener = listener;
         this.found = false;
 
@@ -316,18 +331,23 @@ public class VideoSniffer {
         timeoutHandler.postDelayed(timeoutRunnable, 35000);
     }
 
-    private void cleanup() {
-        timeoutHandler.removeCallbacks(timeoutRunnable);
+    public void cleanup() {
+        if (activeSniffer == this) {
+            activeSniffer = null;
+        }
+        if (timeoutHandler != null && timeoutRunnable != null) {
+            timeoutHandler.removeCallbacks(timeoutRunnable);
+        }
         new Handler(Looper.getMainLooper()).post(() -> {
             if (webView != null) {
                 try {
                     webView.evaluateJavascript(
                         "(function(){" +
                         "  var e=document.querySelectorAll('video,audio');" +
-                        "  for(var i=0;i<e.length;i++){try{e[i].pause();e[i].src='';}catch(err){}}" +
+                        "  for(var i=0;i<e.length;i++){try{e[i].muted=true;e[i].pause();e[i].src='';}catch(err){}}" +
                         "  if(window.frames){for(var j=0;j<window.frames.length;j++){" +
                         "    try{var fe=window.frames[j].document.querySelectorAll('video,audio');" +
-                        "    for(var k=0;k<fe.length;k++){fe[k].pause();fe[k].src='';}}catch(err){}" +
+                        "    for(var k=0;k<fe.length;k++){fe[k].muted=true;fe[k].pause();fe[k].src='';}}catch(err){}" +
                         "  }}" +
                         "})();", null);
                     webView.stopLoading();

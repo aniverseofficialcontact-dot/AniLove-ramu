@@ -77,6 +77,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.getcapacitor.JSObject;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
@@ -96,11 +97,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
@@ -1493,12 +1497,92 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
+    @UnstableApi
     private void changeVideoQuality(String quality) {
         currentSelectedQuality = quality;
+        if (exoPlayer == null) return;
+        try {
+            int targetHeight = -1;
+            String lower = quality.toLowerCase();
+            if (lower.contains("1080")) targetHeight = 1080;
+            else if (lower.contains("720")) targetHeight = 720;
+            else if (lower.contains("480")) targetHeight = 480;
+            else if (lower.contains("360")) targetHeight = 360;
+
+            TrackSelectionParameters builder = exoPlayer.getTrackSelectionParameters()
+                    .buildUpon()
+                    .setMaxVideoSize(1920, targetHeight > 0 ? targetHeight : 4000)
+                    .build();
+            exoPlayer.setTrackSelectionParameters(builder);
+            Toast.makeText(this, "Quality: " + quality, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e("AniLove", "Error changing video quality", e);
+        }
     }
 
+    @UnstableApi
     private void changeAudioLanguage(String audioLang) {
         currentSelectedAudio = audioLang;
+        updateAudioBadge(audioLang);
+        if (exoPlayer == null) return;
+        try {
+            String targetLangCode = "en";
+            String lower = audioLang.toLowerCase();
+            if (lower.contains("jap") || lower.contains("sub") || lower.contains("japanese")) targetLangCode = "ja";
+            else if (lower.contains("hin") || lower.contains("hindi")) targetLangCode = "hi";
+            else if (lower.contains("tam") || lower.contains("tamil")) targetLangCode = "ta";
+            else if (lower.contains("tel") || lower.contains("telugu")) targetLangCode = "te";
+            else if (lower.contains("mal") || lower.contains("malayalam")) targetLangCode = "ml";
+            else if (lower.contains("kan") || lower.contains("kannada")) targetLangCode = "kn";
+            else if (lower.contains("ben") || lower.contains("bengali")) targetLangCode = "bn";
+
+            TrackSelectionParameters builder = exoPlayer.getTrackSelectionParameters()
+                    .buildUpon()
+                    .setPreferredAudioLanguage(targetLangCode)
+                    .build();
+            exoPlayer.setTrackSelectionParameters(builder);
+
+            NativePlayerPlugin.notifyLanguageChange(audioLang);
+            Toast.makeText(this, "Audio: " + audioLang, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e("AniLove", "Error changing audio language", e);
+        }
+    }
+
+    @UnstableApi
+    private void populateTracksFromExoPlayer() {
+        if (exoPlayer == null) return;
+        try {
+            Tracks tracks = exoPlayer.getCurrentTracks();
+            List<String> qualities = new ArrayList<>();
+            List<String> audios = new ArrayList<>();
+
+            for (Tracks.Group group : tracks.getGroups()) {
+                int trackType = group.getType();
+                for (int i = 0; i < group.length; i++) {
+                    Format format = group.getTrackFormat(i);
+                    if (trackType == C.TRACK_TYPE_VIDEO) {
+                        if (format.height > 0) {
+                            String q = format.height + "p";
+                            if (!qualities.contains(q)) qualities.add(q);
+                        }
+                    } else if (trackType == C.TRACK_TYPE_AUDIO) {
+                        String lang = format.language;
+                        String label = format.label;
+                        String name = (label != null && !label.isEmpty()) ? label : (lang != null ? lang : "Audio " + (audios.size() + 1));
+                        if (!audios.contains(name)) audios.add(name);
+                    }
+                }
+            }
+
+            if (!qualities.isEmpty()) {
+                if (!qualities.contains("Auto")) qualities.add(0, "Auto");
+                detectedQualities = qualities;
+            }
+            if (!audios.isEmpty()) {
+                detectedAudios = audios;
+            }
+        } catch (Exception ignored) {}
     }
 
     private void changeSubtitleTrack(String subTrack) {
@@ -1688,6 +1772,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    @UnstableApi
     private void showSettingsMenu() {
         BottomSheetDialog dialog = new BottomSheetDialog(this);
         View view = getLayoutInflater().inflate(R.layout.settings_bottom_sheet, null);

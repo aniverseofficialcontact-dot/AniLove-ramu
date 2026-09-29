@@ -30,6 +30,14 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
+    public static void notifyLanguageChange(String lang) {
+        if (currentInstance != null) {
+            JSObject ret = new JSObject();
+            ret.put("language", lang);
+            currentInstance.notifyListeners("onLanguageChange", ret);
+        }
+    }
+
     @PluginMethod
     public void play(PluginCall call) {
         currentInstance = this;
