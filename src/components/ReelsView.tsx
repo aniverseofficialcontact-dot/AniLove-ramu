@@ -167,16 +167,17 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   }, [currentReel?.id]);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
-    if (videoRef.current && typeof videoRef.current.play === 'function') {
-      return videoRef.current;
-    }
-    const el = document.getElementById('active-reel-video') as HTMLVideoElement | null;
+    if (!currentReel?.id) return null;
+    const el = document.getElementById(`active-reel-video-${currentReel.id}`) as HTMLVideoElement | null;
     if (el) {
       videoRef.current = el;
       return el;
     }
+    if (videoRef.current && typeof videoRef.current.play === 'function') {
+      return videoRef.current;
+    }
     return null;
-  }, []);
+  }, [currentReel?.id]);
 
   // First Touch Unmutes Audio permanently across all reels
   useEffect(() => {
@@ -227,7 +228,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               video.play().catch(() => {});
             } else {
               video.load();
-              video.currentTime = currentPos;
+              if (currentPos > 0) video.currentTime = currentPos;
               video.play().catch(() => {});
             }
           } catch {}
@@ -298,29 +299,25 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
 
-  // Direct Stream Source or RAM Blob URL (Synchronous 0ms check for Reel 1)
+  // Direct Stream Source or RAM Blob URL: Set ONCE per reel view, NEVER mutate mid-flight!
   useEffect(() => {
     if (!currentReel?.id) return;
-    let isMounted = true;
 
     setVideoSrcOverride(null);
     setIs2xSpeed(false);
     setIsVideoLoaded(false);
 
-    // 1. Check synchronous blob cache first
+    // 1. Check if Blob Object URL is available in RAM right now
     const syncBlobUrl = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
     if (syncBlobUrl) {
       setResolvedVideoUrl(syncBlobUrl);
     } else {
+      // Set stable direct MP4 byte stream endpoint
       setResolvedVideoUrl(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`);
-      reelMediaCache.getReelVideoUrl(currentReel.id).then(url => {
-        if (isMounted && url) {
-          setResolvedVideoUrl(url);
-        }
-      });
-    }
 
-    return () => { isMounted = false; };
+      // Background pre-fetch into RAM for future re-visits
+      reelMediaCache.getReelVideoUrl(currentReel.id).catch(() => {});
+    }
   }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata from Cloud/Cache
@@ -882,7 +879,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
                 {/* Pure Borderless HTML5 Video Element (NO Google Drive Embed Controls!) */}
                 <video
-                  id="active-reel-video"
+                  id={`active-reel-video-${currentReel.id}`}
                   ref={el => { videoRef.current = el; }}
                   src={activeVideoUrl}
                   poster={activePosterUrl}
