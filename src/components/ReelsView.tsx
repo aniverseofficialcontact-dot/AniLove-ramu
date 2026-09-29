@@ -27,7 +27,8 @@ import {
   preloadReels,
   getStartingReelsFeed,
   saveStoredReelsSession,
-  recordReelToHistory
+  recordReelToHistory,
+  recordLastTwoWatchedReels
 } from '../services/reelsService';
 import { reelMediaCache } from '../services/reelMediaCache';
 import { reelDeckManager, recordReelAsWatched } from '../services/reelRandomizer';
@@ -100,6 +101,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const seekbarRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const was2xHoldingRef = useRef<boolean>(false);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -277,6 +279,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (currentReel?.id) {
       recordReelAsWatched(currentReel.id);
       recordReelToHistory(currentReel);
+      recordLastTwoWatchedReels(currentReel);
     }
   }, [currentReel?.id]);
 
@@ -308,6 +311,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   useEffect(() => {
     setIsFrameRendered(false);
     setIs2xSpeed(false);
+    was2xHoldingRef.current = false;
   }, [currentReel?.id, historyIndex]);
 
   useEffect(() => {
@@ -572,6 +576,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     touchStartXRef.current = touch.clientX;
     touchStartTimeRef.current = Date.now();
     hasMovedSignificantRef.current = false;
+    was2xHoldingRef.current = false;
     setIsDragging(true);
 
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
@@ -580,6 +585,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       if (v) {
         v.playbackRate = 2.0;
         setIs2xSpeed(true);
+        was2xHoldingRef.current = true;
       }
     }, 250);
   };
@@ -597,10 +603,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
-      const v = getActiveVideo();
-      if (v && is2xSpeed) {
-        v.playbackRate = 1.0;
+      if (was2xHoldingRef.current) {
+        const v = getActiveVideo();
+        if (v) v.playbackRate = 1.0;
         setIs2xSpeed(false);
+        was2xHoldingRef.current = false;
       }
     }
 
@@ -618,10 +625,21 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    const v = getActiveVideo();
-    if (v && is2xSpeed) {
-      v.playbackRate = 1.0;
+
+    // Check if user was in 2x speed hold mode
+    if (was2xHoldingRef.current) {
+      was2xHoldingRef.current = false;
+      const v = getActiveVideo();
+      if (v) {
+        v.playbackRate = 1.0;
+        if (v.paused) v.play().catch(() => {});
+      }
       setIs2xSpeed(false);
+      setIsDragging(false);
+      setDragOffsetY(0);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      return; // Exit immediately to prevent pausing video
     }
 
     lastTouchTimeRef.current = Date.now();
@@ -661,6 +679,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     touchStartXRef.current = e.clientX;
     touchStartTimeRef.current = Date.now();
     hasMovedSignificantRef.current = false;
+    was2xHoldingRef.current = false;
     setIsDragging(true);
 
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
@@ -669,6 +688,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       if (v) {
         v.playbackRate = 2.0;
         setIs2xSpeed(true);
+        was2xHoldingRef.current = true;
       }
     }, 250);
   };
@@ -685,10 +705,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         clearTimeout(holdTimerRef.current);
         holdTimerRef.current = null;
       }
-      const v = getActiveVideo();
-      if (v && is2xSpeed) {
-        v.playbackRate = 1.0;
+      if (was2xHoldingRef.current) {
+        const v = getActiveVideo();
+        if (v) v.playbackRate = 1.0;
         setIs2xSpeed(false);
+        was2xHoldingRef.current = false;
       }
     }
 
@@ -706,10 +727,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    const v = getActiveVideo();
-    if (v && is2xSpeed) {
-      v.playbackRate = 1.0;
+
+    if (was2xHoldingRef.current) {
+      was2xHoldingRef.current = false;
+      const v = getActiveVideo();
+      if (v) {
+        v.playbackRate = 1.0;
+        if (v.paused) v.play().catch(() => {});
+      }
       setIs2xSpeed(false);
+      setIsDragging(false);
+      setDragOffsetY(0);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      return;
     }
 
     if (Date.now() - lastTouchTimeRef.current < 800) return;
@@ -747,9 +778,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    const v = getActiveVideo();
-    if (v && is2xSpeed) {
-      v.playbackRate = 1.0;
+    if (was2xHoldingRef.current) {
+      was2xHoldingRef.current = false;
+      const v = getActiveVideo();
+      if (v) v.playbackRate = 1.0;
       setIs2xSpeed(false);
     }
     if (isDragging) {
@@ -1265,14 +1297,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               </div>
             )}
 
-            {/* Refined Double Tap Heart Pop Animation (Solid Pink Heart, No Pink Background Circle) */}
+            {/* Refined Double Tap Heart Pop Animation (Mirrored Exit Scale 0 & Opacity 0) */}
             <AnimatePresence>
               {showHeartBurst && (
                 <motion.div
                   initial={{ scale: 0, opacity: 0 }}
                   animate={{ scale: 1.15, opacity: 1 }}
-                  exit={{ scale: 1.8, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ duration: 0.45, ease: 'easeInOut' }}
                   style={{
                     position: 'absolute',
                     left: heartBurstPos ? `${heartBurstPos.x}px` : '50%',
@@ -1283,7 +1315,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   }}
                   className="pointer-events-none z-30"
                 >
-                  <Heart className="w-22 h-22 fill-pink-500 text-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.9)] animate-pulse" />
+                  <Heart className="w-22 h-22 fill-pink-500 text-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.9)]" />
                 </motion.div>
               )}
             </AnimatePresence>

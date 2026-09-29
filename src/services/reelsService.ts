@@ -111,6 +111,32 @@ export function findReelIndexByIdOrPrefix(reels: AnimeReel[], queryId?: string):
   );
 }
 
+const DEFAULT_ANCHOR_REEL_1 = '1cgEQgCfiXjM83SicU9B2-757Jg1P_PtK';
+const DEFAULT_ANCHOR_REEL_2 = '1h0urMntH6ZA7AIy-QR4To89kPOZkjhTO';
+const LAST_TWO_WATCHED_KEY = 'anilove_last_two_watched_reels_v1';
+
+export function getStoredLastTwoWatchedReels(): AnimeReel[] {
+  try {
+    const raw = localStorage.getItem(LAST_TWO_WATCHED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map(sanitizeReelForStorage).filter(r => Boolean(r.id));
+    }
+  } catch {}
+  return [];
+}
+
+export function recordLastTwoWatchedReels(reel: AnimeReel): void {
+  if (!reel || !reel.id) return;
+  try {
+    const current = getStoredLastTwoWatchedReels();
+    const filtered = current.filter(r => r.id !== reel.id);
+    const updated = [sanitizeReelForStorage(reel), ...filtered].slice(0, 2);
+    localStorage.setItem(LAST_TWO_WATCHED_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
 export function getStartingReelsFeed(
   initialReelId?: string,
   initialFilterMode?: 'all' | 'saved'
@@ -119,7 +145,6 @@ export function getStartingReelsFeed(
   index: number;
   filterMode: 'all' | 'saved';
 } {
-  const existingSession = getStoredReelsSession();
   const bundled = getBundledReels(false);
   const savedReels = getStoredSavedReels();
 
@@ -145,10 +170,6 @@ export function getStartingReelsFeed(
     const cleanId = String(initialReelId).trim();
     let match = findReelByIdOrPrefix(bundled, cleanId) || findReelByIdOrPrefix(savedReels, cleanId);
 
-    if (!match && existingSession && Array.isArray(existingSession.feedHistory)) {
-      match = findReelByIdOrPrefix(existingSession.feedHistory, cleanId);
-    }
-
     if (!match) {
       match = sanitizeReelForStorage({
         id: cleanId,
@@ -165,16 +186,8 @@ export function getStartingReelsFeed(
     }
 
     reelMediaCache.preloadReel(match.id);
-
-    const others = bundled.filter(r => r.id !== match!.id).slice(0, 3);
-    const feed = [match, ...others];
-
-    saveStoredReelsSession({
-      feedHistory: feed,
-      historyIndex: 0,
-      lastWatchedReelId: match.id,
-      filterMode: 'all',
-    });
+    const upcoming = reelDeckManager.drawNextReels(bundled, 8, [match.id]);
+    const feed = [match, ...upcoming];
 
     return {
       feed,
@@ -183,36 +196,32 @@ export function getStartingReelsFeed(
     };
   }
 
-  if (existingSession && existingSession.feedHistory.length > 0) {
-    if (existingSession.filterMode === 'saved' && savedReels.length === 0) {
-      const initialPool = generateStratifiedDeck(bundled).slice(0, 10);
-      return {
-        feed: initialPool,
-        index: 0,
-        filterMode: 'all',
-      };
-    }
+  // 1. Retrieve persistent last 2 watched reels from localStorage
+  const lastTwo = getStoredLastTwoWatchedReels();
+  let anchorReels: AnimeReel[] = [];
 
-    let resumeIndex = existingSession.historyIndex;
-    if (existingSession.lastWatchedReelId) {
-      const matchIdx = existingSession.feedHistory.findIndex(r => r.id === existingSession.lastWatchedReelId);
-      if (matchIdx >= 0) {
-        resumeIndex = matchIdx;
-      }
-    }
-    resumeIndex = Math.max(0, Math.min(resumeIndex, existingSession.feedHistory.length - 1));
-
-    return {
-      feed: existingSession.feedHistory,
-      index: resumeIndex,
-      filterMode: existingSession.filterMode || 'all',
-    };
+  if (lastTwo.length >= 1) {
+    anchorReels = lastTwo;
+  } else {
+    // Fresh install or cleared cache: load preset default anchor reels (1cgEQg and 1h0urM)
+    const def1 = findReelByIdOrPrefix(bundled, DEFAULT_ANCHOR_REEL_1) || sanitizeReelForStorage({ id: DEFAULT_ANCHOR_REEL_1, cleanTitle: 'Anime Reel 1cgEQg' });
+    const def2 = findReelByIdOrPrefix(bundled, DEFAULT_ANCHOR_REEL_2) || sanitizeReelForStorage({ id: DEFAULT_ANCHOR_REEL_2, cleanTitle: 'Anime Reel 1h0urM' });
+    anchorReels = [def1, def2];
   }
 
-  // Draw fresh stratified, non-repeating starting deck for new session
-  const initialPool = generateStratifiedDeck(bundled).slice(0, 10);
+  const anchorIds = anchorReels.map(r => r.id);
+
+  // 2. Pre-warm anchor reels in media cache
+  for (const r of anchorReels) {
+    if (r?.id) reelMediaCache.preloadReel(r.id, 'high');
+  }
+
+  // 3. Draw unwatched stratified non-repeating deck for upcoming feed items
+  const upcomingUnwatched = reelDeckManager.drawNextReels(bundled, 10, anchorIds);
+  const feed = [...anchorReels, ...upcomingUnwatched];
+
   return {
-    feed: initialPool,
+    feed,
     index: 0,
     filterMode: 'all',
   };
