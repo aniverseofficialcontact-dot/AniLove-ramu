@@ -51,31 +51,23 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
-// Framer Motion Spring Slide Variants (Instagram / Shorts Style)
+// Framer Motion GPU-Accelerated Tween Slide Variants (Instagram / Shorts Style)
 const slideVariants = {
   enter: (direction: number) => ({
     y: direction > 0 ? '100%' : '-100%',
-    opacity: 0,
-    scale: 0.97,
   }),
   center: {
     y: 0,
-    opacity: 1,
-    scale: 1,
     transition: {
-      y: { type: 'spring', stiffness: 350, damping: 30 },
-      opacity: { duration: 0.2 },
-    },
+      y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
+    }
   },
   exit: (direction: number) => ({
-    y: direction < 0 ? '100%' : '-100%',
-    opacity: 0,
-    scale: 0.97,
+    y: direction > 0 ? '-100%' : '100%',
     transition: {
-      y: { type: 'spring', stiffness: 350, damping: 30 },
-      opacity: { duration: 0.2 },
-    },
-  }),
+      y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
+    }
+  })
 };
 
 export const ReelsView: React.FC<ReelsViewProps> = ({
@@ -116,6 +108,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [is2xSpeed, setIs2xSpeed] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [isFrameRendered, setIsFrameRendered] = useState(false);
   const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
 
@@ -303,6 +297,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     setVideoSrcOverride(null);
     setIs2xSpeed(false);
     setIsVideoLoaded(false);
+    setIsFrameRendered(false);
+    setIsBuffering(false);
   }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata from Cloud/Cache
@@ -849,8 +845,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
                 {/* Zero-Flash Poster Overlay Mask */}
                 <div
-                  className={`absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none transition-opacity duration-300 z-10 ${
-                    isVideoLoaded ? 'opacity-0' : 'opacity-100'
+                  className={`absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none transition-opacity duration-200 z-10 ${
+                    isFrameRendered ? 'opacity-0' : 'opacity-100'
                   }`}
                 >
                   <img
@@ -860,6 +856,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                       aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
                     }`}
                   />
+                  {/* Sleek Pink Buffering Spinner */}
+                  {isBuffering && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
+                      <div className="w-11 h-11 rounded-full border-3 border-pink-500 border-t-transparent animate-spin" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Pure Borderless HTML5 Video Element (NO Google Drive Embed Controls!) */}
@@ -874,22 +876,17 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   muted={isMuted}
                   referrerPolicy="no-referrer"
                   onError={handleVideoError}
-                  onStalled={() => {
-                    const v = getActiveVideo();
-                    if (v && !isManuallyPausedRef.current) v.play().catch(() => {});
+                  onWaiting={() => setIsBuffering(true)}
+                  onCanPlay={() => setIsBuffering(false)}
+                  onPlaying={() => {
+                    setIsBuffering(false);
+                    setIsFrameRendered(true);
+                    setIsPlaying(true);
                   }}
-                  onWaiting={() => {
-                    const v = getActiveVideo();
-                    if (v && !isManuallyPausedRef.current) v.play().catch(() => {});
-                  }}
-                  onPlaying={() => setIsVideoLoaded(true)}
                   onLoadedData={() => setIsVideoLoaded(true)}
                   className={`w-full h-full ${
                     aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
                   }`}
-                  onCanPlay={e => {
-                    e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                  }}
                   onTimeUpdate={e => {
                     const el = e.currentTarget;
                     if (el.duration) {
