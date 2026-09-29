@@ -185,8 +185,9 @@ export function getStartingReelsFeed(
 
   if (existingSession && existingSession.feedHistory.length > 0) {
     if (existingSession.filterMode === 'saved' && savedReels.length === 0) {
+      const initialPool = generateStratifiedDeck(bundled).slice(0, 10);
       return {
-        feed: bundled.slice(0, 4),
+        feed: initialPool,
         index: 0,
         filterMode: 'all',
       };
@@ -208,8 +209,10 @@ export function getStartingReelsFeed(
     };
   }
 
+  // Draw fresh stratified, non-repeating starting deck for new session
+  const initialPool = generateStratifiedDeck(bundled).slice(0, 10);
   return {
-    feed: bundled.slice(0, 4),
+    feed: initialPool,
     index: 0,
     filterMode: 'all',
   };
@@ -252,6 +255,44 @@ export function getStoredSavedReels(): AnimeReel[] {
   } catch (err) {
     console.error('Error loading saved reels from localStorage:', err);
     return [];
+  }
+}
+
+const REELS_HISTORY_STORAGE_KEY = 'anilove_reels_history_view_v1';
+
+export function getStoredReelsHistory(): AnimeReel[] {
+  try {
+    const raw = localStorage.getItem(REELS_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map(sanitizeReelForStorage).filter(r => Boolean(r.id));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordReelToHistory(reel: AnimeReel): void {
+  if (!reel || !reel.id) return;
+  try {
+    const current = getStoredReelsHistory();
+    const filtered = current.filter(r => r.id !== reel.id);
+    const updated = [sanitizeReelForStorage(reel), ...filtered].slice(0, 50);
+    localStorage.setItem(REELS_HISTORY_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('anilove-reels-history-updated'));
+  } catch {
+    // silent
+  }
+}
+
+export function clearReelsHistory(): void {
+  try {
+    localStorage.removeItem(REELS_HISTORY_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent('anilove-reels-history-updated'));
+  } catch {
+    // silent
   }
 }
 

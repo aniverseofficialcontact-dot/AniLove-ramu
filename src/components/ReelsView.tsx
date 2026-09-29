@@ -26,7 +26,8 @@ import {
   syncReelsFromGoogleDrive,
   preloadReels,
   getStartingReelsFeed,
-  saveStoredReelsSession
+  saveStoredReelsSession,
+  recordReelToHistory
 } from '../services/reelsService';
 import { reelMediaCache } from '../services/reelMediaCache';
 import { reelDeckManager, recordReelAsWatched } from '../services/reelRandomizer';
@@ -84,9 +85,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isFrameRendered, setIsFrameRendered] = useState(false);
+  const [is2xSpeed, setIs2xSpeed] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
-  const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('contain');
+  const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('cover');
 
   const [heartBurstPos, setHeartBurstPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -95,6 +98,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const seekbarRef = useRef<HTMLDivElement>(null);
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -271,6 +276,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   useEffect(() => {
     if (currentReel?.id) {
       recordReelAsWatched(currentReel.id);
+      recordReelToHistory(currentReel);
     }
   }, [currentReel?.id]);
 
@@ -301,6 +307,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   useEffect(() => {
     setIsFrameRendered(false);
+    setIs2xSpeed(false);
   }, [currentReel?.id, historyIndex]);
 
   useEffect(() => {
@@ -308,6 +315,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
+    video.playbackRate = is2xSpeed ? 2.0 : 1.0;
     video.muted = false;
     video.volume = 1.0;
     video.currentTime = 0;
@@ -565,6 +573,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     touchStartTimeRef.current = Date.now();
     hasMovedSignificantRef.current = false;
     setIsDragging(true);
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      const v = getActiveVideo();
+      if (v) {
+        v.playbackRate = 2.0;
+        setIs2xSpeed(true);
+      }
+    }, 250);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -576,6 +593,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     if (Math.abs(diffY) > 20 || Math.abs(diffX) > 20) {
       hasMovedSignificantRef.current = true;
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      const v = getActiveVideo();
+      if (v && is2xSpeed) {
+        v.playbackRate = 1.0;
+        setIs2xSpeed(false);
+      }
     }
 
     if (Math.abs(diffY) > 12) {
@@ -588,6 +614,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    const v = getActiveVideo();
+    if (v && is2xSpeed) {
+      v.playbackRate = 1.0;
+      setIs2xSpeed(false);
+    }
+
     lastTouchTimeRef.current = Date.now();
     setIsDragging(false);
     if (touchStartYRef.current === null) return;
@@ -626,6 +662,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     touchStartTimeRef.current = Date.now();
     hasMovedSignificantRef.current = false;
     setIsDragging(true);
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      const v = getActiveVideo();
+      if (v) {
+        v.playbackRate = 2.0;
+        setIs2xSpeed(true);
+      }
+    }, 250);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -636,6 +681,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     if (Math.abs(diffY) > 20 || Math.abs(diffX) > 20) {
       hasMovedSignificantRef.current = true;
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      const v = getActiveVideo();
+      if (v && is2xSpeed) {
+        v.playbackRate = 1.0;
+        setIs2xSpeed(false);
+      }
     }
 
     if (Math.abs(diffY) > 10) {
@@ -648,6 +702,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    const v = getActiveVideo();
+    if (v && is2xSpeed) {
+      v.playbackRate = 1.0;
+      setIs2xSpeed(false);
+    }
+
     if (Date.now() - lastTouchTimeRef.current < 800) return;
     setIsDragging(false);
     if (touchStartYRef.current === null) return;
@@ -679,6 +743,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   };
 
   const handleMouseLeave = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    const v = getActiveVideo();
+    if (v && is2xSpeed) {
+      v.playbackRate = 1.0;
+      setIs2xSpeed(false);
+    }
     if (isDragging) {
       setIsDragging(false);
       setDragOffsetY(0);
@@ -841,6 +914,41 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
+  const handleSeekbarScrub = (clientX: number) => {
+    const video = getActiveVideo();
+    if (!video || !seekbarRef.current || !duration) return;
+
+    const rect = seekbarRef.current.getBoundingClientRect();
+    const clickPos = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const targetPercentage = clickPos / rect.width;
+    const newTime = targetPercentage * duration;
+
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+    setProgress(targetPercentage * 100);
+  };
+
+  const handleSeekbarStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    setIsScrubbing(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    handleSeekbarScrub(clientX);
+  };
+
+  const handleSeekbarMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isScrubbing) return;
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    handleSeekbarScrub(clientX);
+  };
+
+  const handleSeekbarEnd = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (isScrubbing) {
+      e.stopPropagation();
+      setIsScrubbing(false);
+    }
+  };
+
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
@@ -884,6 +992,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-pink-600/10 via-purple-600/10 to-indigo-600/10 rounded-full blur-[160px]" />
       </div>
 
+      {/* Floating Top Header Bar */}
       <div className="absolute top-2 lg:top-18 inset-x-0 z-40 px-3 sm:px-6 py-2 flex items-center justify-between pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-2">
           {onBack && (
@@ -919,6 +1028,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         </div>
       </div>
 
+      {/* 2x Speed White Text Badge Indicator */}
+      <AnimatePresence>
+        {is2xSpeed && (
+          <motion.div
+            initial={{ opacity: 0, y: -15, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.9 }}
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-3.5 py-1 rounded-full bg-black/60 text-white font-extrabold text-xs backdrop-blur-md border border-white/20 shadow-xl flex items-center gap-1.5 pointer-events-none"
+          >
+            <span>2x Speed</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -927,7 +1050,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full h-full max-w-lg md:max-w-xl mx-auto flex items-center justify-center overflow-hidden select-none cursor-grab active:cursor-grabbing pb-16 lg:pb-0 pt-0 lg:pt-16"
+        className="relative w-full h-full flex items-center justify-center overflow-hidden select-none cursor-grab active:cursor-grabbing pb-16 lg:pb-0 pt-0 lg:pt-16"
       >
         {isLoading ? (
           <div className="flex flex-col items-center justify-center space-y-3 text-slate-400">
@@ -982,8 +1105,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     decoding="sync"
                     // @ts-ignore
                     fetchPriority="high"
-                    className={`relative z-10 w-full h-full max-w-[420px] max-h-[88vh] ${
-                      aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+                    className={`relative z-10 w-full h-full ${
+                      aspectFitMode === 'cover' ? 'object-cover w-full h-full' : 'object-contain max-w-[420px] md:max-w-[540px] max-h-[92vh]'
                     }`}
                   />
                   {isBuffering && (
@@ -1106,7 +1229,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     }
                   }}
                   className={`w-full h-full ${
-                    aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+                    aspectFitMode === 'cover' ? 'object-cover w-full h-full' : 'object-contain max-w-[420px] md:max-w-[540px] max-h-[92vh]'
                   } bg-transparent`}
                 />
               </motion.div>
@@ -1142,14 +1265,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               </div>
             )}
 
-            {/* Double Tap Heart Pop Animation at exact touch coordinates */}
+            {/* Refined Double Tap Heart Pop Animation (Solid Pink Heart, No Pink Background Circle) */}
             <AnimatePresence>
               {showHeartBurst && (
                 <motion.div
                   initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1.35, opacity: 1 }}
-                  exit={{ scale: 2, opacity: 0 }}
-                  transition={{ duration: 0.55, ease: 'easeOut' }}
+                  animate={{ scale: 1.15, opacity: 1 }}
+                  exit={{ scale: 1.8, opacity: 0 }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
                   style={{
                     position: 'absolute',
                     left: heartBurstPos ? `${heartBurstPos.x}px` : '50%',
@@ -1160,9 +1283,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   }}
                   className="pointer-events-none z-30"
                 >
-                  <div className="p-6 rounded-full bg-pink-500/90 text-white shadow-2xl shadow-pink-500/60 backdrop-blur-md">
-                    <Heart className="w-18 h-18 fill-white text-white animate-pulse" />
-                  </div>
+                  <Heart className="w-22 h-22 fill-pink-500 text-pink-500 drop-shadow-[0_0_25px_rgba(236,72,153,0.9)] animate-pulse" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1220,7 +1341,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
                   setAspectFitMode(nextMode);
                   if (onShowToast) {
-                    onShowToast('info', nextMode === 'cover' ? 'Covering Full Screen' : 'Fit Screen Mode', 'Aspect Ratio');
+                    onShowToast('info', nextMode === 'cover' ? 'Switched to Full Screen Cover' : 'Switched to Fit Screen', 'Aspect Ratio');
                   }
                 }}
                 title={aspectFitMode === 'contain' ? 'Cover Full Screen' : 'Fit Screen'}
@@ -1260,6 +1381,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               </div>
             </div>
 
+            {/* Bottom Metadata & Scrubber Progress Bar */}
             <div className="absolute bottom-16 lg:bottom-4 inset-x-4 sm:inset-x-6 z-20 space-y-2 pointer-events-auto">
               <div className="pr-16 space-y-1">
                 <h2 className="text-sm sm:text-base font-bold text-white line-clamp-2 drop-shadow-md">
@@ -1269,32 +1391,41 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   <span className="px-2 py-0.5 rounded-md bg-white/15 backdrop-blur-md border border-white/10 text-slate-200">
                     {currentReel.size || 'HD Video'}
                   </span>
-                  <span className="text-slate-300 font-mono">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
                 </div>
               </div>
 
-              <div
-                data-interactive="true"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const clickX = e.clientX - rect.left;
-                  const newPct = Math.max(0, Math.min(1, clickX / rect.width));
-                  const v = getActiveVideo();
-                  if (v && duration) {
-                    v.currentTime = newPct * duration;
-                    setCurrentTime(v.currentTime);
-                    setProgress(newPct * 100);
-                  }
-                }}
-                className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden cursor-pointer hover:h-2 transition-all relative"
-              >
+              {/* Video Progress Scrubber Bar with Timestamps Visible ONLY During Dragging */}
+              <div className="flex items-center gap-2.5 w-full">
+                <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-right font-mono drop-shadow transition-opacity duration-200 ${
+                  isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}>
+                  {formatTime(currentTime)}
+                </span>
+
                 <div
-                  className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full transition-all duration-100"
-                  style={{ width: `${progress}%` }}
-                />
+                  ref={seekbarRef}
+                  data-interactive="true"
+                  onMouseDown={handleSeekbarStart}
+                  onMouseMove={handleSeekbarMove}
+                  onMouseUp={handleSeekbarEnd}
+                  onTouchStart={handleSeekbarStart}
+                  onTouchMove={handleSeekbarMove}
+                  onTouchEnd={handleSeekbarEnd}
+                  className="flex-1 h-3 group cursor-pointer flex items-center relative"
+                >
+                  <div className="w-full h-1.5 group-hover:h-2 rounded-full bg-white/20 relative overflow-hidden transition-all duration-150">
+                    <div
+                      className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full transition-all duration-100 relative"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-left font-mono drop-shadow transition-opacity duration-200 ${
+                  isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}>
+                  {formatTime(duration)}
+                </span>
               </div>
             </div>
           </div>

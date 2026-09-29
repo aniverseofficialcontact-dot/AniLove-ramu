@@ -7,24 +7,30 @@ import {
   ExternalLink,
   ChevronLeft,
   Search,
-  Check
+  Check,
+  History,
+  Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import { AnimeReel } from '../types';
-import { getStoredSavedReels, removeSavedReel } from '../services/reelsService';
+import {
+  getStoredSavedReels,
+  removeSavedReel,
+  getStoredReelsHistory,
+  clearReelsHistory,
+} from '../services/reelsService';
 
 interface SavedReelsGalleryProps {
   onOpenReel: (reel: AnimeReel) => void;
   onClose?: () => void;
 }
 
-// Subcomponent to render a crystal-clear visual cover for every reel (Multi-stage thumbnail + active frame seek fallback)
 const ReelCoverMedia: React.FC<{ reel: AnimeReel }> = ({ reel }) => {
   const [thumbStage, setThumbStage] = useState<number>(0);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [videoFrameReady, setVideoFrameReady] = useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
-  // Fallback chain for image thumbnail sources
   const thumbnailSources = [
     reel.thumbnailUrl || `/api/reels/thumbnail/${reel.id}`,
     `https://lh3.googleusercontent.com/d/${reel.id}=w600-h900`,
@@ -43,11 +49,10 @@ const ReelCoverMedia: React.FC<{ reel: AnimeReel }> = ({ reel }) => {
   const handleVideoMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = e.currentTarget;
     try {
-      // Seek past initial black fade-in frames (typically 0.0s - 1.0s)
       const targetTime = video.duration && video.duration > 3 ? 1.5 : 0.8;
       video.currentTime = targetTime;
     } catch {
-      // Ignore if browser restricts seeking
+      // Ignore
     }
   };
 
@@ -57,14 +62,12 @@ const ReelCoverMedia: React.FC<{ reel: AnimeReel }> = ({ reel }) => {
 
   return (
     <div className="absolute inset-0 w-full h-full overflow-hidden bg-[#0e1220]">
-      {/* 1. Anime Themed Gradient Background Base (Guarantees card is never pitch black) */}
       <div className="absolute inset-0 bg-gradient-to-tr from-pink-950/40 via-purple-950/30 to-indigo-950/40 flex items-center justify-center pointer-events-none">
         <div className="w-12 h-12 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400/50">
           <Play className="w-5 h-5 ml-0.5" />
         </div>
       </div>
 
-      {/* 2. Video Frame Snapshot (Active programmatic seek past black intro) */}
       <video
         ref={videoRef}
         src={reel.url}
@@ -79,7 +82,6 @@ const ReelCoverMedia: React.FC<{ reel: AnimeReel }> = ({ reel }) => {
         }`}
       />
 
-      {/* 3. Static High-Res Thumbnail Image */}
       {thumbStage < thumbnailSources.length && (
         <img
           key={currentThumbUrl}
@@ -102,24 +104,42 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
   onOpenReel,
   onClose
 }) => {
-  const [savedReels, setSavedReels] = useState<AnimeReel[]>([]);
+  const [activeTab, setActiveTab] = useState<'saved' | 'history'>('saved');
+  const [reels, setReels] = useState<AnimeReel[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadReels = () => {
-    setSavedReels(getStoredSavedReels());
+    if (activeTab === 'saved') {
+      setReels(getStoredSavedReels());
+    } else {
+      setReels(getStoredReelsHistory());
+    }
   };
 
   useEffect(() => {
     loadReels();
     window.addEventListener('anilove-saved-reels-updated', loadReels);
-    return () => window.removeEventListener('anilove-saved-reels-updated', loadReels);
-  }, []);
+    window.addEventListener('anilove-reels-history-updated', loadReels);
+    return () => {
+      window.removeEventListener('anilove-saved-reels-updated', loadReels);
+      window.removeEventListener('anilove-reels-history-updated', loadReels);
+    };
+  }, [activeTab]);
 
   const handleRemove = (e: React.MouseEvent, reelId: string) => {
     e.stopPropagation();
-    const updated = removeSavedReel(reelId);
-    setSavedReels(updated);
+    if (activeTab === 'saved') {
+      const updated = removeSavedReel(reelId);
+      setReels(updated);
+    }
+  };
+
+  const handleClearHistory = () => {
+    if (confirm('Clear last 50 watched reels history?')) {
+      clearReelsHistory();
+      setReels([]);
+    }
   };
 
   const handleShare = async (e: React.MouseEvent, reel: AnimeReel) => {
@@ -147,7 +167,7 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
     }
   };
 
-  const filteredReels = savedReels.filter(r => {
+  const filteredReels = reels.filter(r => {
     const title = (r.cleanTitle || r.title || '').toLowerCase();
     const q = searchQuery.toLowerCase().trim();
     return !q || title.includes(q);
@@ -155,7 +175,7 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Top Bar / Navigation header */}
+      {/* Top Bar Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#121626] border border-slate-800 shadow-xl">
         <div className="flex items-center gap-3">
           {onClose && (
@@ -169,40 +189,82 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
           )}
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 text-xs font-semibold border border-pink-500/30 mb-1">
-              <Bookmark className="w-3.5 h-3.5 fill-pink-400 text-pink-400" />
-              <span>Saved Anime Reels</span>
+              <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+              <span>Anime Reels Gallery</span>
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-white">
-              Saved Reels ({savedReels.length})
+              {activeTab === 'saved' ? `Saved Reels (${reels.length})` : `Watch History (${reels.length}/50)`}
             </h3>
           </div>
         </div>
 
-        {/* Search Bar */}
-        {savedReels.length > 0 && (
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search saved reels..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
-            />
+        {/* Tab Switcher & Search Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
+            <button
+              onClick={() => setActiveTab('saved')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'saved'
+                  ? 'bg-pink-600 text-white shadow-md shadow-pink-600/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>Saved</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'history'
+                  ? 'bg-pink-600 text-white shadow-md shadow-pink-600/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Last 50 Seen</span>
+            </button>
           </div>
-        )}
+
+          {activeTab === 'history' && reels.length > 0 && (
+            <button
+              onClick={handleClearHistory}
+              className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold transition cursor-pointer flex items-center gap-1"
+              title="Clear watch history"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear</span>
+            </button>
+          )}
+
+          {reels.length > 0 && (
+            <div className="relative w-full sm:w-48">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search reels..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Grid of Saved Reels (Instagram 3-column format) */}
+      {/* Grid of Reels */}
       {filteredReels.length === 0 ? (
         <div className="py-20 text-center rounded-3xl bg-slate-900/40 border border-slate-800/80 p-8 space-y-4">
           <div className="w-16 h-16 rounded-full bg-pink-500/10 text-pink-400 flex items-center justify-center mx-auto border border-pink-500/20">
-            <Bookmark className="w-8 h-8" />
+            {activeTab === 'saved' ? <Bookmark className="w-8 h-8" /> : <History className="w-8 h-8" />}
           </div>
           <div className="space-y-1">
-            <h4 className="text-lg font-bold text-white">No Saved Reels Yet</h4>
+            <h4 className="text-lg font-bold text-white">
+              {activeTab === 'saved' ? 'No Saved Reels Yet' : 'No Watch History Yet'}
+            </h4>
             <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-              When watching anime edit reels, tap the Bookmark to save your favorite clips here.
+              {activeTab === 'saved'
+                ? 'Double-tap any anime edit reel or tap Bookmark to save clips here.'
+                : 'Watch reels in the Reels tab to build your last 50 seen history.'}
             </p>
           </div>
         </div>
@@ -214,24 +276,19 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
               onClick={() => onOpenReel(reel)}
               className="group relative aspect-[9/16] rounded-2xl overflow-hidden bg-slate-950 border border-slate-800/80 hover:border-pink-500/50 transition-all duration-300 shadow-lg hover:shadow-pink-500/20 cursor-pointer"
             >
-              {/* Dual-Layer Reel Thumbnail Cover (Image + Instant Video Frame) */}
               <ReelCoverMedia reel={reel} />
 
-              {/* Instagram-style top badge icon */}
               <div className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-black/60 backdrop-blur-md border border-white/20 flex items-center justify-center text-white">
                 <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
               </div>
 
-              {/* Dark Gradient Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/30 opacity-80 group-hover:opacity-95 transition-opacity" />
 
-              {/* Bottom Details & Quick Actions */}
               <div className="absolute inset-x-0 bottom-0 p-3 flex flex-col justify-end space-y-2 z-10">
                 <p className="text-xs font-bold text-white line-clamp-2 leading-tight drop-shadow">
                   {reel.cleanTitle || reel.title}
                 </p>
 
-                {/* Hover Quick Action Buttons */}
                 <div className="flex items-center justify-between pt-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                   <div className="flex items-center gap-1.5">
                     <button
@@ -245,13 +302,15 @@ export const SavedReelsGallery: React.FC<SavedReelsGalleryProps> = ({
                         <Send className="w-3.5 h-3.5" />
                       )}
                     </button>
-                    <button
-                      onClick={(e) => handleRemove(e, reel.id)}
-                      title="Remove from Saved"
-                      className="p-1.5 rounded-lg bg-black/70 hover:bg-rose-600 text-rose-300 hover:text-white border border-white/20 transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {activeTab === 'saved' && (
+                      <button
+                        onClick={(e) => handleRemove(e, reel.id)}
+                        title="Remove from Saved"
+                        className="p-1.5 rounded-lg bg-black/70 hover:bg-rose-600 text-rose-300 hover:text-white border border-white/20 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1 text-[11px] font-bold text-pink-400">

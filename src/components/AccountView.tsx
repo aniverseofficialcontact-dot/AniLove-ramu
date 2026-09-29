@@ -549,6 +549,18 @@ export const AccountView: React.FC<AccountViewProps> = ({
               <span>Switch Profile</span>
             </button>
 
+            {/* Reels History & Bookmarks Button */}
+            {onNavigateToReels && (
+              <button
+                onClick={() => onNavigateToReels()}
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500/20 to-purple-500/20 hover:from-pink-500/30 hover:to-purple-500/30 border border-pink-500/30 text-pink-300 text-xs font-black uppercase tracking-widest transition flex items-center gap-2 cursor-pointer backdrop-blur-md active:scale-95"
+                title="View last 50 watched reels history and saved bookmarks (~15 KB)"
+              >
+                <Sparkles className="w-4 h-4 text-pink-400" />
+                <span>Reels History</span>
+              </button>
+            )}
+
             <div className="px-5 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-xs font-bold text-slate-300 backdrop-blur-md flex items-center gap-2">
               <Database className="w-4 h-4 text-pink-400" />
               <span>{libraryCount} in Watchlist</span>
