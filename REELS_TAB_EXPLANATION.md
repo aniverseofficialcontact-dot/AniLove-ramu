@@ -9,12 +9,16 @@ This document provides a comprehensive, complete, and up-to-date technical guide
 The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video feed powering 2,049+ anime edit clips directly from Google Drive Edge CDN (`https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`).
 
 ### Key Features & Architectural Highlights
-- **100% Direct Copy from `AniLove2-sam` (Web App Core):** Replaced the Reels pipeline with an exact 1:1 copy of the core logic from `AniLove2-sam` (`src/components/ReelsView.tsx`, `src/services/reelsService.ts`, `src/services/reelMediaCache.ts`, `src/services/reelRandomizer.ts`, `src/data/animeReels.json`).
+- **100% Core Logic from `AniLove2-sam` (Web App Engine):** The Reels pipeline is based on the core logic from `AniLove2-sam` (`src/components/ReelsView.tsx`, `src/services/reelsService.ts`, `src/services/reelMediaCache.ts`, `src/services/reelRandomizer.ts`, `src/data/animeReels.json`).
+- **App Closure Session Refresh:** `saveStoredReelsSession()` uses `sessionStorage` only. When the app is closed or removed from recent tabs, active session history resets automatically, giving the user a fresh, newly shuffled feed on next launch.
 - **Option B Serverless Direct Drive Streaming:** Direct MP4 byte streams (`https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`) bypass local Node proxy routes so the Capacitor Android APK streams directly from Google Drive Edge CDN with 0ms startup delay.
 - **Multi-Drive Stratified Non-Repeating Deck Manager (`reelRandomizer.ts`):** Uses Fisher-Yates stratified shuffle and drive partitioning (`partitionReelsByDrive`) to interleave reels fairly across drives, guaranteeing 0% repeats until all 2,049+ clips are watched.
 - **One-Time Global Audio Unlocker (`unlockAudio`):** Attaches a one-time gesture listener (`click`, `touchstart`, `touchend`, `pointerdown`, `keydown`) so unmuted audio unlocks seamlessly on the user's first touch anywhere on screen.
 - **Zero-Flash Poster & Buffering Engine (`isFrameRendered` & `isBuffering`):** Keeps a crisp poster mask overlay with a sleek pink spinner until `onPlaying` fires on the `<video>` element, completely eliminating black-screen flashes.
+- **Dynamic Touch-Coordinate Heart Burst:** Double-tapping anywhere on the canvas captures exact touch/mouse `(x, y)` coordinates and animates a floating heart burst directly under the user's finger.
+- **Aspect Ratio Cover/Fit Crop Toggle (`<Crop />`):** Action bar Crop button allows users to toggle video framing between full-screen cover (`object-cover`) and aspect fit (`object-contain`).
 - **GPU-Accelerated Tween Flick Physics (`slideVariants`):** 280ms cubic-bezier tween transition (`ease: [0.22, 1, 0.36, 1], duration: 0.28`) matching Instagram / TikTok vertical swipe gesture feel.
+- **Separate Offline Downloads Section (`DownloadsView.tsx`):** Downloads tab features dedicated category tabs separating **Downloaded Anime Series** from **Downloaded Anime Edit Clips**.
 - **Native Android Download Service (`EpisodeDownloadService`):** Integrated with native `DownloadPlugin.startDownload` on Capacitor Android so tapping download saves MP4 files to device storage with background notification progress tracking.
 
 ---
@@ -36,8 +40,8 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
               ▼
 [ ReelsView.tsx (HTML5 Video Stage) ] ─── (Direct Drive Binary Stream & Unmuted Audio Unlock)
               │
-              ├──► [ 1-Touch Audio Unlocker & Media Handlers ]
-              ├──► [ Interactive Gestures & Dynamic Heart Burst ]
+              ├──► [ Dynamic Touch-Coordinate Heart Burst ]
+              ├──► [ Aspect Ratio Cover/Fit Crop Mode ]
               ├──► [ Action Bar (Share, Save, Crop, Download, Chevrons) ]
               └──► [ Native DownloadManager Background Service ]
 ```
@@ -66,15 +70,16 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
 
 ### D. Audio Autoplay Policy & Video Stage (`src/components/ReelsView.tsx`)
 - **Unmuted Audio Unlocker:** On initial mount, `unlockAudio()` attaches passive event listeners to `click`, `touchstart`, `touchend`, `pointerdown`, and `keydown`. Tapping anywhere on screen instantly unmutes `<video>` audio and resumes playback.
-- **`settings.setMediaPlaybackRequiresUserGesture(false)`**: Added in `MainActivity.java` so WebView allows unmuted video autoplay without requiring user interaction blocks.
+- **`settings.setMediaPlaybackRequiresUserGesture(false)`**: Configured in `MainActivity.java` so WebView allows unmuted video autoplay without requiring user interaction blocks.
 - **`android:usesCleartextTraffic="true"`**: Configured in `AndroidManifest.xml` so HTTP/HTTPS media streams are never blocked by Android cleartext network security policy.
 
 ---
 
-## 4. Summary of Files Copied & Replaced from `AniLove2-sam`
+## 4. Summary of Core Files
 
-1. `src/data/animeReels.json` — 100% copied (2,049 anime reel catalog).
-2. `src/services/reelRandomizer.ts` — 100% copied (Stratified deck shuffler).
-3. `src/services/reelMediaCache.ts` — Copied & adapted for Option B Direct Drive streams.
-4. `src/services/reelsService.ts` — Copied & adapted for Option B Direct Drive streams.
-5. `src/components/ReelsView.tsx` — 100% UI, gestures, audio unlock, and player structure copied from `AniLove2-sam` + Native DownloadPlugin integration.
+1. `src/data/animeReels.json` — 2,049 anime reel catalog.
+2. `src/services/reelRandomizer.ts` — Stratified deck shuffler.
+3. `src/services/reelMediaCache.ts` — Adapted for Option B Direct Drive streams.
+4. `src/services/reelsService.ts` — Session management (`sessionStorage` only) and Drive endpoints.
+5. `src/components/ReelsView.tsx` — Full UI, touch coordinates heart burst, crop aspect ratio mode, and Native DownloadPlugin integration.
+6. `src/components/DownloadsView.tsx` — Separate category tabs for Downloaded Anime Series vs Downloaded Anime Edit Clips.

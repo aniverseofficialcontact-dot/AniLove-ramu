@@ -66,12 +66,6 @@ export function saveStoredReelsSession(session: ReelsSessionState): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
     }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
-      if (cleanSession.lastWatchedReelId) {
-        localStorage.setItem('anilove_last_watched_reel_id', cleanSession.lastWatchedReelId);
-      }
-    }
   } catch {
     // silent
   }

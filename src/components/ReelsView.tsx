@@ -6,8 +6,6 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
-  Maximize2,
-  Minimize2,
   Film,
   RotateCw,
   Download,
@@ -74,7 +72,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return session.index;
   });
   const [slideDirection, setSlideDirection] = useState<number>(1);
-
+  
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,13 +81,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isFrameRendered, setIsFrameRendered] = useState(false);
 
   const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
   const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('contain');
+
+  const [heartBurstPos, setHeartBurstPos] = useState<{ x: number; y: number } | null>(null);
 
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -524,7 +523,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [currentReel, savedStatus]);
 
-  const handleCanvasInteraction = useCallback(() => {
+  const handleCanvasInteraction = useCallback((clientX?: number, clientY?: number) => {
     const video = getActiveVideo();
     if (video) {
       video.muted = false;
@@ -538,6 +537,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       clearTimeout(tapTimerRef.current);
       tapTimerRef.current = null;
       lastTapTimeRef.current = 0;
+
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        setHeartBurstPos({ x: clientX, y: clientY });
+      } else {
+        setHeartBurstPos(null);
+      }
+
       handleToggleSave();
     } else {
       lastTapTimeRef.current = now;
@@ -591,6 +597,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const timeDiff = Date.now() - touchStartTimeRef.current;
     const totalDistance = Math.hypot(diffX, diffY);
 
+    const touchX = e.changedTouches[0].clientX;
+    const touchY = e.changedTouches[0].clientY;
+
     touchStartYRef.current = null;
     touchStartXRef.current = null;
 
@@ -604,7 +613,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     } else {
       setDragOffsetY(0);
       if (!hasMovedSignificantRef.current || totalDistance < 25) {
-        handleCanvasInteraction();
+        handleCanvasInteraction(touchX, touchY);
       }
     }
   };
@@ -648,6 +657,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const timeDiff = Date.now() - touchStartTimeRef.current;
     const totalDistance = Math.hypot(diffX, diffY);
 
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
+
     touchStartYRef.current = null;
     touchStartXRef.current = null;
 
@@ -661,7 +673,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     } else {
       setDragOffsetY(0);
       if (!hasMovedSignificantRef.current || totalDistance < 25) {
-        handleCanvasInteraction();
+        handleCanvasInteraction(mouseX, mouseY);
       }
     }
   };
@@ -829,15 +841,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
-
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
@@ -912,14 +915,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
           >
             <RotateCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-pink-400' : ''}`} />
-          </button>
-
-          <button
-            onClick={toggleFullscreen}
-            title="Toggle Fullscreen"
-            className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] hidden sm:flex"
-          >
-            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
           </button>
         </div>
       </div>
@@ -1111,11 +1106,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     }
                   }}
                   className={`w-full h-full ${
-                    isLandscape
-                      ? aspectFitMode === 'contain'
-                        ? 'object-contain'
-                        : 'object-cover'
-                      : 'object-cover'
+                    aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
                   } bg-transparent`}
                 />
               </motion.div>
@@ -1151,6 +1142,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               </div>
             )}
 
+            {/* Double Tap Heart Pop Animation at exact touch coordinates */}
             <AnimatePresence>
               {showHeartBurst && (
                 <motion.div
@@ -1158,7 +1150,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   animate={{ scale: 1.35, opacity: 1 }}
                   exit={{ scale: 2, opacity: 0 }}
                   transition={{ duration: 0.55, ease: 'easeOut' }}
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+                  style={{
+                    position: 'absolute',
+                    left: heartBurstPos ? `${heartBurstPos.x}px` : '50%',
+                    top: heartBurstPos ? `${heartBurstPos.y}px` : '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 50,
+                    pointerEvents: 'none'
+                  }}
+                  className="pointer-events-none z-30"
                 >
                   <div className="p-6 rounded-full bg-pink-500/90 text-white shadow-2xl shadow-pink-500/60 backdrop-blur-md">
                     <Heart className="w-18 h-18 fill-white text-white animate-pulse" />
@@ -1212,19 +1212,22 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 <Download className="w-7 h-7 stroke-[2.2]" />
               </button>
 
-              {isLandscape && (
-                <button
-                  data-interactive="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAspectFitMode(prev => (prev === 'contain' ? 'cover' : 'contain'));
-                  }}
-                  title={aspectFitMode === 'contain' ? 'Switch to Full Fill' : 'Switch to Aspect Fit'}
-                  className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-                >
-                  <Crop className="w-7 h-7 stroke-[2.2]" />
-                </button>
-              )}
+              {/* Crop / Aspect Ratio Toggle (Cover Full Screen vs Fit Screen) */}
+              <button
+                data-interactive="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
+                  setAspectFitMode(nextMode);
+                  if (onShowToast) {
+                    onShowToast('info', nextMode === 'cover' ? 'Covering Full Screen' : 'Fit Screen Mode', 'Aspect Ratio');
+                  }
+                }}
+                title={aspectFitMode === 'contain' ? 'Cover Full Screen' : 'Fit Screen'}
+                className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              >
+                <Crop className="w-7 h-7 stroke-[2.2]" />
+              </button>
 
               <div className="flex flex-col gap-3 pt-2">
                 <button
