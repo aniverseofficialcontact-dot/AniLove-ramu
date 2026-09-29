@@ -63,7 +63,7 @@ export interface DownloadPluginInterface {
   ): Promise<any>;
 }
 
-const DownloadPlugin = registerPlugin<DownloadPluginInterface>('DownloadPlugin');
+export const DownloadPlugin = registerPlugin<DownloadPluginInterface>('DownloadPlugin');
 
 type DownloadSubscriber = (downloads: DownloadItemInfo[]) => void;
 const subscribers = new Set<DownloadSubscriber>();

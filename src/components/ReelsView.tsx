@@ -31,6 +31,7 @@ import {
 } from '../services/reelsService';
 import bundledReelsRaw from '../data/animeReels.json';
 import { reelMediaCache } from '../services/reelMediaCache';
+import { DownloadPlugin } from '../services/downloadManager';
 
 interface ReelsViewProps {
   onBack?: () => void;
@@ -40,8 +41,6 @@ interface ReelsViewProps {
   initialFilterMode?: 'all' | 'saved';
   refreshTrigger?: number;
 }
-
-const DownloadPlugin = registerPlugin<any>('DownloadPlugin');
 
 // Global Unmuted Preference Flag across session
 let globalUserUnmutedPreference = true;
