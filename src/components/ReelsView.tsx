@@ -97,7 +97,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isFrameRendered, setIsFrameRendered] = useState(false);
   const [is2xSpeed, setIs2xSpeed] = useState(false);
@@ -380,7 +379,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             setIsPlaying(true);
             setIsBuffering(false);
           }).catch(() => {
-            // Keep retrying muted play on cold start
+            // keep retrying
           });
         });
       }
@@ -390,13 +389,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     video.volume = 1.0;
     tryPlay();
 
-    const mountCheckTimer = setTimeout(() => {
-      if (video.paused && !isManuallyPausedRef.current) {
-        tryPlay();
-      }
-    }, 120);
+    const t1 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 50);
+    const t2 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 180);
+    const t3 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 350);
 
-    return () => clearTimeout(mountCheckTimer);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, [historyIndex, currentReel?.id, getActiveVideo]);
 
   useEffect(() => {
@@ -540,6 +541,38 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       prevRefreshTriggerRef.current = refreshTrigger;
     }
   }, [refreshTrigger, shuffleReel]);
+
+  const handleRefreshCurrentReel = useCallback(() => {
+    const video = getActiveVideo();
+    if (!video || !currentReel) return;
+
+    setIsFrameRendered(false);
+    setIsBuffering(true);
+    isManuallyPausedRef.current = false;
+
+    video.currentTime = 0;
+    try {
+      video.load();
+    } catch {}
+
+    const p = video.play();
+    if (p !== undefined) {
+      p.then(() => {
+        setIsPlaying(true);
+        setIsBuffering(false);
+      }).catch(() => {
+        video.muted = true;
+        video.play().then(() => {
+          setIsPlaying(true);
+          setIsBuffering(false);
+        }).catch(() => {});
+      });
+    }
+
+    if (onShowToast) {
+      onShowToast('info', `Reloaded ${currentReel.cleanTitle || 'Reel'}`, 'Reel Refreshed');
+    }
+  }, [getActiveVideo, currentReel, onShowToast]);
 
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
@@ -933,22 +966,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goToNext, goToPrev, togglePlay, handleToggleSave, shuffleReel, onBack]);
 
-  const handleSyncDrive = async () => {
-    setIsSyncing(true);
-    onShowToast('sync', 'Checking for new anime edits...', 'Updating Reels');
-    try {
-      const fresh = await syncReelsFromGoogleDrive();
-      if (fresh && fresh.length > 0) {
-        setAllReels(fresh);
-        onShowToast('success', `Updated with ${fresh.length} anime reels!`, 'Update Complete');
-      }
-    } catch {
-      onShowToast('info', 'Reels catalog is up to date.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const handleShare = async () => {
     if (!currentReel) return;
     const shareUrl = `${window.location.origin}/reel/${encodeURIComponent(currentReel.id)}`;
@@ -1147,13 +1164,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         )}
 
         <div className="pointer-events-auto flex items-center gap-2">
+          {/* Reload Active Reel Button */}
           <button
-            onClick={handleSyncDrive}
-            disabled={isSyncing}
-            title="Check for new anime reels"
+            onClick={handleRefreshCurrentReel}
+            title="Reload active reel stream"
             className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
           >
-            <RotateCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-pink-400' : ''}`} />
+            <RotateCw className="w-5 h-5 text-pink-400" />
           </button>
         </div>
       </div>
@@ -1266,6 +1283,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                       el.muted = false;
                       el.volume = 1.0;
                       el.playbackRate = is2xSpeed ? 2.0 : 1.0;
+                      if (el.paused && !isManuallyPausedRef.current) {
+                        el.play().then(() => setIsPlaying(true)).catch(() => {
+                          el.muted = true;
+                          el.play().then(() => setIsPlaying(true)).catch(() => {});
+                        });
+                      }
                     }
                   }}
                   src={activeVideoUrl}
@@ -1296,7 +1319,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                     if (!isManuallyPausedRef.current) {
-                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {
+                        e.currentTarget.muted = true;
+                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      });
                     }
                   }}
                   onLoadedData={(e) => {
@@ -1305,13 +1331,19 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     setIsBuffering(false);
                     setIsFrameRendered(true);
                     if (!isManuallyPausedRef.current) {
-                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {
+                        e.currentTarget.muted = true;
+                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      });
                     }
                   }}
                   onCanPlayThrough={(e) => {
                     e.currentTarget.volume = 1.0;
                     e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
+                    if (!isManuallyPausedRef.current) {
+                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                    }
                   }}
                   onLoadedMetadata={e => {
                     const target = e.currentTarget;
@@ -1323,7 +1355,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     target.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                     if (!isManuallyPausedRef.current) {
-                      target.play().then(() => setIsPlaying(true)).catch(() => {});
+                      target.play().then(() => setIsPlaying(true)).catch(() => {
+                        target.muted = true;
+                        target.play().then(() => setIsPlaying(true)).catch(() => {});
+                      });
                     }
                   }}
                   onTimeUpdate={e => {
