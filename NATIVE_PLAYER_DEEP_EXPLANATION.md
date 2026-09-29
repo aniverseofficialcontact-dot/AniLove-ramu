@@ -34,7 +34,7 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), automatic background VideoSniffer stream extraction for embed URLs, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), dynamic domain `Referer`/`Origin` header resolution, HTTP 403 automatic retry, background VideoSniffer stream extraction for embed URLs, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
 | `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams to extract direct `.m3u8` / `.mp4` video links and `.vtt` subtitles from 3rd-party embed servers without rendering web players. |
 | `subtitleService.ts` | Subtitle Pipeline | Unified API fetching (`subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`) to React. |
@@ -46,13 +46,13 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ---
 
-## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine & Automatic Embed Sniffing
+## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine & HTTP 403 Resolution
 
 The web-based WebView video player has been **completely removed** and replaced entirely with **AndroidX Media3 ExoPlayer**:
 - **Hardware-Accelerated GPU Decoding**: Direct communication with Android `MediaCodec` C++ decoders, delivering 60fps playback with **30-40% lower battery usage** and zero web worker overhead.
-- **Automatic Background Embed Stream Extraction**: When an embed webpage URL (e.g. VidNest, TryEmbed, VidLink, AbyssPlayer, RubyStm, Megaplay) is loaded, `NativePlayerActivity` detects `!isDirectMediaStream(url)` and automatically triggers `VideoSniffer` in the background to capture the real `.m3u8` or `.mp4` stream. The extracted direct stream is fed into `DefaultMediaSourceFactory` for native ExoPlayer playback.
-- **`UnrecognizedInputFormatException` Resolution**: By extracting direct `.m3u8` streams before initialization and setting `MimeTypes.APPLICATION_M3U8` / `DefaultMediaSourceFactory`, ExoPlayer never receives HTML webpage bytes as progressive media files.
-- **Custom HTTP Headers**: `DefaultHttpDataSource.Factory` injects required `Referer` and `User-Agent` headers (e.g. for RubyStm / VidNest) to play protected streams natively.
+- **Dynamic Referer & Origin Domain Matching (`getBestRefererForUrl`)**: Resolves the exact parent domain (e.g. `https://vidnest.fun/`, `https://tryembed.us.cc/`, `https://rubystm.com/`, `https://vidlink.pro/`, `https://vidsrc.cc/`, `https://piratexplay.cc/`) for every stream segment request, populating both `Referer` and `Origin` HTTP headers in `DefaultHttpDataSource.Factory` to bypass CDN hotlink protection and resolve **HTTP 403 Forbidden** errors.
+- **Automatic Background Embed Stream Extraction**: When an embed webpage URL is loaded, `NativePlayerActivity` detects `!isDirectMediaStream(url)` and automatically triggers `VideoSniffer` in the background to capture the real `.m3u8` or `.mp4` stream, feeding the extracted direct link into `DefaultMediaSourceFactory` with correct headers.
+- **HTTP 403 Auto-Retry**: If ExoPlayer encounters an `HttpDataSource.InvalidResponseCodeException` with Response Code 403/401, `onPlayerError` catches it and automatically re-sniffs the parent embed page with updated headers before retrying playback.
 
 ---
 
@@ -119,4 +119,4 @@ The web-based WebView video player has been **completely removed** and replaced 
 ## 🛠️ 7. Maintenance & Troubleshooting Checklist for Developers
 
 1. **ExoPlayer Cleanup**: Always release ExoPlayer instances in `onPause()`, `onStop()`, and `onDestroy()` to prevent background ghost audio or memory leaks.
-2. **Custom Headers & Embed Sniffing**: Ensure any server requiring custom HTTP headers passes `Referer` or `User-Agent`. Embed URLs automatically launch `VideoSniffer` to resolve direct `.m3u8` links before ExoPlayer initialization.
+2. **HTTP 403 & Header Resolution**: Ensure `getBestRefererForUrl` includes any new streaming domains. ExoPlayer automatically populates `Referer` and `Origin` headers to bypass CDN anti-hotlinking.

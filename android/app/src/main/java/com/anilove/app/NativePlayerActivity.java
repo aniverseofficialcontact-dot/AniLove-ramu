@@ -105,6 +105,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -1030,6 +1031,30 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private String getBestRefererForUrl(String videoUrl, String embedUrl) {
+        String primary = (embedUrl != null && !embedUrl.isEmpty()) ? embedUrl : videoUrl;
+        if (primary == null || primary.trim().isEmpty()) {
+            return "https://google.com/";
+        }
+        try {
+            URL parsed = new URL(primary);
+            String host = parsed.getHost().toLowerCase();
+            if (host.contains("vidnest")) return "https://vidnest.fun/";
+            if (host.contains("tryembed")) return "https://tryembed.us.cc/";
+            if (host.contains("rubystm")) return "https://rubystm.com/";
+            if (host.contains("vidlink")) return "https://vidlink.pro/";
+            if (host.contains("vidsrc")) return "https://vidsrc.cc/";
+            if (host.contains("iqsmart")) return "https://pro.iqsmartgames.com/";
+            if (host.contains("piratexplay") || host.contains("abyssplayer")) return "https://piratexplay.cc/";
+            if (host.contains("watchanimeworld")) return "https://watchanimeworld.one/";
+            if (host.contains("megaplay")) return "https://megaplay.buzz/";
+            if (host.contains("justanime")) return "https://justanime.to/";
+            return parsed.getProtocol() + "://" + host + "/";
+        } catch (Exception e) {
+            return "https://google.com/";
+        }
+    }
+
     private boolean isDirectMediaStream(String url) {
         if (url == null || url.trim().isEmpty()) return false;
         String lower = url.toLowerCase().trim();
@@ -1049,7 +1074,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @UnstableApi
-    private void runSnifferFallback(String url, String referer, Map<String, String> headers) {
+    private void runSnifferFallback(String url, String originalReferer, Map<String, String> headers) {
         runOnUiThread(() -> {
             if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
             VideoSniffer sniffer = new VideoSniffer(getApplicationContext());
@@ -1057,8 +1082,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 @Override
                 public void onVideoFound(String videoUrl) {
                     runOnUiThread(() -> {
-                        Log.i("AniLove_Sniffer", "Successfully sniffed direct stream: " + videoUrl);
-                        setupExoPlayerOnlineDirect(videoUrl, referer, headers);
+                        String bestReferer = getBestRefererForUrl(videoUrl, url);
+                        Log.i("AniLove_Sniffer", "Sniffed direct stream: " + videoUrl + " | Referer: " + bestReferer);
+                        setupExoPlayerOnlineDirect(videoUrl, bestReferer, headers);
                     });
                 }
 
@@ -1068,8 +1094,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         if (sniffedSubUrl != null && !sniffedSubUrl.isEmpty()) {
                             subtitleUrl = sniffedSubUrl;
                         }
-                        Log.i("AniLove_Sniffer", "Successfully sniffed direct stream: " + videoUrl + " | Sub: " + sniffedSubUrl);
-                        setupExoPlayerOnlineDirect(videoUrl, referer, headers);
+                        String bestReferer = getBestRefererForUrl(videoUrl, url);
+                        Log.i("AniLove_Sniffer", "Sniffed direct stream: " + videoUrl + " | Sub: " + sniffedSubUrl + " | Referer: " + bestReferer);
+                        setupExoPlayerOnlineDirect(videoUrl, bestReferer, headers);
                     });
                 }
 
@@ -1107,22 +1134,25 @@ public class NativePlayerActivity extends AppCompatActivity {
                 exoPlayer = null;
             }
 
+            String effectiveReferer = getBestRefererForUrl(hlsUrl, referer);
+
             DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
                     .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .setConnectTimeoutMs(15000)
-                    .setReadTimeoutMs(15000)
+                    .setConnectTimeoutMs(20000)
+                    .setReadTimeoutMs(20000)
                     .setAllowCrossProtocolRedirects(true);
 
             Map<String, String> requestHeaders = new HashMap<>();
-            if (referer != null && !referer.isEmpty()) {
-                requestHeaders.put("Referer", referer);
-            }
+            requestHeaders.put("Referer", effectiveReferer);
+            try {
+                URL refUrl = new URL(effectiveReferer);
+                requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
+            } catch (Exception ignored) {}
+
             if (headers != null && !headers.isEmpty()) {
                 requestHeaders.putAll(headers);
             }
-            if (!requestHeaders.isEmpty()) {
-                httpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
-            }
+            httpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
 
             exoPlayer = new ExoPlayer.Builder(this).build();
             exoPlayerView.setPlayer(exoPlayer);
@@ -1182,10 +1212,18 @@ public class NativePlayerActivity extends AppCompatActivity {
                     Log.e("AniLove", "ExoPlayer error: " + error.getMessage(), error);
                     if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
 
-                    if (error.getCause() instanceof UnrecognizedInputFormatException ||
+                    boolean is403 = false;
+                    if (error.getCause() instanceof HttpDataSource.InvalidResponseCodeException) {
+                        HttpDataSource.InvalidResponseCodeException httpError = (HttpDataSource.InvalidResponseCodeException) error.getCause();
+                        if (httpError.responseCode == 403 || httpError.responseCode == 401) {
+                            is403 = true;
+                        }
+                    }
+
+                    if (is403 || error.getCause() instanceof UnrecognizedInputFormatException ||
                         error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED) {
-                        Log.w("AniLove", "UnrecognizedInputFormatException — launching VideoSniffer fallback for: " + hlsUrl);
-                        runSnifferFallback(hlsUrl, referer, headers);
+                        Log.w("AniLove", "HTTP 403 or Unrecognized Format — retrying via VideoSniffer for: " + hlsUrl);
+                        runSnifferFallback(hlsUrl, effectiveReferer, headers);
                     } else {
                         Toast.makeText(NativePlayerActivity.this, "Playback error: Try selecting Server 2-A or Server 2-B from the menu.", Toast.LENGTH_LONG).show();
                     }
