@@ -34,7 +34,8 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), automatic background VideoSniffer stream extraction for embed URLs, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams to extract direct `.m3u8` / `.mp4` video links and `.vtt` subtitles from 3rd-party embed servers without rendering web players. |
 | `subtitleService.ts` | Subtitle Pipeline | Unified API fetching (`subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, `#EXT-X-STREAM-INF` master playlist resolution parsing for 1080p / 720p / 480p quality selection, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
@@ -45,11 +46,12 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ---
 
-## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine
+## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine & Automatic Embed Sniffing
 
 The web-based WebView video player has been **completely removed** and replaced entirely with **AndroidX Media3 ExoPlayer**:
 - **Hardware-Accelerated GPU Decoding**: Direct communication with Android `MediaCodec` C++ decoders, delivering 60fps playback with **30-40% lower battery usage** and zero web worker overhead.
-- **Unified Online & Offline Architecture**: The same ExoPlayer engine renders online direct HLS (`.m3u8`) / MP4 streams and local offline downloaded episodes with exact frame seeking.
+- **Automatic Background Embed Stream Extraction**: When an embed webpage URL (e.g. VidNest, TryEmbed, VidLink, AbyssPlayer, RubyStm, Megaplay) is loaded, `NativePlayerActivity` detects `!isDirectMediaStream(url)` and automatically triggers `VideoSniffer` in the background to capture the real `.m3u8` or `.mp4` stream. The extracted direct stream is fed into `DefaultMediaSourceFactory` for native ExoPlayer playback.
+- **`UnrecognizedInputFormatException` Resolution**: By extracting direct `.m3u8` streams before initialization and setting `MimeTypes.APPLICATION_M3U8` / `DefaultMediaSourceFactory`, ExoPlayer never receives HTML webpage bytes as progressive media files.
 - **Custom HTTP Headers**: `DefaultHttpDataSource.Factory` injects required `Referer` and `User-Agent` headers (e.g. for RubyStm / VidNest) to play protected streams natively.
 
 ---
@@ -117,4 +119,4 @@ The web-based WebView video player has been **completely removed** and replaced 
 ## 🛠️ 7. Maintenance & Troubleshooting Checklist for Developers
 
 1. **ExoPlayer Cleanup**: Always release ExoPlayer instances in `onPause()`, `onStop()`, and `onDestroy()` to prevent background ghost audio or memory leaks.
-2. **Custom Headers**: Ensure any server requiring custom HTTP headers passes `Referer` or `User-Agent` into `setupExoPlayerOnline`.
+2. **Custom Headers & Embed Sniffing**: Ensure any server requiring custom HTTP headers passes `Referer` or `User-Agent`. Embed URLs automatically launch `VideoSniffer` to resolve direct `.m3u8` links before ExoPlayer initialization.

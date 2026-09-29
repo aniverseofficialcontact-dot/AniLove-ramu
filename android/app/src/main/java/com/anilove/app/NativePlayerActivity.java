@@ -107,8 +107,10 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.exoplayer.source.UnrecognizedInputFormatException;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 import androidx.media3.ui.PlayerView;
@@ -1028,8 +1030,75 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isDirectMediaStream(String url) {
+        if (url == null || url.trim().isEmpty()) return false;
+        String lower = url.toLowerCase().trim();
+        int qIdx = lower.indexOf('?');
+        if (qIdx != -1) lower = lower.substring(0, qIdx);
+        int hIdx = lower.indexOf('#');
+        if (hIdx != -1) lower = lower.substring(0, hIdx);
+
+        if (lower.endsWith(".js") || lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".htm")) {
+            return false;
+        }
+
+        return lower.endsWith(".m3u8") || lower.endsWith(".mp4") || lower.endsWith(".m3u") ||
+               lower.endsWith(".m4s") || lower.endsWith(".mpd") || lower.contains("/cdn/hls/") ||
+               lower.contains("/hls/") || lower.contains("manifest.m3u8") || lower.contains("master.m3u8") ||
+               lower.contains("index.m3u8") || lower.contains("googlevideo.com");
+    }
+
+    @UnstableApi
+    private void runSnifferFallback(String url, String referer, Map<String, String> headers) {
+        runOnUiThread(() -> {
+            if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+            VideoSniffer sniffer = new VideoSniffer(getApplicationContext());
+            sniffer.sniff(url, new VideoSniffer.OnVideoFoundListener() {
+                @Override
+                public void onVideoFound(String videoUrl) {
+                    runOnUiThread(() -> {
+                        Log.i("AniLove_Sniffer", "Successfully sniffed direct stream: " + videoUrl);
+                        setupExoPlayerOnlineDirect(videoUrl, referer, headers);
+                    });
+                }
+
+                @Override
+                public void onVideoFound(String videoUrl, String sniffedSubUrl) {
+                    runOnUiThread(() -> {
+                        if (sniffedSubUrl != null && !sniffedSubUrl.isEmpty()) {
+                            subtitleUrl = sniffedSubUrl;
+                        }
+                        Log.i("AniLove_Sniffer", "Successfully sniffed direct stream: " + videoUrl + " | Sub: " + sniffedSubUrl);
+                        setupExoPlayerOnlineDirect(videoUrl, referer, headers);
+                    });
+                }
+
+                @Override
+                public void onError(String message) {
+                    runOnUiThread(() -> {
+                        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                        Toast.makeText(NativePlayerActivity.this, "Stream error: Please select another server option (Server 2-A / 2-B).", Toast.LENGTH_LONG).show();
+                    });
+                }
+            });
+        });
+    }
+
     @UnstableApi
     public void setupExoPlayerOnline(String hlsUrl, String referer, Map<String, String> headers) {
+        if (hlsUrl == null || hlsUrl.isEmpty()) return;
+
+        if (!isDirectMediaStream(hlsUrl)) {
+            Log.i("AniLove", "Embed page detected — running VideoSniffer for: " + hlsUrl);
+            runSnifferFallback(hlsUrl, referer, headers);
+            return;
+        }
+
+        setupExoPlayerOnlineDirect(hlsUrl, referer, headers);
+    }
+
+    @UnstableApi
+    private void setupExoPlayerOnlineDirect(String hlsUrl, String referer, Map<String, String> headers) {
         if (hlsUrl == null || hlsUrl.isEmpty()) return;
         try {
             if (exoPlayer != null) {
@@ -1039,7 +1108,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
 
             DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36")
+                    .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                     .setConnectTimeoutMs(15000)
                     .setReadTimeoutMs(15000)
                     .setAllowCrossProtocolRedirects(true);
@@ -1060,6 +1129,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
 
+            if (hlsUrl.contains(".m3u8") || hlsUrl.contains("hls") || hlsUrl.contains("m3u")) {
+                mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+            } else if (hlsUrl.contains(".mp4")) {
+                mediaBuilder.setMimeType(MimeTypes.VIDEO_MP4);
+            }
+
             if (subtitleUrl != null && !subtitleUrl.isEmpty()) {
                 MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
                         .setMimeType(MimeTypes.TEXT_VTT)
@@ -1070,15 +1145,8 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
 
             MediaItem mediaItem = mediaBuilder.build();
-            MediaSource mediaSource;
-            if (hlsUrl.contains(".m3u8") || hlsUrl.contains("hls")) {
-                mediaSource = new HlsMediaSource.Factory(httpDataSourceFactory)
-                        .setAllowChunklessPreparation(true)
-                        .createMediaSource(mediaItem);
-            } else {
-                mediaSource = new ProgressiveMediaSource.Factory(httpDataSourceFactory)
-                        .createMediaSource(mediaItem);
-            }
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(httpDataSourceFactory);
+            MediaSource mediaSource = mediaSourceFactory.createMediaSource(mediaItem);
 
             exoPlayer.setMediaSource(mediaSource);
             if (startTime > 0) {
@@ -1111,15 +1179,21 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
-                    Log.e("AniLove", "ExoPlayer Online error: " + error.getMessage());
+                    Log.e("AniLove", "ExoPlayer error: " + error.getMessage(), error);
                     if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-                    Toast.makeText(NativePlayerActivity.this, "Native ExoPlayer failed, switching to WebView...", Toast.LENGTH_SHORT).show();
-                    togglePlayerEngine(false);
+
+                    if (error.getCause() instanceof UnrecognizedInputFormatException ||
+                        error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED) {
+                        Log.w("AniLove", "UnrecognizedInputFormatException — launching VideoSniffer fallback for: " + hlsUrl);
+                        runSnifferFallback(hlsUrl, referer, headers);
+                    } else {
+                        Toast.makeText(NativePlayerActivity.this, "Playback error: Try selecting Server 2-A or Server 2-B from the menu.", Toast.LENGTH_LONG).show();
+                    }
                 }
             });
         } catch (Exception e) {
             Log.e("AniLove", "Error setting up Online ExoPlayer", e);
-            togglePlayerEngine(false);
+            runSnifferFallback(hlsUrl, referer, headers);
         }
     }
 
