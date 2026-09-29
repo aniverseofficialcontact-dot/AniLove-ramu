@@ -67,6 +67,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
@@ -102,8 +103,11 @@ import androidx.media3.common.Player;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
@@ -149,6 +153,13 @@ public class NativePlayerActivity extends AppCompatActivity {
     private float currentPermanentSpeed = 1.0f;
     private boolean isVolumeBoosted = false;
     private boolean isSubtitlesEnabled = true;
+
+    // ExoPlayer Engine Toggle & Auto-Next Toast State
+    private boolean useExoPlayerEngine = false;
+    private View layoutAutoNextToast;
+    private TextView textAutoNextCountdown;
+    private boolean isAutoNextCanceled = false;
+    private boolean isAutoNextTriggered = false;
 
     // Real-Time Dynamic Media Track States
     private List<String> detectedQualities = new ArrayList<>();
@@ -715,9 +726,24 @@ public class NativePlayerActivity extends AppCompatActivity {
             isFullscreenMode = !isFullscreenMode;
             Log.i("AniLove", "toggleFullscreenInPlace | now: " + isFullscreenMode);
             
-            Intent intent = getIntent();
-            intent.putExtra("startFullscreen", isFullscreenMode);
-            applyWindowSettings(intent);
+            View topContainer = findViewById(R.id.video_root_container);
+            if (topContainer != null) {
+                topContainer.animate()
+                        .scaleX(isFullscreenMode ? 1.04f : 0.96f)
+                        .scaleY(isFullscreenMode ? 1.04f : 0.96f)
+                        .setDuration(120)
+                        .withEndAction(() -> {
+                            topContainer.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start();
+                            Intent intent = getIntent();
+                            intent.putExtra("startFullscreen", isFullscreenMode);
+                            applyWindowSettings(intent);
+                        })
+                        .start();
+            } else {
+                Intent intent = getIntent();
+                intent.putExtra("startFullscreen", isFullscreenMode);
+                applyWindowSettings(intent);
+            }
         });
     }
 
@@ -797,6 +823,31 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         btnPlayPause.setOnClickListener(v -> togglePlayPause());
         findViewById(R.id.btn_settings).setOnClickListener(v -> showSettingsMenu());
+
+        TextView btnEngineToggle = findViewById(R.id.btn_engine_toggle);
+        if (btnEngineToggle != null) {
+            btnEngineToggle.setOnClickListener(v -> togglePlayerEngine(!useExoPlayerEngine));
+        }
+
+        layoutAutoNextToast = findViewById(R.id.layout_auto_next_toast);
+        textAutoNextCountdown = findViewById(R.id.text_auto_next_countdown);
+        View btnAutoNextPlayNow = findViewById(R.id.btn_auto_next_play_now);
+        View btnAutoNextCancel = findViewById(R.id.btn_auto_next_cancel);
+
+        if (btnAutoNextPlayNow != null) {
+            btnAutoNextPlayNow.setOnClickListener(v -> {
+                if (layoutAutoNextToast != null) layoutAutoNextToast.setVisibility(View.GONE);
+                navigateEpisode(true);
+            });
+        }
+
+        if (btnAutoNextCancel != null) {
+            btnAutoNextCancel.setOnClickListener(v -> {
+                isAutoNextCanceled = true;
+                if (layoutAutoNextToast != null) layoutAutoNextToast.setVisibility(View.GONE);
+            });
+        }
+
         btnCaptions = findViewById(R.id.btn_captions);
         btnCaptions.setOnClickListener(v -> showCaptionMenu());
         
@@ -1024,6 +1075,183 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    @UnstableApi
+    public void setupExoPlayerOnline(String hlsUrl, String referer, Map<String, String> headers) {
+        if (hlsUrl == null || hlsUrl.isEmpty()) return;
+        try {
+            if (exoPlayer != null) {
+                exoPlayer.stop();
+                exoPlayer.release();
+                exoPlayer = null;
+            }
+
+            DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36")
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(15000)
+                    .setAllowCrossProtocolRedirects(true);
+
+            Map<String, String> requestHeaders = new HashMap<>();
+            if (referer != null && !referer.isEmpty()) {
+                requestHeaders.put("Referer", referer);
+            }
+            if (headers != null && !headers.isEmpty()) {
+                requestHeaders.putAll(headers);
+            }
+            if (!requestHeaders.isEmpty()) {
+                httpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
+            }
+
+            exoPlayer = new ExoPlayer.Builder(this).build();
+            exoPlayerView.setPlayer(exoPlayer);
+
+            MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
+
+            if (subtitleUrl != null && !subtitleUrl.isEmpty()) {
+                MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
+                        .setMimeType(MimeTypes.TEXT_VTT)
+                        .setLanguage("en")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build();
+                mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
+            }
+
+            MediaItem mediaItem = mediaBuilder.build();
+            MediaSource mediaSource;
+            if (hlsUrl.contains(".m3u8") || hlsUrl.contains("hls")) {
+                mediaSource = new HlsMediaSource.Factory(httpDataSourceFactory)
+                        .setAllowChunklessPreparation(true)
+                        .createMediaSource(mediaItem);
+            } else {
+                mediaSource = new ProgressiveMediaSource.Factory(httpDataSourceFactory)
+                        .createMediaSource(mediaItem);
+            }
+
+            exoPlayer.setMediaSource(mediaSource);
+            if (startTime > 0) {
+                exoPlayer.seekTo(startTime * 1000L);
+            }
+            exoPlayer.prepare();
+            exoPlayer.setPlayWhenReady(true);
+            if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+
+            exoPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onIsPlayingChanged(boolean playing) {
+                    isPlaying = playing;
+                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                    if (isPlaying) resetHideTimer(); else stopHideTimer();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_BUFFERING) {
+                        if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+                    } else if (playbackState == Player.STATE_READY) {
+                        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        isPlaying = false;
+                        btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                        navigateEpisode(true);
+                    }
+                }
+
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    Log.e("AniLove", "ExoPlayer Online error: " + error.getMessage());
+                    if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                    Toast.makeText(NativePlayerActivity.this, "Native ExoPlayer failed, switching to WebView...", Toast.LENGTH_SHORT).show();
+                    togglePlayerEngine(false);
+                }
+            });
+        } catch (Exception e) {
+            Log.e("AniLove", "Error setting up Online ExoPlayer", e);
+            togglePlayerEngine(false);
+        }
+    }
+
+    @UnstableApi
+    public void togglePlayerEngine(boolean enableExo) {
+        if (isOfflineMode) return;
+        runOnUiThread(() -> {
+            useExoPlayerEngine = enableExo;
+            TextView btnEngine = findViewById(R.id.btn_engine_toggle);
+            if (btnEngine != null) {
+                btnEngine.setText(useExoPlayerEngine ? "⚡ Exo" : "🌐 Web");
+                btnEngine.setTextColor(useExoPlayerEngine ? Color.parseColor("#818CF8") : Color.parseColor("#34D399"));
+            }
+
+            if (useExoPlayerEngine) {
+                if (playerWebView != null) {
+                    playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); return v ? v.currentTime : 0; })()", value -> {
+                        double currentSec = 0;
+                        try {
+                            if (value != null && !value.equals("null") && !value.isEmpty()) {
+                                currentSec = Double.parseDouble(value.replace("\"", ""));
+                            }
+                        } catch (Exception ignored) {}
+                        startTime = (int) currentSec;
+
+                        playerWebView.setVisibility(View.GONE);
+                        exoPlayerView.setVisibility(View.VISIBLE);
+
+                        playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); if (v) { v.pause(); v.muted = true; } })()", null);
+
+                        String streamUrl = getIntent().getStringExtra("videoUrl");
+                        if (streamUrl == null) streamUrl = getIntent().getStringExtra("url");
+                        String referer = getIntent().getStringExtra("referer");
+                        setupExoPlayerOnline(streamUrl, referer, null);
+                    });
+                }
+            } else {
+                double currentSec = 0;
+                if (exoPlayer != null) {
+                    currentSec = exoPlayer.getCurrentPosition() / 1000.0;
+                    exoPlayer.stop();
+                }
+
+                exoPlayerView.setVisibility(View.GONE);
+                playerWebView.setVisibility(View.VISIBLE);
+
+                final double targetSec = currentSec;
+                playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); if (v) { v.muted = false; v.currentTime = " + targetSec + "; v.play(); } })()", null);
+            }
+        });
+    }
+
+    private void checkAutoNextEpisodeTrigger(long currentMs, long durationMs) {
+        if (durationMs <= 0 || isAutoNextCanceled || isAutoNextTriggered) return;
+        long remainingMs = durationMs - currentMs;
+        if (remainingMs <= 10000 && remainingMs > 0) {
+            int remainingSec = (int) Math.ceil(remainingMs / 1000.0);
+            runOnUiThread(() -> {
+                if (layoutAutoNextToast != null) {
+                    if (layoutAutoNextToast.getVisibility() != View.VISIBLE) {
+                        layoutAutoNextToast.setAlpha(0f);
+                        layoutAutoNextToast.setVisibility(View.VISIBLE);
+                        layoutAutoNextToast.animate().alpha(1f).setDuration(250).start();
+                    }
+                    if (textAutoNextCountdown != null) {
+                        textAutoNextCountdown.setText("Next in " + remainingSec + "s");
+                    }
+                }
+            });
+            if (remainingMs <= 1200) {
+                isAutoNextTriggered = true;
+                runOnUiThread(() -> {
+                    if (layoutAutoNextToast != null) layoutAutoNextToast.setVisibility(View.GONE);
+                    navigateEpisode(true);
+                });
+            }
+        } else if (remainingMs > 10000) {
+            runOnUiThread(() -> {
+                if (layoutAutoNextToast != null && layoutAutoNextToast.getVisibility() == View.VISIBLE) {
+                    layoutAutoNextToast.setVisibility(View.GONE);
+                }
+            });
+        }
+    }
+
     public void updatePosition(int y) {
         if (isFullscreenMode || isOfflineMode) return;
         runOnUiThread(() -> {
@@ -1127,6 +1355,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 currentVideoTime = current;
                 videoDuration = duration;
                 updateNativeSubtitleOverlay(current);
+                checkAutoNextEpisodeTrigger((long)(current * 1000), (long)(duration * 1000));
                 if (opEdSeekBarDrawable != null) {
                     opEdSeekBarDrawable.invalidateSelf();
                 }
@@ -2396,7 +2625,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void syncPlayerState() {
-        if (isOfflineMode && exoPlayer != null) {
+        if ((isOfflineMode || useExoPlayerEngine) && exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
             if (durationMs > 0 && durationMs != C.TIME_UNSET) {
@@ -2411,6 +2640,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     seekBar.setMax(duration);
                     seekBar.setProgress(current);
                 }
+                checkAutoNextEpisodeTrigger(currentMs, durationMs);
             }
             return;
         }

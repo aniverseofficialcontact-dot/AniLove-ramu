@@ -2,6 +2,9 @@ package com.anilove.app;
 
 import android.content.Intent;
 import android.util.Log;
+
+import androidx.media3.common.util.UnstableApi;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -122,5 +125,17 @@ public class NativePlayerPlugin extends Plugin {
             });
         }
         call.resolve();
+    }
+
+    @UnstableApi
+    @PluginMethod
+    public void togglePlayerEngine(PluginCall call) {
+        Boolean enableExo = call.getBoolean("enableExo");
+        if (enableExo != null && NativePlayerActivity.currentInstance != null) {
+            NativePlayerActivity.currentInstance.togglePlayerEngine(enableExo);
+            call.resolve();
+        } else {
+            call.resolve();
+        }
     }
 }

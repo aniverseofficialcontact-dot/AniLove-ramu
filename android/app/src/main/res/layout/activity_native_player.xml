@@ -200,11 +200,28 @@
                     android:src="@android:drawable/ic_menu_preferences"
                     app:tint="@android:color/white" />
 
+                <TextView
+                    android:id="@+id/btn_engine_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:layout_toStartOf="@id/btn_settings"
+                    android:layout_centerVertical="true"
+                    android:layout_marginEnd="6dp"
+                    android:paddingHorizontal="10dp"
+                    android:gravity="center"
+                    android:background="@drawable/speed_btn_bg"
+                    android:text="⚡ Exo"
+                    android:textColor="#818CF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true" />
+
                 <ImageButton
                     android:id="@+id/btn_captions"
                     android:layout_width="38dp"
                     android:layout_height="38dp"
-                    android:layout_toStartOf="@id/btn_settings"
+                    android:layout_toStartOf="@id/btn_engine_toggle"
                     android:layout_centerVertical="true"
                     android:layout_marginEnd="2dp"
                     android:padding="7dp"
@@ -420,6 +437,69 @@
             android:elevation="20dp"
             android:translationZ="20dp"
             android:visibility="gone" />
+
+        <!-- Independent Auto-Next Episode Countdown Toast -->
+        <LinearLayout
+            android:id="@+id/layout_auto_next_toast"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|bottom"
+            android:layout_marginBottom="60dp"
+            android:layout_marginStart="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/indicator_pill_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:elevation="20dp"
+            android:translationZ="20dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/auto_next_progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/text_auto_next_countdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Next in 10s"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btn_auto_next_play_now"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:background="@drawable/speed_btn_bg"
+                android:text="Play Now"
+                android:textColor="#818CF8"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/btn_auto_next_cancel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="3dp"
+                android:text="✕"
+                android:textColor="#A0A0A0"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
 
         <!-- Native Subtitle Overlay (Outside controls_overlay so captions stay visible when controls hide) -->
         <TextView
