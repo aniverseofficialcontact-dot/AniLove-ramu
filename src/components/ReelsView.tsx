@@ -41,8 +41,8 @@ interface ReelsViewProps {
   refreshTrigger?: number;
 }
 
-// Global Unmuted Preference Flag across session
-let globalUserUnmutedPreference = true;
+// Global Unmuted Preference Flag across session (Default muted for initial Android WebView autoplay compatibility)
+let globalUserUnmutedPreference = false;
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -108,7 +108,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const [slideDirection, setSlideDirection] = useState<number>(1);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false); // Unmuted by default
+  const [isMuted, setIsMuted] = useState(true); // Default muted on startup for 100% instant autoplay
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -117,7 +117,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [is2xSpeed, setIs2xSpeed] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
-  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string>('');
   const [isScrubbing, setIsScrubbing] = useState(false);
 
   const [enrichedMetadata, setEnrichedMetadata] = useState<Record<string, EnrichedReelMetadata>>({});
@@ -155,10 +154,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const activeVideoUrl = useMemo(() => {
     if (videoSrcOverride) return videoSrcOverride;
-    if (resolvedVideoUrl) return resolvedVideoUrl;
     if (!currentReel?.id) return '';
     return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
-  }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
+  }, [currentReel?.id, videoSrcOverride]);
 
   // Poster Image Source
   const activePosterUrl = useMemo(() => {
@@ -214,15 +212,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       if (isPausedOrStuck) {
         const timeStuckMs = now - lastTimeUpdateRef.current;
 
-        // Level 1 Kickstart (800ms): Retry play()
-        if (timeStuckMs > 800) {
+        // Level 1 Kickstart (600ms): Retry play()
+        if (timeStuckMs > 600) {
           video.play().then(() => {
             setIsPlaying(true);
           }).catch(() => {});
         }
 
-        // Level 2 Soft Reload (2200ms): Kickstart video media element buffer
-        if (timeStuckMs > 2200) {
+        // Level 2 Soft Reload (2000ms): Kickstart video media element buffer
+        if (timeStuckMs > 2000) {
           try {
             if (video.readyState >= 1) {
               video.play().catch(() => {});
@@ -234,8 +232,8 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           } catch {}
         }
 
-        // Level 3 Fallback Stream Override (4200ms): Refresh direct stream endpoint
-        if (timeStuckMs > 4200 && currentReel?.id && !videoSrcOverride) {
+        // Level 3 Fallback Stream Override (4000ms): Refresh direct stream endpoint
+        if (timeStuckMs > 4000 && currentReel?.id && !videoSrcOverride) {
           setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t&retry=${now}`);
           lastTimeUpdateRef.current = now;
         }
@@ -244,7 +242,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         lastTimeUpdateRef.current = now;
         if (!isPlaying) setIsPlaying(true);
       }
-    }, 350);
+    }, 300);
 
     return () => clearInterval(interval);
   }, [getActiveVideo, currentReel?.id, videoSrcOverride, isPlaying]);
@@ -299,25 +297,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
 
-  // Direct Stream Source or RAM Blob URL: Set ONCE per reel view, NEVER mutate mid-flight!
+  // Direct Stream Reset on Reel Switch
   useEffect(() => {
     if (!currentReel?.id) return;
-
     setVideoSrcOverride(null);
     setIs2xSpeed(false);
     setIsVideoLoaded(false);
-
-    // 1. Check if Blob Object URL is available in RAM right now
-    const syncBlobUrl = reelMediaCache.getSynchronousBlobUrl(currentReel.id);
-    if (syncBlobUrl) {
-      setResolvedVideoUrl(syncBlobUrl);
-    } else {
-      // Set stable direct MP4 byte stream endpoint
-      setResolvedVideoUrl(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`);
-
-      // Background pre-fetch into RAM for future re-visits
-      reelMediaCache.getReelVideoUrl(currentReel.id).catch(() => {});
-    }
   }, [currentReel?.id, historyIndex]);
 
   // Fetch enriched metadata from Cloud/Cache
