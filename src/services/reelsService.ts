@@ -336,7 +336,7 @@ export function getStartingReelsFeed(
     };
   }
 
-  const fullPool = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
+  const fullPool = bundled.length > 0 ? bundled : [];
 
   return {
     feed: fullPool,
@@ -444,10 +444,4 @@ export function prewarmInitialReelsOnAppStart(): void {
   } catch {
     // silent
   }
-}
-
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    prewarmInitialReelsOnAppStart();
-  }, 50);
 }
