@@ -9,6 +9,9 @@ This document provides a comprehensive, complete, and up-to-date technical guide
 The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video feed powering 2,049+ anime edit clips directly from Google Drive Edge CDN (`https://drive.usercontent.google.com/download?id=${reelId}&export=download&confirm=t`).
 
 ### Key Features & Architectural Highlights
+- **Deterministic Unique Reel Tagging (`formatUniqueReelTitle`):** Every reel in the 2,049+ catalog is deterministically assigned a clean sequential tag: `Anime Reel #1`, `Anime Reel #2`, ..., `Anime Reel #125`, ..., `Anime Reel #2049`. Newly uploaded reels from Google Drive automatically receive sequential numbers (`Anime Reel #2050`, `Anime Reel #2051`, etc.).
+- **Cold Startup Playback Fallback Engine:** Solves cold startup video freezes by executing an unmuted playback attempt followed immediately by a muted playback fallback (`video.muted = true; video.play()`) if WebView blocks initial unmuted autoplay on cold launch. The video STARTS PLAYING IMMEDIATELY on frame 0 without getting paused or stuck.
+- **Large Navigation Arrow Touch Targets (`ChevronDown` & `ChevronUp`):** Action bar navigation arrows feature expanded touch hit targets (`p-3 -m-1.5 w-8 h-8`) with explicit canvas gesture interception, guaranteeing 100% tap accuracy without accidental play/pause toggles.
 - **Persistent Startup Anchor Reels (0ms Instant Playback):**
   - **Last 2 Watched Reels Persistence:** `getStartingReelsFeed()` retrieves the user's last 2 watched reels from `localStorage` (`anilove_last_two_watched_reels_v1`) so when reopening the app, the feed starts with those 2 reels pre-warmed instantly in cache.
   - **Default Preset Anchor Reels:** For new installs or cleared cache, default anchor reels `1cgEQgCfiXjM83SicU9B2-757Jg1P_PtK` and `1h0urMntH6ZA7AIy-QR4To89kPOZkjhTO` load first by default so initial startup is 100% reliable.
@@ -33,7 +36,7 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
 [ Google Drive Vault (2,049 Reels) ]
               │
               ▼
-[ reelsService.ts / animeReels.json ] ─── (Sanitizes URLs, Folder Obfuscation & Metadata)
+[ reelsService.ts / animeReels.json ] ─── (Sanitizes URLs, Folder Obfuscation & Unique Tagging: "Anime Reel #125")
               │
               ▼
 [ Startup Anchor Pipeline ]
@@ -44,8 +47,9 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
 [ Unwatched Stratified Deck ] ─── (Multi-Drive 0% Repetition Unwatched Generator)
               │
               ▼
-[ ReelsView.tsx (HTML5 Video Stage) ] ─── (Direct Drive Binary Stream & Unmuted Audio Unlock)
+[ ReelsView.tsx (HTML5 Video Stage) ] ─── (Direct Drive Binary Stream & Cold Startup Autoplay Fallback)
               │
+              ├──► [ Expanded Hit Target Navigation Arrows (ChevronDown / ChevronUp) ]
               ├──► [ Mirrored Scale-0 Heart Disappear Animation ]
               ├──► [ Smooth 2x Speed Hold & Release Control ]
               ├──► [ Interactive Seekbar Scrubbing & Hidden Timestamps ]
@@ -56,15 +60,13 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
 
 ## 3. Detailed Technical Components
 
-### A. Persistent Last 2 Watched Reels & Default Anchor System
-- **Preset Default Reel IDs**:
-  - Reel 1: `1cgEQgCfiXjM83SicU9B2-757Jg1P_PtK`
-  - Reel 2: `1h0urMntH6ZA7AIy-QR4To89kPOZkjhTO`
-- **Storage Persistence**: Saves last 2 viewed reel objects in `localStorage` (`anilove_last_two_watched_reels_v1`).
+### A. Unique Reel Tagging & Numbering System (`formatUniqueReelTitle`)
+- **Deterministic Number Mapping**: Builds an in-memory index map of all 2,049 reels in `animeReels.json`. Each reel receives a clean sequential title: `Anime Reel #1`, `Anime Reel #2`, ..., `Anime Reel #125`, ..., `Anime Reel #2049`.
+- **Dynamic Drive Upload Numbering**: Newly synced reels uploaded to Google Drive automatically receive sequential numbers (`Anime Reel #2050`, `Anime Reel #2051`, etc.).
 
-### B. Unwatched Non-Repeating Deck & Auto-Sync Engine
-- **Unwatched Deck Prioritization**: Filters out watched IDs (`getWatchedReelIds()`) and interleave unwatched items fairly across Google Drive folders.
-- **Auto-Sync New Drive Uploads**: Fresh uploads from Google Drive are automatically tagged as unwatched and placed at the front of the stratified deck.
+### B. Cold Startup Autoplay Fallback Engine
+- **Muted Autoplay Fallback**: If browser/WebView restricts unmuted `play()` on frame 0 before initial user touch, `tryPlay()` catches the error and executes `video.muted = true; video.play()`, ensuring video starts playing immediately on startup.
+- **First Touch Audio Unmute**: On the user's first touch anywhere on screen, `unlockAudio()` unmutes video audio (`video.muted = false`) seamlessly.
 
 ---
 
@@ -73,8 +75,8 @@ The **Reels Tab** in AniLove is a 100% serverless, ultra-fast vertical video fee
 1. `src/data/animeReels.json` — 2,049 anime reel catalog.
 2. `src/services/reelRandomizer.ts` — Stratified deck shuffler.
 3. `src/services/reelMediaCache.ts` — Pre-warms anchor and upcoming reel media.
-4. `src/services/reelsService.ts` — Last 2 watched reels persistence, default anchor reels, and history manager.
-5. `src/components/ReelsView.tsx` — Full UI, 2x hold release fix, mirrored heart animation, and seekbar scrubbing.
+4. `src/services/reelsService.ts` — Unique reel numbering (`Anime Reel #125`), last 2 watched reels persistence, default anchor reels, and history manager.
+5. `src/components/ReelsView.tsx` — Full UI, cold startup autoplay fallback, 2x hold release fix, enlarged navigation arrow hit targets, mirrored heart animation, and seekbar scrubbing.
 6. `src/components/SavedReelsGallery.tsx` — Dual-tab gallery for Saved Bookmarks and Last 50 Seen Watched Reels History.
 7. `src/components/AccountView.tsx` — Account settings with 1-tap Reels History access.
 8. `src/components/DownloadsView.tsx` — Separate category tabs for Downloaded Anime Series vs Downloaded Anime Edit Clips.

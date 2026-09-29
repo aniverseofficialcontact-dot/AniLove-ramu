@@ -320,25 +320,42 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (!video || !currentReel) return;
 
     video.playbackRate = is2xSpeed ? 2.0 : 1.0;
-    video.muted = false;
-    video.volume = 1.0;
     video.currentTime = 0;
     setProgress(0);
     setCurrentTime(0);
 
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
+    const tryPlay = () => {
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => {
           setIsPlaying(true);
           setIsBuffering(false);
-        })
-        .catch(() => {
-          setIsPlaying(false);
-          setIsBuffering(false);
+        }).catch(() => {
+          // Cold startup fallback: If unmuted autoplay is blocked before gesture, mute temporarily & play!
+          video.muted = true;
+          video.play().then(() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+          }).catch(() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          });
         });
-    }
-  }, [historyIndex, currentReel, getActiveVideo]);
+      }
+    };
+
+    video.muted = false;
+    video.volume = 1.0;
+    tryPlay();
+
+    const mountCheckTimer = setTimeout(() => {
+      if (video.paused && !isManuallyPausedRef.current) {
+        tryPlay();
+      }
+    }, 120);
+
+    return () => clearTimeout(mountCheckTimer);
+  }, [historyIndex, currentReel?.id, getActiveVideo]);
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -378,6 +395,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const goToNext = useCallback(() => {
     if (currentPool.length === 0) return;
     isManuallyPausedRef.current = false;
+    setIsPlaying(true);
     setSlideDirection(1);
     setDragOffsetY(0);
     setIsDragging(false);
@@ -405,6 +423,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const goToPrev = useCallback(() => {
     isManuallyPausedRef.current = false;
+    setIsPlaying(true);
     if (filterMode === 'saved') {
       if (historyIndex > 0) {
         setSlideDirection(-1);
@@ -570,7 +589,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     lastTouchTimeRef.current = Date.now();
-    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) return;
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      return;
+    }
     const touch = e.touches[0];
     touchStartYRef.current = touch.clientY;
     touchStartXRef.current = touch.clientX;
@@ -626,7 +648,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       holdTimerRef.current = null;
     }
 
-    // Check if user was in 2x speed hold mode
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) {
+      if (was2xHoldingRef.current) {
+        was2xHoldingRef.current = false;
+        const v = getActiveVideo();
+        if (v) v.playbackRate = 1.0;
+        setIs2xSpeed(false);
+      }
+      setIsDragging(false);
+      setDragOffsetY(0);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      return;
+    }
+
     if (was2xHoldingRef.current) {
       was2xHoldingRef.current = false;
       const v = getActiveVideo();
@@ -639,7 +674,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       setDragOffsetY(0);
       touchStartYRef.current = null;
       touchStartXRef.current = null;
-      return; // Exit immediately to prevent pausing video
+      return;
     }
 
     lastTouchTimeRef.current = Date.now();
@@ -674,7 +709,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (Date.now() - lastTouchTimeRef.current < 800) return;
-    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) return;
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      return;
+    }
     touchStartYRef.current = e.clientY;
     touchStartXRef.current = e.clientX;
     touchStartTimeRef.current = Date.now();
@@ -726,6 +764,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
+    }
+
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) {
+      if (was2xHoldingRef.current) {
+        was2xHoldingRef.current = false;
+        const v = getActiveVideo();
+        if (v) v.playbackRate = 1.0;
+        setIs2xSpeed(false);
+      }
+      setIsDragging(false);
+      setDragOffsetY(0);
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      return;
     }
 
     if (was2xHoldingRef.current) {
@@ -1325,6 +1377,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 data-interactive="true"
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   handleShare();
                 }}
                 title="Share Reel"
@@ -1341,6 +1394,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 data-interactive="true"
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   handleToggleSave();
                 }}
                 title={savedStatus[currentReel.id] ? 'Bookmarked (Tap to Unsave)' : 'Save Reel (S)'}
@@ -1357,6 +1411,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 data-interactive="true"
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   handleDownloadReel();
                 }}
                 title="Download MP4 Video"
@@ -1370,6 +1425,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 data-interactive="true"
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
                   setAspectFitMode(nextMode);
                   if (onShowToast) {
@@ -1387,28 +1443,30 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   data-interactive="true"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     goToPrev();
                   }}
                   disabled={historyIndex === 0}
                   title="Previous Reel (Up Arrow / Scroll Up)"
-                  className={`p-1.5 transition-all duration-200 active:scale-75 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${
+                  className={`p-3 -m-1.5 transition-all duration-200 active:scale-75 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${
                     historyIndex === 0
                       ? 'opacity-20 cursor-not-allowed text-white/30'
-                      : 'text-white/80 hover:text-white cursor-pointer'
+                      : 'text-white/90 hover:text-white cursor-pointer'
                   }`}
                 >
-                  <ChevronUp className="w-7 h-7 stroke-[2.5]" />
+                  <ChevronUp className="w-8 h-8 stroke-[2.5]" />
                 </button>
                 <button
                   data-interactive="true"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     goToNext();
                   }}
                   title="Next Reel (Down Arrow / Scroll Down / Swipe Up)"
-                  className="p-1.5 text-white/80 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                  className="p-3 -m-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
                 >
-                  <ChevronDown className="w-7 h-7 stroke-[2.5]" />
+                  <ChevronDown className="w-8 h-8 stroke-[2.5]" />
                 </button>
               </div>
             </div>

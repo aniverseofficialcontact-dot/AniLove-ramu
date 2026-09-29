@@ -227,12 +227,48 @@ export function getStartingReelsFeed(
   };
 }
 
-export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
+const reelIdIndexMap = new Map<string, number>();
+
+function initializeReelIndexMap() {
+  if (reelIdIndexMap.size > 0) return;
+  if (Array.isArray(bundledReelsRaw)) {
+    bundledReelsRaw.forEach((item, idx) => {
+      if (item && item.id) {
+        reelIdIndexMap.set(item.id.toLowerCase(), idx + 1);
+      }
+    });
+  }
+}
+
+export function formatUniqueReelTitle(reelId: string, customTitle?: string, fallbackIndex?: number): string {
+  initializeReelIndexMap();
+  const cleanId = String(reelId || '').trim().toLowerCase();
+
+  if (cleanId) {
+    const foundNum = reelIdIndexMap.get(cleanId);
+    if (foundNum !== undefined) {
+      return `Anime Reel #${foundNum}`;
+    }
+  }
+
+  if (fallbackIndex !== undefined && fallbackIndex > 0) {
+    return `Anime Reel #${fallbackIndex}`;
+  }
+
+  const generatedNum = (reelIdIndexMap.size || 2049) + 1;
+  if (cleanId) {
+    reelIdIndexMap.set(cleanId, generatedNum);
+  }
+  return `Anime Reel #${generatedNum}`;
+}
+
+export function sanitizeReelForStorage(reel: Partial<AnimeReel>, indexHint?: number): AnimeReel {
   const fileId = String(reel.id || '').trim();
+  const cleanTitle = formatUniqueReelTitle(fileId, reel.cleanTitle || reel.title, indexHint);
   return {
     id: fileId,
-    title: String(reel.title || 'Anime Reel'),
-    cleanTitle: String(reel.cleanTitle || reel.title || 'Anime Reel'),
+    title: cleanTitle,
+    cleanTitle: cleanTitle,
     folderId: String(reel.folderId || ''),
     folderName: String(reel.folderName || ''),
     url: String(reel.url || `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`),
@@ -245,7 +281,9 @@ export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
 }
 
 export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
-  let list = Array.isArray(bundledReelsRaw) ? bundledReelsRaw.map(sanitizeReelForStorage) : [];
+  let list = Array.isArray(bundledReelsRaw)
+    ? bundledReelsRaw.map((r, idx) => sanitizeReelForStorage(r, idx + 1))
+    : [];
   if (shuffle && list.length > 0) {
     list = generateStratifiedDeck(list);
   }
