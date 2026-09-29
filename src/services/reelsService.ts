@@ -1,21 +1,11 @@
 import { AnimeReel } from '../types';
 import { reelMediaCache } from './reelMediaCache';
 import bundledReelsRaw from '../data/animeReels.json';
+import { generateStratifiedDeck, reelDeckManager, recordReelAsWatched } from './reelRandomizer';
 
 const SAVED_REELS_STORAGE_KEY = 'anilove_saved_anime_reels';
-const WATCHED_REELS_IDS_KEY = 'anilove_reels_watched_ids';
+const WATCHED_REELS_HISTORY_KEY = 'anilove_watched_reels_history';
 const REELS_SESSION_STORAGE_KEY = 'anilove_active_reels_session';
-const DYNAMIC_REELS_STORAGE_KEY = 'anilove_dynamic_live_reels';
-
-export interface EnrichedReelMetadata {
-  animeTitle?: string;
-  episode?: number | string;
-  timestamp?: string;
-  anilistId?: number;
-  similarity?: number;
-  categories?: string[];
-  identifiedAt?: number;
-}
 
 export interface ReelsSessionState {
   feedHistory: AnimeReel[];
@@ -25,179 +15,14 @@ export interface ReelsSessionState {
 }
 
 let inMemoryReelsSession: ReelsSessionState | null = null;
-const cloudMetadataCache = new Map<string, EnrichedReelMetadata>();
 
-export async function fetchReelCloudMetadata(reelId: string): Promise<EnrichedReelMetadata | null> {
-  if (!reelId) return null;
-  if (cloudMetadataCache.has(reelId)) {
-    return cloudMetadataCache.get(reelId)!;
-  }
-  return null;
-}
-
-export async function saveReelCloudMetadata(reelId: string, metadata: EnrichedReelMetadata): Promise<void> {
-  if (!reelId || !metadata) return;
-  cloudMetadataCache.set(reelId, metadata);
-}
-
-export function getWatchedReelIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(WATCHED_REELS_IDS_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-
-export function markReelAsWatched(reelId: string): void {
-  if (!reelId) return;
-  try {
-    const set = getWatchedReelIds();
-    if (!set.has(reelId)) {
-      set.add(reelId);
-      localStorage.setItem(WATCHED_REELS_IDS_KEY, JSON.stringify(Array.from(set)));
-    }
-  } catch {
-    // silent
-  }
-}
-
-export function clearWatchedReelIds(): void {
-  try {
-    localStorage.removeItem(WATCHED_REELS_IDS_KEY);
-  } catch {
-    // silent
-  }
-}
-
-export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
-  const id = String(reel.id || '').trim();
-  const videoStreamUrl = `https://drive.google.com/uc?export=view&id=${id}`;
-  const fallbackDownloadUrl = `https://drive.google.com/uc?export=download&id=${id}&confirm=t`;
-  const posterImageUrl = `https://lh3.googleusercontent.com/d/${id}`;
-
-  return {
-    id,
-    title: String(reel.title || `Anime Reel ${id.slice(0, 6)}`),
-    cleanTitle: String(reel.cleanTitle || reel.title || `Anime Reel ${id.slice(0, 6)}`),
-    folderId: 'anime_edits_vault',
-    folderName: String(reel.folderName || 'Anime Edits'),
-    url: videoStreamUrl,
-    directUrl: videoStreamUrl,
-    thumbnailUrl: posterImageUrl,
-    streamProxyUrl: videoStreamUrl,
-    downloadProxyUrl: fallbackDownloadUrl,
-    size: reel.size ? String(reel.size) : 'HD Video',
-    mimeType: String(reel.mimeType || 'video/mp4')
-  };
-}
-
-export async function syncLiveGoogleDriveFolder(folderId: string = '1L7FrLGfkUSNJNDGseo6g9K0itnS3xxdE'): Promise<{ reels: AnimeReel[]; newCount: number }> {
-  try {
-    const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const isCapacitor = typeof window !== 'undefined' && Boolean((window as any).Capacitor);
-
-    if (isLocalhost || isCapacitor) {
-      return { reels: getBundledReels(false), newCount: 0 };
-    }
-
-    const res = await fetch(`https://drive.google.com/embeddedfolderview?id=${folderId}#list`, {
-      mode: 'cors',
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      }
-    });
-
-    if (!res.ok) return { reels: getBundledReels(false), newCount: 0 };
-
-    const html = await res.text();
-    const entryRegex = /<div class="flip-entry" id="entry-([A-Za-z0-9_\-]{20,45})"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g;
-    const entries = [...html.matchAll(entryRegex)];
-
-    if (entries.length === 0) return { reels: getBundledReels(false), newCount: 0 };
-
-    const existingMap = new Map<string, AnimeReel>();
-    const baseList = getBundledReels(false);
-    baseList.forEach(r => existingMap.set(r.id, r));
-
-    let newCount = 0;
-    entries.forEach((e, idx) => {
-      const id = e[1];
-      if (!existingMap.has(id)) {
-        newCount++;
-        const titleMatch = e[2].match(/<div class="flip-entry-title">([^<]+)<\/div>/);
-        const rawTitle = titleMatch ? titleMatch[1].trim() : `Anime Reel ${idx + 1}`;
-        let cleanTitle = rawTitle.replace(/\.(mp4|mov|mkv|webm|avi)$/i, '').trim();
-        if (!cleanTitle || cleanTitle.toLowerCase().includes('unknown')) {
-          cleanTitle = `Anime Reel #${idx + 1}`;
-        }
-
-        const newReel = sanitizeReelForStorage({
-          id,
-          name: cleanTitle,
-          title: cleanTitle,
-          cleanTitle: cleanTitle,
-          folderId: 'anime_edits_vault',
-          folderName: 'Anime Edits'
-        });
-        existingMap.set(id, newReel);
-      }
-    });
-
-    const fullList = Array.from(existingMap.values());
-    if (newCount > 0) {
-      try {
-        localStorage.setItem(DYNAMIC_REELS_STORAGE_KEY, JSON.stringify(fullList));
-      } catch {}
-    }
-
-    return { reels: fullList, newCount };
-  } catch (err) {
-    return { reels: getBundledReels(false), newCount: 0 };
-  }
-}
-
-export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
-  let list = Array.isArray(bundledReelsRaw) ? bundledReelsRaw.map(sanitizeReelForStorage) : [];
-
-  try {
-    const rawDynamic = localStorage.getItem(DYNAMIC_REELS_STORAGE_KEY);
-    if (rawDynamic) {
-      const parsed = JSON.parse(rawDynamic);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const map = new Map<string, AnimeReel>();
-        list.forEach(r => map.set(r.id, r));
-        parsed.forEach(r => {
-          if (r?.id && !map.has(r.id)) {
-            map.set(r.id, sanitizeReelForStorage(r));
-          }
-        });
-        list = Array.from(map.values());
-      }
-    }
-  } catch {}
-
-  if (list.length === 0) return [];
-
-  const watched = getWatchedReelIds();
-  const unseen = list.filter(r => !watched.has(r.id));
-  const candidatePool = unseen.length > 0 ? unseen : list;
-
-  if (shuffle) {
-    return [...candidatePool].sort(() => Math.random() - 0.5);
-  }
-  return candidatePool;
-}
-
-// Session state is stored ONLY in sessionStorage (cleared automatically when app is removed from recent apps)
 export function getStoredReelsSession(): ReelsSessionState | null {
   if (inMemoryReelsSession && inMemoryReelsSession.feedHistory.length > 0) {
     return inMemoryReelsSession;
   }
   try {
-    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(REELS_SESSION_STORAGE_KEY) : null;
+    const raw = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(REELS_SESSION_STORAGE_KEY) : null) ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem(REELS_SESSION_STORAGE_KEY) : null);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.feedHistory) && parsed.feedHistory.length > 0) {
@@ -241,6 +66,12 @@ export function saveStoredReelsSession(session: ReelsSessionState): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
     }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(REELS_SESSION_STORAGE_KEY, json);
+      if (cleanSession.lastWatchedReelId) {
+        localStorage.setItem('anilove_last_watched_reel_id', cleanSession.lastWatchedReelId);
+      }
+    }
   } catch {
     // silent
   }
@@ -251,6 +82,9 @@ export function clearReelsSession(): void {
   try {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(REELS_SESSION_STORAGE_KEY);
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(REELS_SESSION_STORAGE_KEY);
     }
   } catch {
     // silent
@@ -292,32 +126,61 @@ export function getStartingReelsFeed(
   filterMode: 'all' | 'saved';
 } {
   const existingSession = getStoredReelsSession();
-  const bundled = getBundledReels(true);
+  const bundled = getBundledReels(false);
   const savedReels = getStoredSavedReels();
 
   if (initialFilterMode === 'saved') {
     if (savedReels.length > 0) {
       const foundIdx = initialReelId ? findReelIndexByIdOrPrefix(savedReels, initialReelId) : 0;
+      const targetIdx = foundIdx >= 0 ? foundIdx : 0;
       return {
         feed: savedReels,
-        index: Math.max(0, foundIdx),
+        index: targetIdx,
+        filterMode: 'saved',
+      };
+    } else {
+      return {
+        feed: [],
+        index: 0,
         filterMode: 'saved',
       };
     }
-    return { feed: [], index: 0, filterMode: 'saved' };
   }
 
   if (initialReelId && String(initialReelId).trim()) {
     const cleanId = String(initialReelId).trim();
     let match = findReelByIdOrPrefix(bundled, cleanId) || findReelByIdOrPrefix(savedReels, cleanId);
 
+    if (!match && existingSession && Array.isArray(existingSession.feedHistory)) {
+      match = findReelByIdOrPrefix(existingSession.feedHistory, cleanId);
+    }
+
     if (!match) {
-      match = sanitizeReelForStorage({ id: cleanId });
+      match = sanitizeReelForStorage({
+        id: cleanId,
+        name: `Anime Reel ${cleanId.slice(0, 6)}`,
+        title: `Anime Reel ${cleanId.slice(0, 6)}`,
+        cleanTitle: 'Anime Reel',
+        folderId: '',
+        folderName: 'Anime Edits',
+        url: `https://drive.usercontent.google.com/download?id=${cleanId}&export=download&confirm=t`,
+        directUrl: `https://drive.usercontent.google.com/download?id=${cleanId}&export=download&confirm=t`,
+        thumbnailUrl: `https://lh3.googleusercontent.com/d/${cleanId}`,
+        mimeType: 'video/mp4'
+      });
     }
 
     reelMediaCache.preloadReel(match.id);
-    const others = bundled.filter(r => r.id !== match!.id);
+
+    const others = bundled.filter(r => r.id !== match!.id).slice(0, 3);
     const feed = [match, ...others];
+
+    saveStoredReelsSession({
+      feedHistory: feed,
+      historyIndex: 0,
+      lastWatchedReelId: match.id,
+      filterMode: 'all',
+    });
 
     return {
       feed,
@@ -326,23 +189,61 @@ export function getStartingReelsFeed(
     };
   }
 
-  // Restore active session when switching tabs in app during current session
-  if (existingSession && existingSession.feedHistory && existingSession.feedHistory.length > 0 && existingSession.filterMode !== 'saved') {
-    let resumeIndex = Math.max(0, Math.min(existingSession.historyIndex, existingSession.feedHistory.length - 1));
+  if (existingSession && existingSession.feedHistory.length > 0) {
+    if (existingSession.filterMode === 'saved' && savedReels.length === 0) {
+      return {
+        feed: bundled.slice(0, 4),
+        index: 0,
+        filterMode: 'all',
+      };
+    }
+
+    let resumeIndex = existingSession.historyIndex;
+    if (existingSession.lastWatchedReelId) {
+      const matchIdx = existingSession.feedHistory.findIndex(r => r.id === existingSession.lastWatchedReelId);
+      if (matchIdx >= 0) {
+        resumeIndex = matchIdx;
+      }
+    }
+    resumeIndex = Math.max(0, Math.min(resumeIndex, existingSession.feedHistory.length - 1));
+
     return {
       feed: existingSession.feedHistory,
       index: resumeIndex,
-      filterMode: 'all',
+      filterMode: existingSession.filterMode || 'all',
     };
   }
 
-  const fullPool = bundled.length > 0 ? bundled : [];
-
   return {
-    feed: fullPool,
+    feed: bundled.slice(0, 4),
     index: 0,
     filterMode: 'all',
   };
+}
+
+export function sanitizeReelForStorage(reel: Partial<AnimeReel>): AnimeReel {
+  const fileId = String(reel.id || '').trim();
+  return {
+    id: fileId,
+    title: String(reel.title || 'Anime Reel'),
+    cleanTitle: String(reel.cleanTitle || reel.title || 'Anime Reel'),
+    folderId: String(reel.folderId || ''),
+    folderName: String(reel.folderName || ''),
+    url: String(reel.url || `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`),
+    directUrl: String(reel.directUrl || `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`),
+    thumbnailUrl: String(reel.thumbnailUrl || `https://lh3.googleusercontent.com/d/${fileId}`),
+    size: reel.size ? String(reel.size) : undefined,
+    sizeBytes: typeof reel.sizeBytes === 'number' ? reel.sizeBytes : undefined,
+    mimeType: String(reel.mimeType || 'video/mp4')
+  };
+}
+
+export function getBundledReels(shuffle: boolean = true): AnimeReel[] {
+  let list = Array.isArray(bundledReelsRaw) ? bundledReelsRaw.map(sanitizeReelForStorage) : [];
+  if (shuffle && list.length > 0) {
+    list = generateStratifiedDeck(list);
+  }
+  return list;
 }
 
 export function getStoredSavedReels(): AnimeReel[] {
@@ -355,6 +256,7 @@ export function getStoredSavedReels(): AnimeReel[] {
     }
     return [];
   } catch (err) {
+    console.error('Error loading saved reels from localStorage:', err);
     return [];
   }
 }
@@ -365,13 +267,14 @@ export function saveStoredSavedReels(reels: AnimeReel[]): void {
     localStorage.setItem(SAVED_REELS_STORAGE_KEY, JSON.stringify(cleanList));
     window.dispatchEvent(new CustomEvent('anilove-saved-reels-updated'));
   } catch (err) {
-    console.error('Error saving reels:', err);
+    console.error('Error saving reels to localStorage:', err);
   }
 }
 
 export function isReelSaved(reelId: string): boolean {
   if (!reelId) return false;
-  return getStoredSavedReels().some(r => r.id === reelId);
+  const current = getStoredSavedReels();
+  return current.some(r => r.id === reelId);
 }
 
 export function toggleSaveReel(reel: AnimeReel): boolean {
@@ -414,10 +317,18 @@ export async function fetchReelById(reelId: string): Promise<AnimeReel | null> {
   if (!reelId) return null;
   const cleanId = String(reelId).trim();
   const bundled = getBundledReels(false);
-  const found = findReelByIdOrPrefix(bundled, cleanId);
-  if (found) return found;
+  const foundLocal = findReelByIdOrPrefix(bundled, cleanId);
+  if (foundLocal) return foundLocal;
 
-  return sanitizeReelForStorage({ id: cleanId });
+  return sanitizeReelForStorage({
+    id: cleanId,
+    title: `Anime Reel ${cleanId.slice(0, 6)}`,
+    cleanTitle: 'Anime Reel',
+    url: `https://drive.usercontent.google.com/download?id=${cleanId}&export=download&confirm=t`,
+    directUrl: `https://drive.usercontent.google.com/download?id=${cleanId}&export=download&confirm=t`,
+    thumbnailUrl: `https://lh3.googleusercontent.com/d/${cleanId}`,
+    mimeType: 'video/mp4',
+  });
 }
 
 export async function preloadReels(reelIds: string[]): Promise<void> {
@@ -444,4 +355,14 @@ export function prewarmInitialReelsOnAppStart(): void {
   } catch {
     // silent
   }
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    prewarmInitialReelsOnAppStart();
+  }, 50);
+}
+
+export async function syncReelsFromGoogleDrive(): Promise<AnimeReel[]> {
+  return fetchAllReels();
 }

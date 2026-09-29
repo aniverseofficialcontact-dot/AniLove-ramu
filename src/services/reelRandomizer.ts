@@ -38,6 +38,13 @@ export function partitionReelsByDrive(reels: AnimeReel[]): Map<string, AnimeReel
 
 /**
  * Multi-Drive Stratified Shuffler
+ *
+ * Takes reels across N drives (e.g. 10 current drives, and any newly populated future drives)
+ * and produces a balanced interleaved deck where:
+ * 1. Each non-empty drive is shuffled independently.
+ * 2. Items from different drives are evenly distributed and interleaved.
+ * 3. Drives with few items are spaced out smoothly across the deck.
+ * 4. Empty drives are safely omitted without errors.
  */
 export function generateStratifiedDeck(allReels: AnimeReel[]): AnimeReel[] {
   if (!allReels || allReels.length === 0) return [];
@@ -45,6 +52,7 @@ export function generateStratifiedDeck(allReels: AnimeReel[]): AnimeReel[] {
   const driveMap = partitionReelsByDrive(allReels);
   const activeDrives: AnimeReel[][] = [];
 
+  // Shuffle each drive's reels independently and filter out any empty drives
   driveMap.forEach((items) => {
     if (items.length > 0) {
       activeDrives.push(fisherYatesShuffle(items));
@@ -54,12 +62,14 @@ export function generateStratifiedDeck(allReels: AnimeReel[]): AnimeReel[] {
   if (activeDrives.length === 0) return [];
   if (activeDrives.length === 1) return activeDrives[0];
 
+  // Shuffle the order of active drives for unpredictable entry order
   const shuffledDrives = fisherYatesShuffle(activeDrives);
 
   const totalReels = allReels.length;
   const result: AnimeReel[] = [];
   const drivePointers = new Array(shuffledDrives.length).fill(0);
 
+  // Round-robin / fair interleave across active drives until all are consumed
   while (result.length < totalReels) {
     let anyAddedInCycle = false;
 
@@ -74,12 +84,16 @@ export function generateStratifiedDeck(allReels: AnimeReel[]): AnimeReel[] {
       }
     }
 
+    // Safety guard to avoid infinite loops if data is malformed
     if (!anyAddedInCycle) break;
   }
 
   return result;
 }
 
+/**
+ * Watched Reels History Persistence
+ */
 export function getWatchedReelIds(): Set<string> {
   try {
     if (typeof localStorage === 'undefined') return new Set();
@@ -89,8 +103,8 @@ export function getWatchedReelIds(): Set<string> {
     if (Array.isArray(parsed)) {
       return new Set(parsed.map(String));
     }
-  } catch {
-    // silent
+  } catch (err) {
+    console.warn('[ReelsRandomizer] Failed to read watched history:', err);
   }
   return new Set();
 }
@@ -102,11 +116,12 @@ export function recordReelAsWatched(reelId: string): void {
     const watched = getWatchedReelIds();
     watched.add(String(reelId));
 
+    // Cap history size to prevent storage bloat
     const array = Array.from(watched);
     const capped = array.length > MAX_WATCHED_HISTORY_ITEMS ? array.slice(-MAX_WATCHED_HISTORY_ITEMS) : array;
     localStorage.setItem(WATCHED_REELS_STORAGE_KEY, JSON.stringify(capped));
-  } catch {
-    // silent
+  } catch (err) {
+    console.warn('[ReelsRandomizer] Failed to save watched history:', err);
   }
 }
 
@@ -119,10 +134,17 @@ export function clearWatchedReelHistory(): void {
   } catch {}
 }
 
+/**
+ * Persistent Unplayed Stratified Deck Manager
+ * Guarantees 0% repeats until all reels in the active pool are watched.
+ */
 class ReelDeckManager {
   private unplayedDeck: AnimeReel[] = [];
   private poolFingerprint: string = '';
 
+  /**
+   * Initializes or replenishes the unplayed deck with multi-drive stratified distribution.
+   */
   public ensureDeck(allReels: AnimeReel[], forceReset: boolean = false): void {
     if (!allReels || allReels.length === 0) {
       this.unplayedDeck = [];
@@ -137,16 +159,23 @@ class ReelDeckManager {
     this.poolFingerprint = currentFingerprint;
     const watchedSet = getWatchedReelIds();
 
+    // Find all unplayed reels
     let unplayed = allReels.filter(r => !watchedSet.has(r.id));
 
+    // If the entire library (2049+ reels) has been watched or fewer than 10 remain:
+    // Reset watched history for a fresh cycle and reshuffle
     if (unplayed.length < 10) {
       clearWatchedReelHistory();
       unplayed = allReels;
     }
 
+    // Stratify the unplayed items across all drives
     this.unplayedDeck = generateStratifiedDeck(unplayed);
   }
 
+  /**
+   * Draw N non-repeating reels from the deck
+   */
   public drawNextReels(allReels: AnimeReel[], count: number, excludeIds: string[] = []): AnimeReel[] {
     this.ensureDeck(allReels);
 
@@ -162,6 +191,7 @@ class ReelDeckManager {
       }
     }
 
+    // If deck ran dry, replenish and continue drawing
     if (drawn.length < count && allReels.length > 0) {
       this.ensureDeck(allReels, true);
       while (drawn.length < count && this.unplayedDeck.length > 0) {
@@ -177,11 +207,17 @@ class ReelDeckManager {
     return drawn;
   }
 
+  /**
+   * Returns a single random reel adhering to the multi-drive stratified non-repeating rule
+   */
   public pickNextReel(allReels: AnimeReel[], excludeIds: string[] = []): AnimeReel | null {
     const drawn = this.drawNextReels(allReels, 1, excludeIds);
     return drawn[0] || null;
   }
 
+  /**
+   * Gets remaining unplayed count in current cycle
+   */
   public getRemainingCount(): number {
     return this.unplayedDeck.length;
   }

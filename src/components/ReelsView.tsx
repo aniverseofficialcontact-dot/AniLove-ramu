@@ -6,30 +6,32 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
+  Maximize2,
+  Minimize2,
+  Film,
+  RotateCw,
+  Download,
+  Check,
   Crop,
   Heart,
-  Volume2,
-  VolumeX,
-  Download,
-  RefreshCw,
   Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { registerPlugin, Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import { AnimeReel } from '../types';
 import {
+  fetchAllReels,
+  fetchReelById,
   getBundledReels,
   getStoredSavedReels,
   toggleSaveReel,
+  syncReelsFromGoogleDrive,
   preloadReels,
   getStartingReelsFeed,
-  markReelAsWatched,
-  fetchReelCloudMetadata,
-  sanitizeReelForStorage,
-  saveStoredReelsSession,
-  EnrichedReelMetadata
+  saveStoredReelsSession
 } from '../services/reelsService';
 import { reelMediaCache } from '../services/reelMediaCache';
+import { reelDeckManager, recordReelAsWatched } from '../services/reelRandomizer';
 import { DownloadPlugin } from '../services/downloadManager';
 
 interface ReelsViewProps {
@@ -41,34 +43,7 @@ interface ReelsViewProps {
   refreshTrigger?: number;
 }
 
-// Global Unmuted Preference Flag across session (Default muted for initial Android WebView autoplay compatibility)
-let globalUserUnmutedPreference = false;
-
-function formatTime(seconds: number): string {
-  if (isNaN(seconds) || seconds < 0) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-}
-
-// Framer Motion GPU-Accelerated Tween Slide Variants (Instagram / Shorts Style)
-const slideVariants = {
-  enter: (direction: number) => ({
-    y: direction > 0 ? '100%' : '-100%',
-  }),
-  center: {
-    y: 0,
-    transition: {
-      y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
-    }
-  },
-  exit: (direction: number) => ({
-    y: direction > 0 ? '-100%' : '100%',
-    transition: {
-      y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
-    }
-  })
-};
+const preloadedThumbnailCache = new Set<string>();
 
 export const ReelsView: React.FC<ReelsViewProps> = ({
   onBack,
@@ -78,429 +53,684 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   initialFilterMode,
   refreshTrigger,
 }) => {
+  const [allReels, setAllReels] = useState<AnimeReel[]>(() => getBundledReels(false));
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>(() => {
     const saved = getStoredSavedReels();
     const map: Record<string, boolean> = {};
     saved.forEach(r => { if (r?.id) map[r.id] = true; });
     return map;
   });
-
-  const [filterMode, setFilterMode] = useState<'all' | 'saved'>(initialFilterMode || 'all');
-
+  const [filterMode, setFilterMode] = useState<'all' | 'saved'>(() => {
+    if (initialFilterMode) return initialFilterMode;
+    const session = getStartingReelsFeed(initialReelId, initialFilterMode);
+    return session.filterMode || 'all';
+  });
   const [feedHistory, setFeedHistory] = useState<AnimeReel[]>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    if (session.feed && session.feed.length > 0) return session.feed;
-    return getBundledReels(true);
+    return session.feed;
   });
-
   const [historyIndex, setHistoryIndex] = useState<number>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
-    return session.index || 0;
+    return session.index;
   });
-
   const [slideDirection, setSlideDirection] = useState<number>(1);
+
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(true); // Default muted on startup for 100% instant autoplay
   const [showPlayPauseFeedback, setShowPlayPauseFeedback] = useState<'play' | 'pause' | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
-  const [is2xSpeed, setIs2xSpeed] = useState(false);
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [isFrameRendered, setIsFrameRendered] = useState(false);
-  const [videoSrcOverride, setVideoSrcOverride] = useState<string | null>(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
 
-  const [enrichedMetadata, setEnrichedMetadata] = useState<Record<string, EnrichedReelMetadata>>({});
-  const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('cover');
+  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(9 / 16);
+  const [aspectFitMode, setAspectFitMode] = useState<'contain' | 'cover'>('contain');
 
-  // Dynamic Touch Coordinate Heart Burst State
-  const [heartBurstPos, setHeartBurstPos] = useState<{ x: number; y: number } | null>(null);
-
-  // Drag Physics State
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const seekbarRef = useRef<HTMLDivElement>(null);
-  const isInitialMountRef = useRef<boolean>(true);
-
-  // Stall & Progress Watchdog references
-  const lastTimeUpdateRef = useRef<number>(Date.now());
-  const lastCurrentTimeRef = useRef<number>(0);
-
-  // Gesture & Hold references
-  const touchStartYRef = useRef<number | null>(null);
-  const touchStartTimeRef = useRef<number>(0);
-  const lastWheelTimeRef = useRef<number>(0);
-  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTimeRef = useRef<number>(0);
-  const isManuallyPausedRef = useRef<boolean>(false);
-
-  // Derived variables & memoized sources
-  const currentReel = feedHistory[historyIndex] || null;
-  const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
-  const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
-
-  const activeVideoUrl = useMemo(() => {
-    if (videoSrcOverride) return videoSrcOverride;
-    if (!currentReel?.id) return '';
-    return `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
-  }, [currentReel?.id, videoSrcOverride]);
-
-  // Poster Image Source
-  const activePosterUrl = useMemo(() => {
-    if (!currentReel?.id) return '';
-    return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
-  }, [currentReel?.id]);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
-    if (!currentReel?.id) return null;
-    const el = document.getElementById(`active-reel-video-${currentReel.id}`) as HTMLVideoElement | null;
+    if (videoRef.current && typeof videoRef.current.play === 'function') {
+      return videoRef.current;
+    }
+    const el = document.getElementById('active-reel-video') as HTMLVideoElement | null;
     if (el) {
       videoRef.current = el;
       return el;
     }
-    if (videoRef.current && typeof videoRef.current.play === 'function') {
-      return videoRef.current;
-    }
     return null;
-  }, [currentReel?.id]);
+  }, []);
 
-  // First Touch Unmutes Audio permanently across all reels
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const lastTouchTimeRef = useRef<number>(0);
+  const lastWheelTimeRef = useRef<number>(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartTimeRef = useRef<number>(0);
+  const hasMovedSignificantRef = useRef<boolean>(false);
+  const isManuallyPausedRef = useRef<boolean>(false);
+  const hasUnlockedAudioRef = useRef<boolean>(false);
+
+  const refreshSavedMap = useCallback(() => {
+    const saved = getStoredSavedReels();
+    const map: Record<string, boolean> = {};
+    saved.forEach(r => {
+      if (r && r.id) map[r.id] = true;
+    });
+    setSavedStatus(map);
+  }, []);
+
   useEffect(() => {
-    const handleFirstTouch = () => {
-      globalUserUnmutedPreference = true;
-      const video = getActiveVideo();
-      if (video) {
-        video.muted = false;
-        video.volume = 1.0;
-        setIsMuted(false);
-      }
-    };
+    refreshSavedMap();
+    window.addEventListener('anilove-saved-reels-updated', refreshSavedMap);
+    return () => window.removeEventListener('anilove-saved-reels-updated', refreshSavedMap);
+  }, [refreshSavedMap]);
 
-    window.addEventListener('touchstart', handleFirstTouch, { once: true });
-    window.addEventListener('click', handleFirstTouch, { once: true });
-    return () => {
-      window.removeEventListener('touchstart', handleFirstTouch);
-      window.removeEventListener('click', handleFirstTouch);
-    };
-  }, [getActiveVideo]);
+  const pickRandomReel = useCallback((pool: AnimeReel[], excludeIds: string[] = []): AnimeReel | null => {
+    if (!pool || pool.length === 0) return null;
+    if (filterMode === 'saved') {
+      const candidates = pool.filter(r => !excludeIds.includes(r.id));
+      const selectionPool = candidates.length > 0 ? candidates : pool;
+      const randIdx = Math.floor(Math.random() * selectionPool.length);
+      return selectionPool[randIdx];
+    }
+    return reelDeckManager.pickNextReel(pool, excludeIds);
+  }, [filterMode]);
 
-  // Stall Watchdog & Auto-Reconnect Engine: Detects freeze, stall, or paused state and kickstarts playback
+  const currentPool = React.useMemo(() => {
+    if (filterMode === 'saved') {
+      return getStoredSavedReels();
+    }
+    return allReels;
+  }, [allReels, filterMode, savedStatus]);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      const video = getActiveVideo();
-      if (!video || isManuallyPausedRef.current) return;
-
-      const now = Date.now();
-      const currentPos = video.currentTime;
-
-      // Video is considered stuck if paused or currentTime hasn't moved
-      const isPausedOrStuck = video.paused || currentPos === lastCurrentTimeRef.current;
-
-      if (isPausedOrStuck) {
-        const timeStuckMs = now - lastTimeUpdateRef.current;
-
-        // Level 1 Kickstart (600ms): Retry play()
-        if (timeStuckMs > 600) {
-          video.play().then(() => {
-            setIsPlaying(true);
+    let isMounted = true;
+    const load = async () => {
+      try {
+        if (initialReelId) {
+          fetchReelById(initialReelId).then(reel => {
+            if (reel && isMounted) {
+              setFeedHistory(prev => prev.map(item => {
+                if (item.id === reel.id || item.id.toLowerCase() === reel.id.toLowerCase()) {
+                  return { ...item, ...reel };
+                }
+                return item;
+              }));
+            }
           }).catch(() => {});
         }
 
-        // Level 2 Soft Reload (2000ms): Kickstart video media element buffer
-        if (timeStuckMs > 2000) {
-          try {
-            if (video.readyState >= 1) {
-              video.play().catch(() => {});
-            } else {
-              video.load();
-              if (currentPos > 0) video.currentTime = currentPos;
-              video.play().catch(() => {});
-            }
-          } catch {}
-        }
+        const data = await fetchAllReels(true);
+        if (!isMounted) return;
 
-        // Level 3 Fallback Stream Override (4000ms): Refresh direct stream endpoint
-        if (timeStuckMs > 4000 && currentReel?.id && !videoSrcOverride) {
-          setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t&retry=${now}`);
-          lastTimeUpdateRef.current = now;
+        if (data && data.length > 0) {
+          setAllReels(data);
+          if (filterMode === 'all') {
+            setFeedHistory(prev => {
+              if (prev.length === 0) {
+                const q = data.slice(0, 4);
+                preloadReels(q.map(r => r.id));
+                return q;
+              }
+              return prev;
+            });
+          }
         }
-      } else {
-        lastCurrentTimeRef.current = currentPos;
-        lastTimeUpdateRef.current = now;
-        if (!isPlaying) setIsPlaying(true);
-      }
-    }, 300);
-
-    return () => clearInterval(interval);
-  }, [getActiveVideo, currentReel?.id, videoSrcOverride, isPlaying]);
-
-  // App Visibility & Window Focus Auto-Resume Engine
-  useEffect(() => {
-    const handleResume = () => {
-      if (document.visibilityState === 'visible') {
-        const video = getActiveVideo();
-        if (video && !isManuallyPausedRef.current) {
-          lastTimeUpdateRef.current = Date.now();
-          video.play().then(() => setIsPlaying(true)).catch(() => {});
-        }
+      } catch {
+        // silent fallback to bundled
       }
     };
 
-    document.addEventListener('visibilitychange', handleResume);
-    window.addEventListener('focus', handleResume);
+    load();
     return () => {
-      document.removeEventListener('visibilitychange', handleResume);
-      window.removeEventListener('focus', handleResume);
+      isMounted = false;
     };
-  }, [getActiveVideo]);
+  }, [initialReelId, filterMode]);
 
-  // Mode Switch ('all' vs 'saved') - Skips initial mount
+  const feedHistoryRef = useRef(feedHistory);
+  const historyIndexRef = useRef(historyIndex);
+  const filterModeRef = useRef(filterMode);
+
   useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
+    feedHistoryRef.current = feedHistory;
+    historyIndexRef.current = historyIndex;
+    filterModeRef.current = filterMode;
+  }, [feedHistory, historyIndex, filterMode]);
 
-    if (filterMode === 'saved') {
-      const saved = getStoredSavedReels();
-      setFeedHistory(saved);
-      setHistoryIndex(0);
-    } else {
-      const bundled = getBundledReels(true);
-      setFeedHistory(bundled);
-      setHistoryIndex(0);
-    }
-  }, [filterMode]);
-
-  // Save session state to restore position when switching tabs in app
   useEffect(() => {
-    if (feedHistory.length > 0 && currentReel) {
+    if (feedHistory.length > 0) {
       saveStoredReelsSession({
         feedHistory,
         historyIndex,
+        lastWatchedReelId: feedHistory[historyIndex]?.id,
         filterMode,
-        lastWatchedReelId: currentReel.id
       });
     }
-  }, [historyIndex, feedHistory, filterMode, currentReel?.id]);
+  }, [feedHistory, historyIndex, filterMode]);
 
-  // Direct Stream Reset on Reel Switch
   useEffect(() => {
-    if (!currentReel?.id) return;
-    setVideoSrcOverride(null);
-    setIs2xSpeed(false);
-    setIsVideoLoaded(false);
-    setIsFrameRendered(false);
-    setIsBuffering(false);
-  }, [currentReel?.id, historyIndex]);
-
-  // Fetch enriched metadata from Cloud/Cache
-  useEffect(() => {
-    if (!currentReel?.id) return;
-    const reelId = currentReel.id;
-
-    let isMounted = true;
-    fetchReelCloudMetadata(reelId).then(meta => {
-      if (isMounted && meta) {
-        setEnrichedMetadata(prev => ({ ...prev, [reelId]: meta }));
+    return () => {
+      if (feedHistoryRef.current.length > 0) {
+        const idx = Math.max(0, Math.min(historyIndexRef.current, feedHistoryRef.current.length - 1));
+        const currentItem = feedHistoryRef.current[idx];
+        saveStoredReelsSession({
+          feedHistory: feedHistoryRef.current,
+          historyIndex: idx,
+          lastWatchedReelId: currentItem?.id,
+          filterMode: filterModeRef.current,
+        });
       }
-    });
+    };
+  }, []);
 
-    return () => { isMounted = false; };
+  const prevInitialReelIdRef = useRef<string | undefined>(initialReelId);
+  const prevInitialFilterModeRef = useRef<'all' | 'saved' | undefined>(initialFilterMode);
+
+  useEffect(() => {
+    const reelChanged = initialReelId !== undefined && initialReelId !== prevInitialReelIdRef.current;
+    const modeChanged = initialFilterMode !== undefined && initialFilterMode !== prevInitialFilterModeRef.current;
+
+    if (reelChanged || modeChanged) {
+      prevInitialReelIdRef.current = initialReelId;
+      prevInitialFilterModeRef.current = initialFilterMode;
+      const targetMode = initialFilterMode || (initialReelId ? 'all' : undefined);
+      const session = getStartingReelsFeed(initialReelId, targetMode);
+      if (targetMode) setFilterMode(targetMode);
+      setFeedHistory(session.feed);
+      setHistoryIndex(session.index);
+    }
+  }, [initialReelId, initialFilterMode]);
+
+  useEffect(() => {
+    if (filterMode === 'saved' || currentPool.length === 0) return;
+    const remainingAhead = feedHistory.length - 1 - historyIndex;
+    if (remainingAhead < 3) {
+      const needed = 3 - remainingAhead;
+      const excludeIds = feedHistory.map(r => r.id);
+      const newItems = reelDeckManager.drawNextReels(currentPool, needed, excludeIds);
+      if (newItems.length > 0) {
+        setFeedHistory(prev => [...prev, ...newItems]);
+      }
+    }
+  }, [historyIndex, feedHistory.length, currentPool, filterMode]);
+
+  const currentReel = feedHistory[historyIndex] || null;
+  const nextReel1 = feedHistory[historyIndex + 1] || null;
+  const nextReel2 = feedHistory[historyIndex + 2] || null;
+  const nextReel3 = feedHistory[historyIndex + 3] || null;
+
+  useEffect(() => {
+    if (currentReel?.id) {
+      recordReelAsWatched(currentReel.id);
+    }
   }, [currentReel?.id]);
 
-  // Mark reel as watched after 3s
   useEffect(() => {
-    if (!currentReel?.id || !isPlaying) return;
-    const timer = setTimeout(() => {
-      markReelAsWatched(currentReel.id);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [currentReel?.id, isPlaying]);
+    if (!currentReel?.id) return;
+    reelMediaCache.preloadReel(currentReel.id, 'high');
+  }, [currentReel?.id]);
 
-  // Preload upcoming reels in parallel background RAM
   useEffect(() => {
     if (!currentReel) return;
-    const upcoming = feedHistory.slice(historyIndex + 1, historyIndex + 5).map(r => r.id);
-    preloadReels([currentReel.id, ...upcoming]);
-  }, [historyIndex, currentReel?.id, feedHistory]);
+    const idsToPreload = [
+      currentReel.id,
+      nextReel1?.id,
+      nextReel2?.id,
+      nextReel3?.id
+    ].filter(Boolean) as string[];
 
-  // Instant Autoplay Loop & Media Engine Handlers
+    preloadReels(idsToPreload);
+
+    for (const id of idsToPreload) {
+      if (!preloadedThumbnailCache.has(id)) {
+        preloadedThumbnailCache.add(id);
+        const img = new Image();
+        img.src = `https://lh3.googleusercontent.com/d/${id}`;
+      }
+    }
+  }, [historyIndex, currentReel?.id, nextReel1?.id, nextReel2?.id, nextReel3?.id]);
+
+  useEffect(() => {
+    setIsFrameRendered(false);
+  }, [currentReel?.id, historyIndex]);
+
   useEffect(() => {
     isManuallyPausedRef.current = false;
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
-    video.playbackRate = is2xSpeed ? 2.0 : 1.0;
+    video.muted = false;
+    video.volume = 1.0;
+    video.currentTime = 0;
+    setProgress(0);
+    setCurrentTime(0);
 
-    let isSubscribed = true;
-
-    const attemptPlay = async () => {
-      if (!isSubscribed || isManuallyPausedRef.current) return;
-      try {
-        video.muted = !globalUserUnmutedPreference;
-        video.volume = 1.0;
-        await video.play();
-        if (isSubscribed) {
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
           setIsPlaying(true);
-          setIsMuted(!globalUserUnmutedPreference ? video.muted : false);
-        }
-      } catch (err) {
-        if (!isSubscribed || isManuallyPausedRef.current) return;
-        try {
-          video.muted = true;
-          if (isSubscribed) setIsMuted(true);
-          await video.play();
-          if (isSubscribed) setIsPlaying(true);
-        } catch {
-          // Keep attempting playback on canplay / loadeddata
+          setIsBuffering(false);
+        })
+        .catch(() => {
+          setIsPlaying(false);
+          setIsBuffering(false);
+        });
+    }
+  }, [historyIndex, currentReel, getActiveVideo]);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      hasUnlockedAudioRef.current = true;
+      const v = getActiveVideo();
+      if (v) {
+        v.muted = false;
+        v.volume = 1.0;
+        if (v.paused && !isManuallyPausedRef.current) {
+          v.play()
+            .then(() => {
+              setIsPlaying(true);
+            })
+            .catch(() => {});
         }
       }
+      cleanup();
     };
 
-    attemptPlay();
-
-    const handleMediaReady = () => {
-      if (!isManuallyPausedRef.current) attemptPlay();
+    const cleanup = () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('touchend', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
     };
 
-    video.addEventListener('canplay', handleMediaReady);
-    video.addEventListener('loadeddata', handleMediaReady);
-    video.addEventListener('playing', handleMediaReady);
+    window.addEventListener('click', unlockAudio, { passive: true, once: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
+    window.addEventListener('touchend', unlockAudio, { passive: true, once: true });
+    window.addEventListener('pointerdown', unlockAudio, { passive: true, once: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true, once: true });
 
-    return () => {
-      isSubscribed = false;
-      video.removeEventListener('canplay', handleMediaReady);
-      video.removeEventListener('loadeddata', handleMediaReady);
-      video.removeEventListener('playing', handleMediaReady);
-    };
-  }, [historyIndex, currentReel?.id, activeVideoUrl, getActiveVideo, is2xSpeed]);
-
-  const cleanupVideoElement = useCallback(() => {
-    const video = getActiveVideo();
-    if (video) {
-      try {
-        video.pause();
-        video.removeAttribute('src');
-        video.load();
-      } catch {}
-    }
+    return cleanup;
   }, [getActiveVideo]);
 
   const goToNext = useCallback(() => {
-    cleanupVideoElement();
-    setDragOffsetY(0);
+    if (currentPool.length === 0) return;
+    isManuallyPausedRef.current = false;
     setSlideDirection(1);
-    setHistoryIndex(prev => {
-      const nextIdx = prev + 1;
-      if (nextIdx >= feedHistory.length) {
-        const bundled = getBundledReels(true);
-        if (bundled.length > 0) {
-          setFeedHistory(old => [...old, ...bundled.slice(0, 5)]);
-        }
+    setDragOffsetY(0);
+    setIsDragging(false);
+
+    if (filterMode === 'saved') {
+      if (historyIndex < feedHistory.length - 1) {
+        setHistoryIndex(prev => prev + 1);
+      } else if (feedHistory.length > 1) {
+        setHistoryIndex(0);
       }
-      return nextIdx;
-    });
-  }, [cleanupVideoElement, feedHistory.length]);
+      return;
+    }
+
+    if (historyIndex < feedHistory.length - 1) {
+      setHistoryIndex(prev => prev + 1);
+    } else {
+      const exclude = feedHistory.slice(-20).map(r => r.id);
+      const nextRandom = pickRandomReel(currentPool, exclude);
+      if (nextRandom) {
+        setFeedHistory(prev => [...prev, nextRandom]);
+        setHistoryIndex(prev => prev + 1);
+      }
+    }
+  }, [currentPool, feedHistory, historyIndex, filterMode, pickRandomReel]);
 
   const goToPrev = useCallback(() => {
-    cleanupVideoElement();
-    setDragOffsetY(0);
-    setSlideDirection(-1);
-    setHistoryIndex(prev => Math.max(0, prev - 1));
-  }, [cleanupVideoElement]);
+    isManuallyPausedRef.current = false;
+    if (filterMode === 'saved') {
+      if (historyIndex > 0) {
+        setSlideDirection(-1);
+        setDragOffsetY(0);
+        setIsDragging(false);
+        setHistoryIndex(prev => prev - 1);
+      } else if (feedHistory.length > 1) {
+        setSlideDirection(-1);
+        setDragOffsetY(0);
+        setIsDragging(false);
+        setHistoryIndex(feedHistory.length - 1);
+      } else {
+        setDragOffsetY(0);
+        setIsDragging(false);
+      }
+      return;
+    }
+
+    if (historyIndex > 0) {
+      setSlideDirection(-1);
+      setDragOffsetY(0);
+      setIsDragging(false);
+      setHistoryIndex(prev => prev - 1);
+    } else {
+      setDragOffsetY(0);
+      setIsDragging(false);
+    }
+  }, [historyIndex, filterMode, feedHistory.length]);
+
+  const shuffleReel = useCallback(() => {
+    if (currentPool.length <= 1) return;
+    isManuallyPausedRef.current = false;
+    setSlideDirection(1);
+    if (filterMode === 'saved') {
+      const otherIndices = feedHistory.map((_, i) => i).filter(i => i !== historyIndex);
+      if (otherIndices.length > 0) {
+        const nextIdx = otherIndices[Math.floor(Math.random() * otherIndices.length)];
+        setHistoryIndex(nextIdx);
+        saveStoredReelsSession({
+          feedHistory,
+          historyIndex: nextIdx,
+          lastWatchedReelId: feedHistory[nextIdx]?.id,
+          filterMode: 'saved',
+        });
+      }
+      return;
+    }
+    reelDeckManager.ensureDeck(currentPool, true);
+    const newQueue = reelDeckManager.drawNextReels(currentPool, 4, [currentReel?.id || '']);
+    if (newQueue.length > 0) {
+      setFeedHistory(newQueue);
+      setHistoryIndex(0);
+      setDragOffsetY(0);
+      setIsPlaying(true);
+      preloadReels(newQueue.map(r => r.id));
+      reelMediaCache.preloadReel(newQueue[0].id, 'high');
+      saveStoredReelsSession({
+        feedHistory: newQueue,
+        historyIndex: 0,
+        lastWatchedReelId: newQueue[0].id,
+        filterMode: 'all',
+      });
+    }
+  }, [currentPool, currentReel?.id, filterMode, feedHistory, historyIndex]);
+
+  const prevRefreshTriggerRef = useRef(refreshTrigger);
+  useEffect(() => {
+    if (refreshTrigger !== undefined && prevRefreshTriggerRef.current !== undefined && refreshTrigger !== prevRefreshTriggerRef.current) {
+      prevRefreshTriggerRef.current = refreshTrigger;
+      shuffleReel();
+    } else if (refreshTrigger !== undefined) {
+      prevRefreshTriggerRef.current = refreshTrigger;
+    }
+  }, [refreshTrigger, shuffleReel]);
 
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
     if (!video) return;
 
-    if (video.paused) {
+    video.muted = false;
+    video.volume = 1.0;
+
+    if (video.paused || isManuallyPausedRef.current) {
       isManuallyPausedRef.current = false;
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
-      setShowPlayPauseFeedback('play');
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => {
+          setIsPlaying(true);
+          setShowPlayPauseFeedback('play');
+          setTimeout(() => setShowPlayPauseFeedback(null), 650);
+        }).catch(() => {});
+      } else {
+        setIsPlaying(true);
+        setShowPlayPauseFeedback('play');
+        setTimeout(() => setShowPlayPauseFeedback(null), 650);
+      }
     } else {
       isManuallyPausedRef.current = true;
       video.pause();
       setIsPlaying(false);
       setShowPlayPauseFeedback('pause');
+      setTimeout(() => setShowPlayPauseFeedback(null), 650);
     }
-
-    setTimeout(() => setShowPlayPauseFeedback(null), 800);
-  }, [getActiveVideo]);
-
-  const toggleMute = useCallback(() => {
-    const video = getActiveVideo();
-    if (!video) return;
-    const nextMuted = !video.muted;
-    video.muted = nextMuted;
-    setIsMuted(nextMuted);
-    globalUserUnmutedPreference = !nextMuted;
   }, [getActiveVideo]);
 
   const handleToggleSave = useCallback((targetReel?: AnimeReel) => {
     const target = targetReel || currentReel;
-    if (!target?.id) return;
+    if (!target || !target.id) return;
 
-    const isNowSaved = toggleSaveReel(target);
-    setSavedStatus(prev => ({ ...prev, [target.id]: isNowSaved }));
+    const isCurrentlySaved = Boolean(savedStatus[target.id]);
+    const isNowSaved = !isCurrentlySaved;
 
-    if (onShowToast) {
-      onShowToast('info', isNowSaved ? 'Saved to Bookmarks' : 'Removed from Bookmarks', 'Saved Reels');
-    }
-  }, [currentReel, onShowToast]);
-
-  // Native Android & Web Download Handler
-  const handleDownloadReel = () => {
-    if (!currentReel) return;
-    const downloadUrl = `https://drive.google.com/uc?export=download&id=${currentReel.id}&confirm=t`;
-
-    if (onShowToast) {
-      onShowToast('success', `Downloading ${displayTitle}...`, 'Reel Download');
-    }
-
-    if (Capacitor.isNativePlatform()) {
-      try {
-        DownloadPlugin.startDownload({
-          item: {
-            id: `reel_${currentReel.id}`,
-            anilistId: 0,
-            animeTitle: displayTitle,
-            episodeNumber: historyIndex + 1,
-            streamUrl: downloadUrl,
-            pageUrl: downloadUrl,
-            audio: 'SUB',
-            quality: '1080p',
-            serverName: 'GoogleDrive',
-            status: 'QUEUED',
-            progress: 0,
-            bytesDownloaded: 0,
-            totalBytes: 0,
-            localFilePath: '',
-            localSubPath: '',
-            thumbnail: activePosterUrl,
-            title: displayTitle,
-          }
-        }).catch(() => {
-          window.open(downloadUrl, '_system');
-        });
-      } catch {
-        window.open(downloadUrl, '_system');
+    setSavedStatus(prev => {
+      const nextMap = { ...prev };
+      if (isNowSaved) {
+        nextMap[target.id] = true;
+      } else {
+        delete nextMap[target.id];
       }
+      return nextMap;
+    });
+
+    toggleSaveReel(target);
+
+    if (isNowSaved) {
+      setShowHeartBurst(true);
+      setTimeout(() => setShowHeartBurst(false), 900);
+    }
+  }, [currentReel, savedStatus]);
+
+  const handleCanvasInteraction = useCallback(() => {
+    const video = getActiveVideo();
+    if (video) {
+      video.muted = false;
+      video.volume = 1.0;
+    }
+
+    const now = Date.now();
+    const DOUBLE_TAP_GAP = 280;
+
+    if (tapTimerRef.current && (now - lastTapTimeRef.current < DOUBLE_TAP_GAP)) {
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+      lastTapTimeRef.current = 0;
+      handleToggleSave();
     } else {
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `${displayTitle}.mp4`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      lastTapTimeRef.current = now;
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => {
+        tapTimerRef.current = null;
+        lastTapTimeRef.current = 0;
+        togglePlay();
+      }, DOUBLE_TAP_GAP);
+    }
+  }, [handleToggleSave, togglePlay, getActiveVideo]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    lastTouchTimeRef.current = Date.now();
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) return;
+    const touch = e.touches[0];
+    touchStartYRef.current = touch.clientY;
+    touchStartXRef.current = touch.clientX;
+    touchStartTimeRef.current = Date.now();
+    hasMovedSignificantRef.current = false;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    lastTouchTimeRef.current = Date.now();
+    if (touchStartYRef.current === null) return;
+    const touch = e.touches[0];
+    const diffY = touch.clientY - touchStartYRef.current;
+    const diffX = touch.clientX - (touchStartXRef.current || touch.clientX);
+
+    if (Math.abs(diffY) > 20 || Math.abs(diffX) > 20) {
+      hasMovedSignificantRef.current = true;
+    }
+
+    if (Math.abs(diffY) > 12) {
+      if (historyIndex === 0 && diffY > 0) {
+        setDragOffsetY(diffY * 0.3);
+      } else {
+        setDragOffsetY(diffY);
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    lastTouchTimeRef.current = Date.now();
+    setIsDragging(false);
+    if (touchStartYRef.current === null) return;
+
+    const diffY = e.changedTouches[0].clientY - touchStartYRef.current;
+    const diffX = e.changedTouches[0].clientX - (touchStartXRef.current || e.changedTouches[0].clientX);
+    const timeDiff = Date.now() - touchStartTimeRef.current;
+    const totalDistance = Math.hypot(diffX, diffY);
+
+    touchStartYRef.current = null;
+    touchStartXRef.current = null;
+
+    const DRAG_THRESHOLD = 50;
+    const isQuickFlick = timeDiff < 280 && Math.abs(diffY) > 30;
+
+    if (diffY < -DRAG_THRESHOLD || (isQuickFlick && diffY < 0)) {
+      goToNext();
+    } else if (diffY > DRAG_THRESHOLD || (isQuickFlick && diffY > 0)) {
+      goToPrev();
+    } else {
+      setDragOffsetY(0);
+      if (!hasMovedSignificantRef.current || totalDistance < 25) {
+        handleCanvasInteraction();
+      }
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (Date.now() - lastTouchTimeRef.current < 800) return;
+    if ((e.target as HTMLElement).closest('button, a, input, [data-interactive]')) return;
+    touchStartYRef.current = e.clientY;
+    touchStartXRef.current = e.clientX;
+    touchStartTimeRef.current = Date.now();
+    hasMovedSignificantRef.current = false;
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (Date.now() - lastTouchTimeRef.current < 800) return;
+    if (touchStartYRef.current === null) return;
+    const diffY = e.clientY - touchStartYRef.current;
+    const diffX = e.clientX - (touchStartXRef.current || e.clientX);
+
+    if (Math.abs(diffY) > 20 || Math.abs(diffX) > 20) {
+      hasMovedSignificantRef.current = true;
+    }
+
+    if (Math.abs(diffY) > 10) {
+      if (historyIndex === 0 && diffY > 0) {
+        setDragOffsetY(diffY * 0.3);
+      } else {
+        setDragOffsetY(diffY);
+      }
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (Date.now() - lastTouchTimeRef.current < 800) return;
+    setIsDragging(false);
+    if (touchStartYRef.current === null) return;
+
+    const diffY = e.clientY - touchStartYRef.current;
+    const diffX = e.clientX - (touchStartXRef.current || e.clientX);
+    const timeDiff = Date.now() - touchStartTimeRef.current;
+    const totalDistance = Math.hypot(diffX, diffY);
+
+    touchStartYRef.current = null;
+    touchStartXRef.current = null;
+
+    const DRAG_THRESHOLD = 50;
+    const isQuickFlick = timeDiff < 280 && Math.abs(diffY) > 30;
+
+    if (diffY < -DRAG_THRESHOLD || (isQuickFlick && diffY < 0)) {
+      goToNext();
+    } else if (diffY > DRAG_THRESHOLD || (isQuickFlick && diffY > 0)) {
+      goToPrev();
+    } else {
+      setDragOffsetY(0);
+      if (!hasMovedSignificantRef.current || totalDistance < 25) {
+        handleCanvasInteraction();
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      setDragOffsetY(0);
+      touchStartYRef.current = null;
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    const now = Date.now();
+    const WHEEL_COOLDOWN = 380;
+    if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN) return;
+
+    if (Math.abs(e.deltaY) > 25) {
+      lastWheelTimeRef.current = now;
+      if (e.deltaY > 0) {
+        goToNext();
+      } else {
+        goToPrev();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        goToNext();
+      } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        goToPrev();
+      } else if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleToggleSave();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        shuffleReel();
+      } else if (e.key === 'Escape' && onBack) {
+        e.preventDefault();
+        onBack();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goToNext, goToPrev, togglePlay, handleToggleSave, shuffleReel, onBack]);
+
+  const handleSyncDrive = async () => {
+    setIsSyncing(true);
+    onShowToast('sync', 'Checking for new anime edits...', 'Updating Reels');
+    try {
+      const fresh = await syncReelsFromGoogleDrive();
+      if (fresh && fresh.length > 0) {
+        setAllReels(fresh);
+        onShowToast('success', `Updated with ${fresh.length} anime reels!`, 'Update Complete');
+      }
+    } catch {
+      onShowToast('info', 'Reels catalog is up to date.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -517,545 +747,556 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       }
     }
 
-    if (navigator.clipboard) {
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(shareUrl);
-        if (onShowToast) onShowToast('success', 'Reel link copied!', 'Share Reel');
-      } catch {}
-    }
-  };
-
-  // Tap & Double Tap with Dynamic Touch Coordinates
-  const handleCanvasInteraction = useCallback((clientX?: number, clientY?: number) => {
-    const video = getActiveVideo();
-    if (video && video.muted) {
-      video.muted = false;
-      setIsMuted(false);
-      globalUserUnmutedPreference = true;
-    }
-
-    const now = Date.now();
-    const DOUBLE_TAP_GAP = 280;
-
-    if (now - lastTapTimeRef.current < DOUBLE_TAP_GAP) {
-      if (tapTimerRef.current) {
-        clearTimeout(tapTimerRef.current);
-        tapTimerRef.current = null;
+        copied = true;
+      } catch {
+        // fallback
       }
-
-      if (typeof clientX === 'number' && typeof clientY === 'number') {
-        setHeartBurstPos({ x: clientX, y: clientY });
-      } else {
-        setHeartBurstPos(null);
+    }
+    if (!copied) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch {
+        // silent
       }
+    }
 
-      setShowHeartBurst(true);
-      setTimeout(() => setShowHeartBurst(false), 900);
-      handleToggleSave();
-      lastTapTimeRef.current = 0;
+    if (copied) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+      onShowToast('info', 'Reel link copied to clipboard!', 'Link Copied');
     } else {
-      lastTapTimeRef.current = now;
-      tapTimerRef.current = setTimeout(() => {
-        togglePlay();
-        tapTimerRef.current = null;
-      }, DOUBLE_TAP_GAP);
+      onShowToast('info', shareUrl, 'Share Link');
     }
-  }, [getActiveVideo, handleToggleSave, togglePlay]);
-
-  // Long-press 2x Fast Forward Speed Handlers
-  const handlePointerDown = (e: React.PointerEvent) => {
-    const video = getActiveVideo();
-    if (video && video.muted) {
-      video.muted = false;
-      setIsMuted(false);
-      globalUserUnmutedPreference = true;
-    }
-
-    touchStartYRef.current = e.clientY;
-    touchStartTimeRef.current = Date.now();
-    setIsDragging(true);
-
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = setTimeout(() => {
-      const v = getActiveVideo();
-      if (v) {
-        v.playbackRate = 2.0;
-        setIs2xSpeed(true);
-      }
-    }, 250);
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
+  const handleDownloadReel = () => {
+    if (!currentReel) return;
+    const downloadUrl = `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
+
+    if (onShowToast) {
+      onShowToast('success', `Downloading ${currentReel.cleanTitle || 'Reel'}...`, 'Reel Download');
     }
 
-    const video = getActiveVideo();
-    if (video && is2xSpeed) {
-      video.playbackRate = 1.0;
-      setIs2xSpeed(false);
-    }
-
-    if (!touchStartYRef.current) return;
-    setIsDragging(false);
-
-    const diffY = e.clientY - touchStartYRef.current;
-    const timeDiff = Date.now() - touchStartTimeRef.current;
-    touchStartYRef.current = null;
-
-    const DRAG_THRESHOLD = 50;
-    const isQuickFlick = timeDiff < 300 && Math.abs(diffY) > 30;
-
-    if (diffY < -DRAG_THRESHOLD || (isQuickFlick && diffY < 0)) {
-      goToNext();
-    } else if (diffY > DRAG_THRESHOLD || (isQuickFlick && diffY > 0)) {
-      goToPrev();
+    if (Capacitor.isNativePlatform()) {
+      try {
+        DownloadPlugin.startDownload({
+          item: {
+            id: `reel_${currentReel.id}`,
+            anilistId: 0,
+            animeTitle: currentReel.cleanTitle || 'Anime Edit',
+            episodeNumber: historyIndex + 1,
+            streamUrl: downloadUrl,
+            pageUrl: downloadUrl,
+            audio: 'SUB',
+            quality: '1080p',
+            serverName: 'GoogleDrive',
+            status: 'QUEUED',
+            progress: 0,
+            bytesDownloaded: 0,
+            totalBytes: 0,
+            localFilePath: '',
+            localSubPath: '',
+            thumbnail: `https://lh3.googleusercontent.com/d/${currentReel.id}`,
+            title: currentReel.cleanTitle || 'Anime Edit',
+          }
+        }).catch(() => {
+          window.open(downloadUrl, '_system');
+        });
+      } catch {
+        window.open(downloadUrl, '_system');
+      }
     } else {
-      setDragOffsetY(0);
-      if (timeDiff < 220 && Math.abs(diffY) < 15) {
-        handleCanvasInteraction(e.clientX, e.clientY);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${currentReel.cleanTitle || 'AnimeReel'}.mp4`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  const formatTime = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const isLandscape = videoAspectRatio > 1.15;
+  const activeVideoUrl = useMemo(() => {
+    if (!currentReel?.id) return '';
+    const syncUrl = reelMediaCache.getSynchronousObjectUrl(currentReel.id);
+    return syncUrl || `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
+  }, [currentReel?.id]);
+
+  const slideVariants = {
+    enter: (direction: number) => ({
+      y: direction > 0 ? '100%' : '-100%',
+    }),
+    center: {
+      y: 0,
+      transition: {
+        y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
       }
-    }
-  };
-
-  const handlePointerLeave = () => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    const video = getActiveVideo();
-    if (video && is2xSpeed) {
-      video.playbackRate = 1.0;
-      setIs2xSpeed(false);
-    }
-    setIsDragging(false);
-    setDragOffsetY(0);
-  };
-
-  // Interactive Bottom Seekbar Drag / Scrubbing Handlers
-  const handleSeekbarScrub = (clientX: number) => {
-    const video = getActiveVideo();
-    if (!video || !seekbarRef.current || !duration) return;
-
-    const rect = seekbarRef.current.getBoundingClientRect();
-    const clickPos = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    const targetPercentage = clickPos / rect.width;
-    const newTime = targetPercentage * duration;
-
-    video.currentTime = newTime;
-    setCurrentTime(newTime);
-    setProgress(targetPercentage * 100);
-  };
-
-  const handleSeekbarStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    setIsScrubbing(true);
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    handleSeekbarScrub(clientX);
-  };
-
-  const handleSeekbarMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (!isScrubbing) return;
-    e.stopPropagation();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    handleSeekbarScrub(clientX);
-  };
-
-  const handleSeekbarEnd = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (isScrubbing) {
-      e.stopPropagation();
-      setIsScrubbing(false);
-    }
-  };
-
-  // Wheel Scroll Handler
-  const handleWheel = (e: React.WheelEvent) => {
-    const now = Date.now();
-    const WHEEL_COOLDOWN = 380;
-    if (now - lastWheelTimeRef.current < WHEEL_COOLDOWN) return;
-
-    if (Math.abs(e.deltaY) > 20) {
-      lastWheelTimeRef.current = now;
-      if (e.deltaY > 0) {
-        goToNext();
-      } else {
-        goToPrev();
+    },
+    exit: (direction: number) => ({
+      y: direction > 0 ? '-100%' : '100%',
+      transition: {
+        y: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.28 },
       }
-    }
-  };
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      if (activeEl && (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName) || activeEl.isContentEditable)) {
-        return;
-      }
-      if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
-        e.preventDefault();
-        goToNext();
-      } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
-        e.preventDefault();
-        goToPrev();
-      } else if (e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        togglePlay();
-      } else if (e.key === 'm' || e.key === 'M') {
-        e.preventDefault();
-        toggleMute();
-      } else if (e.key === 's' || e.key === 'S') {
-        e.preventDefault();
-        handleToggleSave();
-      } else if (e.key === 'Escape' && onBack) {
-        e.preventDefault();
-        onBack();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNext, goToPrev, togglePlay, toggleMute, handleToggleSave, onBack]);
-
-  const handleVideoError = () => {
-    if (currentReel?.id && !videoSrcOverride) {
-      setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
-    }
+    })
   };
 
   return (
     <div
       ref={containerRef}
+      id="anime-reels-container"
       onWheel={handleWheel}
-      className="relative w-full h-[100dvh] bg-slate-950 text-white overflow-hidden select-none flex flex-col justify-between font-sans touch-pan-y"
+      className="fixed inset-0 z-40 w-full h-[100dvh] bg-black text-white flex flex-col items-center justify-center select-none overflow-hidden touch-none"
     >
-      {/* Top Floating Header Overlay */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-auto">
-        <div className="flex items-center gap-2">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-pink-600/10 via-purple-600/10 to-indigo-600/10 rounded-full blur-[160px]" />
+      </div>
+
+      <div className="absolute top-2 lg:top-18 inset-x-0 z-40 px-3 sm:px-6 py-2 flex items-center justify-between pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-2">
           {onBack && (
             <button
               onClick={onBack}
-              className="p-2 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md border border-white/10 transition-all cursor-pointer"
+              title={filterMode === 'saved' ? 'Return to Library' : 'Return to AniLove Home'}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-black/60 hover:bg-black/80 backdrop-blur-xl border border-white/15 text-slate-200 hover:text-white font-bold text-xs shadow-2xl transition active:scale-95 cursor-pointer"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4 text-pink-400" />
+              <span className="hidden sm:inline">{filterMode === 'saved' ? 'Library' : 'Back'}</span>
             </button>
           )}
+        </div>
 
-          {/* Filter Mode Toggle */}
-          <div className="flex items-center bg-black/50 p-1 rounded-full border border-white/10 backdrop-blur-md">
-            <button
-              onClick={() => setFilterMode('all')}
-              className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
-                filterMode === 'all'
-                  ? 'bg-gradient-to-r from-pink-600 to-indigo-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              All Reels
-            </button>
-            <button
-              onClick={() => setFilterMode('saved')}
-              className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
-                filterMode === 'saved'
-                  ? 'bg-gradient-to-r from-pink-600 to-indigo-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Saved ({Object.values(savedStatus).filter(Boolean).length})
-            </button>
+        {filterMode === 'saved' ? (
+          <div className="pointer-events-none flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/15 text-xs font-bold text-pink-300 shadow-2xl">
+            <Bookmark className="w-3.5 h-3.5 fill-current text-pink-400" />
+            <span>Saved Reels ({historyIndex + 1}/{feedHistory.length || Object.keys(savedStatus).length})</span>
           </div>
+        ) : (
+          <div />
+        )}
+
+        <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            onClick={handleSyncDrive}
+            disabled={isSyncing}
+            title="Check for new anime reels"
+            className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+          >
+            <RotateCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-pink-400' : ''}`} />
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            title="Toggle Fullscreen"
+            className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] hidden sm:flex"
+          >
+            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+          </button>
         </div>
       </div>
 
-      {/* 2x Fast Forward Small White Text Badge Indicator */}
-      <AnimatePresence>
-        {is2xSpeed && (
-          <motion.div
-            initial={{ opacity: 0, y: -15, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.9 }}
-            className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-full bg-black/60 text-white font-extrabold text-xs backdrop-blur-md border border-white/20 shadow-lg flex items-center gap-1.5 pointer-events-none"
-          >
-            <span>2x Speed</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Video Stage with Instagram Spring Slide Transitions */}
-      <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-        {feedHistory.length === 0 ? (
-          /* Empty State */
-          <div className="flex flex-col items-center justify-center text-center p-8 space-y-4 z-20">
-            <div className="w-16 h-16 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-3xl border border-pink-500/30">
-              🔖
-            </div>
-            <h3 className="text-xl font-bold text-white">
-              {filterMode === 'saved' ? 'No Saved Reels Yet' : 'Loading Reels Catalog...'}
-            </h3>
-            <p className="text-xs text-slate-400 max-w-xs">
+      <div
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="relative w-full h-full max-w-lg md:max-w-xl mx-auto flex items-center justify-center overflow-hidden select-none cursor-grab active:cursor-grabbing pb-16 lg:pb-0 pt-0 lg:pt-16"
+      >
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center space-y-3 text-slate-400">
+            <div className="w-12 h-12 rounded-full border-3 border-pink-500 border-t-transparent animate-spin" />
+            <p className="text-sm font-bold text-slate-300">Loading Anime Reels...</p>
+          </div>
+        ) : !currentReel ? (
+          <div className="text-center p-8 space-y-4 max-w-sm">
+            <Film className="w-14 h-14 text-slate-600 mx-auto" />
+            <h3 className="text-lg font-bold text-white">No Reels Found</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
               {filterMode === 'saved'
-                ? 'Tap the bookmark button on any anime edit reel to save it to your collection.'
-                : 'Fetching latest anime edit reels from Google Drive.'}
+                ? 'You have not saved any reels yet. Double-tap any video or tap the bookmark button to save.'
+                : 'Tap the refresh button above or explore all reels.'}
             </p>
-            {filterMode === 'saved' ? (
-              <button
-                onClick={() => setFilterMode('all')}
-                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
-              >
-                Explore All Reels
-              </button>
-            ) : (
+            {filterMode === 'saved' && (
               <button
                 onClick={() => {
-                  const bundled = getBundledReels(true);
-                  setFeedHistory(bundled);
-                  setHistoryIndex(0);
+                  if (onBack) onBack();
                 }}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all"
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500 to-violet-600 text-white text-xs font-bold transition cursor-pointer shadow-lg shadow-pink-500/25"
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Reload Catalog</span>
+                Return to Library
               </button>
             )}
           </div>
         ) : (
-          currentReel && (
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
             <AnimatePresence initial={false} custom={slideDirection} mode="popLayout">
               <motion.div
-                key={currentReel.id}
+                key={`${currentReel.id}-${historyIndex}`}
                 custom={slideDirection}
                 variants={slideVariants}
                 initial="enter"
                 animate="center"
                 exit="exit"
-                style={{ y: dragOffsetY }}
-                onPointerDown={handlePointerDown}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
-                className="absolute inset-0 w-full h-full flex items-center justify-center cursor-pointer overflow-hidden touch-none"
+                style={{
+                  y: dragOffsetY,
+                }}
+                className="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden will-change-transform"
               >
-                {/* Background Ambient Blur Poster */}
-                <div className="absolute inset-0 bg-black -z-10 overflow-hidden">
-                  <img
-                    src={activePosterUrl}
-                    alt=""
-                    className="w-full h-full object-cover blur-3xl opacity-30 scale-125"
-                  />
-                </div>
-
-                {/* Zero-Flash Poster Overlay Mask */}
                 <div
                   className={`absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none transition-opacity duration-200 z-10 ${
                     isFrameRendered ? 'opacity-0' : 'opacity-100'
                   }`}
                 >
+                  <div className="absolute inset-0 bg-slate-950/90" />
                   <img
-                    src={activePosterUrl}
-                    alt=""
-                    className={`w-full h-full ${
-                      aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
+                    src={`https://lh3.googleusercontent.com/d/${currentReel.id}`}
+                    alt={currentReel.cleanTitle || 'Anime Reel'}
+                    loading="eager"
+                    decoding="sync"
+                    // @ts-ignore
+                    fetchPriority="high"
+                    className={`relative z-10 w-full h-full max-w-[420px] max-h-[88vh] ${
+                      aspectFitMode === 'cover' ? 'object-cover' : 'object-contain'
                     }`}
                   />
-                  {/* Sleek Pink Buffering Spinner */}
                   {isBuffering && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
-                      <div className="w-11 h-11 rounded-full border-3 border-pink-500 border-t-transparent animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-20">
+                      <div className="w-10 h-10 rounded-full border-3 border-pink-500 border-t-transparent animate-spin" />
                     </div>
                   )}
                 </div>
 
-                {/* Pure Borderless HTML5 Video Element (NO Google Drive Embed Controls!) */}
+                {isLandscape && (
+                  <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+                    <img
+                      src={`https://lh3.googleusercontent.com/d/${currentReel.id}`}
+                      alt=""
+                      className="w-full h-full object-cover blur-3xl scale-125 opacity-40 brightness-75 transition-opacity duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/40" />
+                  </div>
+                )}
+
                 <video
-                  id={`active-reel-video-${currentReel.id}`}
-                  ref={el => { videoRef.current = el; }}
+                  id="active-reel-video"
+                  key={currentReel.id}
+                  ref={(el) => {
+                    if (el) {
+                      videoRef.current = el;
+                      el.muted = false;
+                      el.volume = 1.0;
+                    }
+                  }}
                   src={activeVideoUrl}
-                  poster={activePosterUrl}
+                  poster={`https://lh3.googleusercontent.com/d/${currentReel.id}`}
                   autoPlay
                   playsInline
                   loop
-                  muted={isMuted}
-                  referrerPolicy="no-referrer"
-                  onError={handleVideoError}
-                  onWaiting={() => setIsBuffering(true)}
-                  onCanPlay={() => setIsBuffering(false)}
-                  onPlaying={() => {
-                    setIsBuffering(false);
-                    setIsFrameRendered(true);
+                  muted={false}
+                  preload="auto"
+                  onPlay={(e) => {
+                    e.currentTarget.muted = false;
+                    e.currentTarget.volume = 1.0;
                     setIsPlaying(true);
+                    setIsBuffering(false);
                   }}
-                  onLoadedData={() => setIsVideoLoaded(true)}
-                  className={`w-full h-full ${
-                    aspectFitMode === 'cover' ? 'object-cover' : 'object-contain max-w-[420px] max-h-[92vh]'
-                  }`}
-                  onTimeUpdate={e => {
-                    const el = e.currentTarget;
-                    if (el.duration) {
-                      setProgress((el.currentTime / el.duration) * 100);
-                      setDuration(el.duration);
-                      setCurrentTime(el.currentTime);
+                  onPause={() => {
+                    setIsPlaying(false);
+                  }}
+                  onCanPlay={(e) => {
+                    e.currentTarget.muted = false;
+                    e.currentTarget.volume = 1.0;
+                    setIsBuffering(false);
+                    if (isPlaying && !isManuallyPausedRef.current) {
+                      e.currentTarget.play().catch(() => {});
                     }
                   }}
+                  onLoadedData={(e) => {
+                    e.currentTarget.muted = false;
+                    e.currentTarget.volume = 1.0;
+                    setIsBuffering(false);
+                    setIsFrameRendered(true);
+                    if (isPlaying && !isManuallyPausedRef.current) {
+                      e.currentTarget.play().catch(() => {});
+                    }
+                  }}
+                  onCanPlayThrough={(e) => {
+                    e.currentTarget.muted = false;
+                    e.currentTarget.volume = 1.0;
+                    setIsBuffering(false);
+                  }}
+                  onLoadedMetadata={e => {
+                    const target = e.currentTarget;
+                    setDuration(target.duration || 0);
+                    if (target.videoWidth && target.videoHeight) {
+                      setVideoAspectRatio(target.videoWidth / target.videoHeight);
+                    }
+                    target.muted = false;
+                    target.volume = 1.0;
+                    setIsBuffering(false);
+                    if (isPlaying && !isManuallyPausedRef.current) {
+                      target.play().catch(() => {});
+                    }
+                  }}
+                  onTimeUpdate={e => {
+                    const v = e.currentTarget;
+                    if (v && v.duration) {
+                      if (!isFrameRendered && v.currentTime > 0) {
+                        setIsFrameRendered(true);
+                      }
+                      setCurrentTime(v.currentTime);
+                      setProgress((v.currentTime / v.duration) * 100);
+                      setDuration(v.duration);
+                    }
+                  }}
+                  onWaiting={() => setIsBuffering(true)}
+                  onPlaying={() => {
+                    setIsPlaying(true);
+                    setIsBuffering(false);
+                    setIsFrameRendered(true);
+                  }}
+                  onStalled={() => {
+                    const v = getActiveVideo();
+                    if (v && v.readyState >= 3) {
+                      setIsBuffering(false);
+                    }
+                  }}
+                  onError={(e) => {
+                    setIsBuffering(false);
+                    const v = e.currentTarget;
+                    const directUrl = `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
+                    if (v.src !== directUrl) {
+                      v.src = directUrl;
+                      v.load();
+                      v.play().catch(() => {});
+                    }
+                  }}
+                  onEnded={e => {
+                    const v = e.currentTarget;
+                    if (v) {
+                      v.currentTime = 0;
+                      v.play().catch(() => {});
+                    }
+                  }}
+                  className={`w-full h-full ${
+                    isLandscape
+                      ? aspectFitMode === 'contain'
+                        ? 'object-contain'
+                        : 'object-cover'
+                      : 'object-cover'
+                  } bg-transparent`}
                 />
-
-                {/* Double Tap Heart Burst Animation at exact touch coordinates */}
-                {showHeartBurst && (
-                  <motion.div
-                    initial={{ scale: 0.3, opacity: 0 }}
-                    animate={{ scale: 1.3, opacity: 1 }}
-                    exit={{ scale: 0.3, opacity: 0 }}
-                    style={{
-                      position: 'absolute',
-                      left: heartBurstPos ? `${heartBurstPos.x}px` : '50%',
-                      top: heartBurstPos ? `${heartBurstPos.y}px` : '50%',
-                      transform: 'translate(-50%, -50%)',
-                      zIndex: 50,
-                      pointerEvents: 'none'
-                    }}
-                    className="pointer-events-none"
-                  >
-                    <Heart className="w-28 h-28 text-pink-500 fill-pink-500 drop-shadow-[0_0_30px_rgba(236,72,153,0.9)]" />
-                  </motion.div>
-                )}
-
-                {/* PAUSE OVERLAY STACK (Clean Transparent Background - NO BLUR!) */}
-                {(!isPlaying || isManuallyPausedRef.current) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 z-40 bg-transparent transition-all pointer-events-auto">
-                    {/* 1. Mute/Unmute Circular Button (Above Play Symbol) */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                      className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-xl cursor-pointer active:scale-90 transition-all"
-                      title={isMuted ? 'Unmute' : 'Mute'}
-                    >
-                      {isMuted ? <VolumeX className="w-6 h-6 text-pink-400" /> : <Volume2 className="w-6 h-6 text-emerald-400" />}
-                    </button>
-
-                    {/* 2. Center Play Symbol */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                      className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 flex items-center justify-center shadow-2xl cursor-pointer active:scale-95 transition-all"
-                      title="Resume Video"
-                    >
-                      <Play className="w-8 h-8 fill-white translate-x-0.5" />
-                    </button>
-                  </div>
-                )}
               </motion.div>
             </AnimatePresence>
-          )
-        )}
 
-        {/* Right Side Floating Action Column (Matching Image 2: Clean Transparent Line Icons) */}
-        {feedHistory.length > 0 && currentReel && (
-          <div className="absolute right-4 bottom-24 z-30 flex flex-col items-center gap-6 pointer-events-auto">
-            {/* 1. Share / Send Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleShare(); }}
-              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Share Reel"
-            >
-              <Send className="w-6 h-6 -rotate-45" />
-            </button>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/85 pointer-events-none z-10" />
 
-            {/* 2. Bookmark / Save Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleToggleSave(); }}
-              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Save Reel"
-            >
-              <Bookmark className={`w-6 h-6 ${savedStatus[currentReel.id] ? 'fill-white text-white' : ''}`} />
-            </button>
+            <AnimatePresence>
+              {showPlayPauseFeedback && (
+                <motion.div
+                  initial={{ scale: 0.7, opacity: 0 }}
+                  animate={{ scale: 1.1, opacity: 1 }}
+                  exit={{ scale: 1.4, opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+                >
+                  <div className="w-18 h-18 rounded-full bg-black/75 backdrop-blur-xl text-white flex items-center justify-center border border-white/25 shadow-2xl">
+                    {showPlayPauseFeedback === 'play' ? (
+                      <Play className="w-9 h-9 ml-1 fill-white" />
+                    ) : (
+                      <Pause className="w-9 h-9 fill-white" />
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* 3. Crop / Fit Mode Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setAspectFitMode(prev => prev === 'contain' ? 'cover' : 'contain'); }}
-              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Fit / Fill Aspect Ratio"
-            >
-              <Crop className="w-6 h-6" />
-            </button>
+            {!isPlaying && !isBuffering && !showPlayPauseFeedback && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                <div className="w-16 h-16 rounded-full bg-black/70 backdrop-blur-xl text-white flex items-center justify-center border border-white/25 shadow-2xl scale-110">
+                  <Play className="w-8 h-8 ml-1 fill-white" />
+                </div>
+              </div>
+            )}
 
-            {/* 4. Download Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDownloadReel(); }}
-              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Download Reel"
-            >
-              <Download className="w-6 h-6" />
-            </button>
+            <AnimatePresence>
+              {showHeartBurst && (
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1.35, opacity: 1 }}
+                  exit={{ scale: 2, opacity: 0 }}
+                  transition={{ duration: 0.55, ease: 'easeOut' }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
+                >
+                  <div className="p-6 rounded-full bg-pink-500/90 text-white shadow-2xl shadow-pink-500/60 backdrop-blur-md">
+                    <Heart className="w-18 h-18 fill-white text-white animate-pulse" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* 5. Chevron Up Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); goToPrev(); }}
-              disabled={historyIndex === 0}
-              className="p-1.5 text-white/90 hover:text-white disabled:opacity-30 transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Previous Reel"
-            >
-              <ChevronUp className="w-6 h-6" />
-            </button>
+            <div className="absolute right-3 sm:right-4 bottom-28 lg:bottom-24 flex flex-col items-center gap-5 sm:gap-6 z-20 pointer-events-auto">
+              <button
+                data-interactive="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShare();
+                }}
+                title="Share Reel"
+                className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              >
+                {copiedLink ? (
+                  <Check className="w-7 h-7 text-emerald-400 stroke-[2.2]" />
+                ) : (
+                  <Send className="w-7 h-7 stroke-[2.2] -rotate-12" />
+                )}
+              </button>
 
-            {/* 6. Chevron Down Icon */}
-            <button
-              onClick={(e) => { e.stopPropagation(); goToNext(); }}
-              className="p-1.5 text-white/90 hover:text-white transition-all cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] active:scale-90"
-              title="Next Reel"
-            >
-              <ChevronDown className="w-6 h-6" />
-            </button>
-          </div>
-        )}
+              <button
+                data-interactive="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleSave();
+                }}
+                title={savedStatus[currentReel.id] ? 'Bookmarked (Tap to Unsave)' : 'Save Reel (S)'}
+                className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              >
+                <Bookmark
+                  className={`w-7 h-7 stroke-[2.2] ${
+                    savedStatus[currentReel.id] ? 'fill-white text-white' : ''
+                  }`}
+                />
+              </button>
 
-        {/* Bottom Metadata Info Card */}
-        {feedHistory.length > 0 && currentReel && (
-          <div className="absolute bottom-10 left-4 right-20 z-30 flex flex-col gap-1.5 pointer-events-auto">
-            <h3 className="text-white font-extrabold text-base leading-snug drop-shadow-md">
-              {displayTitle}
-            </h3>
+              <button
+                data-interactive="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadReel();
+                }}
+                title="Download MP4 Video"
+                className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              >
+                <Download className="w-7 h-7 stroke-[2.2]" />
+              </button>
 
-            <div className="flex items-center gap-2 text-xs text-slate-300 font-medium">
-              <span>🎬 Anime Edit</span>
-              <span>•</span>
-              <span className="text-pink-400">#AniLoveReels</span>
+              {isLandscape && (
+                <button
+                  data-interactive="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAspectFitMode(prev => (prev === 'contain' ? 'cover' : 'contain'));
+                  }}
+                  title={aspectFitMode === 'contain' ? 'Switch to Full Fill' : 'Switch to Aspect Fit'}
+                  className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                >
+                  <Crop className="w-7 h-7 stroke-[2.2]" />
+                </button>
+              )}
+
+              <div className="flex flex-col gap-3 pt-2">
+                <button
+                  data-interactive="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goToPrev();
+                  }}
+                  disabled={historyIndex === 0}
+                  title="Previous Reel (Up Arrow / Scroll Up)"
+                  className={`p-1.5 transition-all duration-200 active:scale-75 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${
+                    historyIndex === 0
+                      ? 'opacity-20 cursor-not-allowed text-white/30'
+                      : 'text-white/80 hover:text-white cursor-pointer'
+                  }`}
+                >
+                  <ChevronUp className="w-7 h-7 stroke-[2.5]" />
+                </button>
+                <button
+                  data-interactive="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goToNext();
+                  }}
+                  title="Next Reel (Down Arrow / Scroll Down / Swipe Up)"
+                  className="p-1.5 text-white/80 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                >
+                  <ChevronDown className="w-7 h-7 stroke-[2.5]" />
+                </button>
+              </div>
+            </div>
+
+            <div className="absolute bottom-16 lg:bottom-4 inset-x-4 sm:inset-x-6 z-20 space-y-2 pointer-events-auto">
+              <div className="pr-16 space-y-1">
+                <h2 className="text-sm sm:text-base font-bold text-white line-clamp-2 drop-shadow-md">
+                  {currentReel.cleanTitle}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-300">
+                  <span className="px-2 py-0.5 rounded-md bg-white/15 backdrop-blur-md border border-white/10 text-slate-200">
+                    {currentReel.size || 'HD Video'}
+                  </span>
+                  <span className="text-slate-300 font-mono">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                data-interactive="true"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickX = e.clientX - rect.left;
+                  const newPct = Math.max(0, Math.min(1, clickX / rect.width));
+                  const v = getActiveVideo();
+                  if (v && duration) {
+                    v.currentTime = newPct * duration;
+                    setCurrentTime(v.currentTime);
+                    setProgress(newPct * 100);
+                  }
+                }}
+                className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden cursor-pointer hover:h-2 transition-all relative"
+              >
+                <div
+                  className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full transition-all duration-100"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* Interactive Bottom Seekbar (Timestamps visible ONLY during dragging) */}
-      {feedHistory.length > 0 && currentReel && (
-        <div className="absolute bottom-2 left-4 right-4 z-30 flex items-center gap-2.5 select-none pointer-events-auto">
-          <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-right font-mono drop-shadow transition-opacity duration-200 ${
-            isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}>
-            {formatTime(currentTime)}
-          </span>
-
-          <div
-            ref={seekbarRef}
-            onMouseDown={handleSeekbarStart}
-            onMouseMove={handleSeekbarMove}
-            onMouseUp={handleSeekbarEnd}
-            onTouchStart={handleSeekbarStart}
-            onTouchMove={handleSeekbarMove}
-            onTouchEnd={handleSeekbarEnd}
-            className="relative flex-1 h-4 group cursor-pointer flex items-center"
-          >
-            <div className="w-full h-1.5 group-hover:h-2.5 rounded-full bg-white/25 relative overflow-hidden transition-all duration-150">
-              <div
-                className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 rounded-full relative"
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-pink-400 shadow-[0_0_10px_#ec4899] border border-white" />
-              </div>
-            </div>
-          </div>
-
-          <span className={`text-[11px] font-bold text-slate-300 min-w-[28px] text-left font-mono drop-shadow transition-opacity duration-200 ${
-            isScrubbing ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}>
-            {formatTime(duration)}
-          </span>
-        </div>
-      )}
     </div>
   );
 };
