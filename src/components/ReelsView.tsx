@@ -45,6 +45,20 @@ interface ReelsViewProps {
 
 const preloadedThumbnailCache = new Set<string>();
 
+const renderTitleWithPinkNumber = (title?: string) => {
+  if (!title) return 'Anime Reel';
+  const match = title.match(/^(.*?)(\s*#\d+)?$/);
+  if (match && match[2]) {
+    return (
+      <>
+        <span>{match[1]}</span>
+        <span className="text-pink-500 font-extrabold drop-shadow-[0_0_10px_rgba(236,72,153,0.6)] ml-1">{match[2]}</span>
+      </>
+    );
+  }
+  return title;
+};
+
 export const ReelsView: React.FC<ReelsViewProps> = ({
   onBack,
   onNavigateToAccount,
@@ -140,6 +154,35 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     window.addEventListener('anilove-saved-reels-updated', refreshSavedMap);
     return () => window.removeEventListener('anilove-saved-reels-updated', refreshSavedMap);
   }, [refreshSavedMap]);
+
+  // Reset 2x speed whenever document visibility changes or app goes to background
+  useEffect(() => {
+    const reset2xSpeed = () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      was2xHoldingRef.current = false;
+      setIs2xSpeed(false);
+      const v = getActiveVideo();
+      if (v) {
+        v.playbackRate = 1.0;
+        if (!isManuallyPausedRef.current && v.paused) {
+          v.play().then(() => setIsPlaying(true)).catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', reset2xSpeed);
+    window.addEventListener('blur', reset2xSpeed);
+    window.addEventListener('focus', reset2xSpeed);
+
+    return () => {
+      document.removeEventListener('visibilitychange', reset2xSpeed);
+      window.removeEventListener('blur', reset2xSpeed);
+      window.removeEventListener('focus', reset2xSpeed);
+    };
+  }, [getActiveVideo]);
 
   const pickRandomReel = useCallback((pool: AnimeReel[], excludeIds: string[] = []): AnimeReel | null => {
     if (!pool || pool.length === 0) return null;
@@ -319,7 +362,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
-    video.playbackRate = is2xSpeed ? 2.0 : 1.0;
+    video.playbackRate = 1.0;
     video.currentTime = 0;
     setProgress(0);
     setCurrentTime(0);
@@ -337,8 +380,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             setIsPlaying(true);
             setIsBuffering(false);
           }).catch(() => {
-            setIsPlaying(false);
-            setIsBuffering(false);
+            // Keep retrying muted play on cold start
           });
         });
       }
@@ -667,7 +709,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       const v = getActiveVideo();
       if (v) {
         v.playbackRate = 1.0;
-        if (v.paused) v.play().catch(() => {});
+        if (v.paused && !isManuallyPausedRef.current) {
+          v.play().catch(() => {});
+        }
       }
       setIs2xSpeed(false);
       setIsDragging(false);
@@ -785,7 +829,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       const v = getActiveVideo();
       if (v) {
         v.playbackRate = 1.0;
-        if (v.paused) v.play().catch(() => {});
+        if (v.paused && !isManuallyPausedRef.current) {
+          v.play().catch(() => {});
+        }
       }
       setIs2xSpeed(false);
       setIsDragging(false);
@@ -1219,6 +1265,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                       videoRef.current = el;
                       el.muted = false;
                       el.volume = 1.0;
+                      el.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     }
                   }}
                   src={activeVideoUrl}
@@ -1231,32 +1278,39 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   onPlay={(e) => {
                     e.currentTarget.muted = false;
                     e.currentTarget.volume = 1.0;
+                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsPlaying(true);
                     setIsBuffering(false);
                   }}
-                  onPause={() => {
-                    setIsPlaying(false);
+                  onPause={(e) => {
+                    if (isManuallyPausedRef.current) {
+                      setIsPlaying(false);
+                    } else {
+                      if (e.currentTarget && typeof e.currentTarget.play === 'function') {
+                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      }
+                    }
                   }}
                   onCanPlay={(e) => {
-                    e.currentTarget.muted = false;
                     e.currentTarget.volume = 1.0;
+                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
-                    if (isPlaying && !isManuallyPausedRef.current) {
-                      e.currentTarget.play().catch(() => {});
+                    if (!isManuallyPausedRef.current) {
+                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
                     }
                   }}
                   onLoadedData={(e) => {
-                    e.currentTarget.muted = false;
                     e.currentTarget.volume = 1.0;
+                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                     setIsFrameRendered(true);
-                    if (isPlaying && !isManuallyPausedRef.current) {
-                      e.currentTarget.play().catch(() => {});
+                    if (!isManuallyPausedRef.current) {
+                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
                     }
                   }}
                   onCanPlayThrough={(e) => {
-                    e.currentTarget.muted = false;
                     e.currentTarget.volume = 1.0;
+                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                   }}
                   onLoadedMetadata={e => {
@@ -1265,11 +1319,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     if (target.videoWidth && target.videoHeight) {
                       setVideoAspectRatio(target.videoWidth / target.videoHeight);
                     }
-                    target.muted = false;
                     target.volume = 1.0;
+                    target.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
-                    if (isPlaying && !isManuallyPausedRef.current) {
-                      target.play().catch(() => {});
+                    if (!isManuallyPausedRef.current) {
+                      target.play().then(() => setIsPlaying(true)).catch(() => {});
                     }
                   }}
                   onTimeUpdate={e => {
@@ -1372,9 +1426,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               )}
             </AnimatePresence>
 
-            <div className="absolute right-3 sm:right-4 bottom-28 lg:bottom-24 flex flex-col items-center gap-5 sm:gap-6 z-20 pointer-events-auto">
+            <div className="absolute right-3 sm:right-4 bottom-28 lg:bottom-24 flex flex-col items-center gap-5 sm:gap-6 z-30 pointer-events-auto">
               <button
                 data-interactive="true"
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleShare();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -1392,6 +1452,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
               <button
                 data-interactive="true"
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleToggleSave();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -1409,6 +1475,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
               <button
                 data-interactive="true"
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleDownloadReel();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -1423,6 +1495,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               {/* Crop / Aspect Ratio Toggle (Cover Full Screen vs Fit Screen) */}
               <button
                 data-interactive="true"
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
+                  setAspectFitMode(nextMode);
+                  if (onShowToast) {
+                    onShowToast('info', nextMode === 'cover' ? 'Switched to Full Screen Cover' : 'Switched to Fit Screen', 'Aspect Ratio');
+                  }
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
@@ -1441,6 +1523,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               <div className="flex flex-col gap-3 pt-2">
                 <button
                   data-interactive="true"
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    goToPrev();
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -1458,6 +1546,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 </button>
                 <button
                   data-interactive="true"
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    goToNext();
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -1475,7 +1569,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             <div className="absolute bottom-16 lg:bottom-4 inset-x-4 sm:inset-x-6 z-20 space-y-2 pointer-events-auto">
               <div className="pr-16 space-y-1">
                 <h2 className="text-sm sm:text-base font-bold text-white line-clamp-2 drop-shadow-md">
-                  {currentReel.cleanTitle}
+                  {renderTitleWithPinkNumber(currentReel.cleanTitle)}
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-300">
                   <span className="px-2 py-0.5 rounded-md bg-white/15 backdrop-blur-md border border-white/10 text-slate-200">
