@@ -34,18 +34,12 @@
                 android:layout_weight="1"
                 android:background="@android:color/black">
 
-                <WebView
-                    android:id="@+id/player_webview"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="visible" />
-
                 <androidx.media3.ui.PlayerView
                     android:id="@+id/player_exoplayer"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     app:use_controller="false"
-                    android:visibility="gone" />
+                    android:visibility="visible" />
 
             </FrameLayout>
 
@@ -200,28 +194,11 @@
                     android:src="@android:drawable/ic_menu_preferences"
                     app:tint="@android:color/white" />
 
-                <TextView
-                    android:id="@+id/btn_engine_toggle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="30dp"
-                    android:layout_toStartOf="@id/btn_settings"
-                    android:layout_centerVertical="true"
-                    android:layout_marginEnd="6dp"
-                    android:paddingHorizontal="10dp"
-                    android:gravity="center"
-                    android:background="@drawable/speed_btn_bg"
-                    android:text="⚡ Exo"
-                    android:textColor="#818CF8"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:clickable="true"
-                    android:focusable="true" />
-
                 <ImageButton
                     android:id="@+id/btn_captions"
                     android:layout_width="38dp"
                     android:layout_height="38dp"
-                    android:layout_toStartOf="@id/btn_engine_toggle"
+                    android:layout_toStartOf="@id/btn_settings"
                     android:layout_centerVertical="true"
                     android:layout_marginEnd="2dp"
                     android:padding="7dp"

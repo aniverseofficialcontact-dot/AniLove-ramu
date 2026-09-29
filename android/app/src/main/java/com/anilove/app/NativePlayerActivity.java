@@ -121,7 +121,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
     public static PlayerNavigationListener navigationListener;
 
-    private WebView playerWebView;
     private PlayerView exoPlayerView;
     private ExoPlayer exoPlayer;
     private boolean isOfflineMode = false;
@@ -154,8 +153,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isVolumeBoosted = false;
     private boolean isSubtitlesEnabled = true;
 
-    // ExoPlayer Engine Toggle & Auto-Next Toast State
-    private boolean useExoPlayerEngine = false;
+    // Auto-Next Toast State
     private View layoutAutoNextToast;
     private TextView textAutoNextCountdown;
     private boolean isAutoNextCanceled = false;
@@ -242,32 +240,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void applySubtitleTimingOffsetInWeb() {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var offset = " + subtitleTimingOffset + "; " +
-                "  function shift(win) { try { " +
-                "    var v = win.document.querySelector('video'); " +
-                "    if (v && v.textTracks) { " +
-                "      for (var i = 0; i < v.textTracks.length; i++) { " +
-                "        var tr = v.textTracks[i]; " +
-                "        if (tr && tr.cues) { " +
-                "          for (var j = 0; j < tr.cues.length; j++) { " +
-                "            var c = tr.cues[j]; " +
-                "            if (typeof c._origStart === 'undefined') { " +
-                "              c._origStart = c.startTime; " +
-                "              c._origEnd = c.endTime; " +
-                "            } " +
-                "            c.startTime = Math.max(0, c._origStart + offset); " +
-                "            c.endTime = Math.max(0, c._origEnd + offset); " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e){} " +
-                "  for (var f = 0; f < win.frames.length; f++) { try { shift(win.frames[f]); } catch(e){} } } " +
-                "  shift(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
+        runOnUiThread(() -> updateNativeSubtitleOverlay(exoPlayer != null ? exoPlayer.getCurrentPosition() / 1000.0 : 0));
     }
 
     private void saveCaptionSettingsToPrefs() {
@@ -442,28 +415,18 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (seekBar != null) seekBar.setProgress(0);
         btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
 
-        if (playerWebView != null) {
-            playerWebView.evaluateJavascript("(function(){var e=document.querySelectorAll('video,audio'); for(var i=0;i<e.length;i++){e[i].pause();e[i].src='';}})();", null);
-            playerWebView.stopLoading();
-        }
         if (exoPlayer != null) {
             exoPlayer.stop();
         }
 
         isOfflineMode = intent.getBooleanExtra("offlineMode", false);
         if (isOfflineMode) {
-            if (playerWebView != null) playerWebView.setVisibility(View.GONE);
-            if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
             setupExoPlayer(intent.getStringExtra("localFilePath"), intent.getStringExtra("localSubPath"));
         } else {
-            if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
-            if (playerWebView != null) {
-                playerWebView.setVisibility(View.VISIBLE);
-                String url = intent.getStringExtra("url");
-                if (url != null && !url.isEmpty()) {
-                    setupHybridEngine(url);
-                }
-            }
+            String streamUrl = intent.getStringExtra("videoUrl");
+            if (streamUrl == null) streamUrl = intent.getStringExtra("url");
+            String referer = intent.getStringExtra("referer");
+            setupExoPlayerOnline(streamUrl, referer, null);
         }
         resetHideTimer();
     }
@@ -788,11 +751,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
 
         // UI Initialization
-        playerWebView = findViewById(R.id.player_webview);
-        playerWebView.setBackgroundColor(Color.BLACK);
-        playerWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-
         exoPlayerView = findViewById(R.id.player_exoplayer);
+        if (exoPlayerView != null) {
+            exoPlayerView.setVisibility(View.VISIBLE);
+        }
         
         loadingProgress = findViewById(R.id.loading_progress);
         controlsOverlay = findViewById(R.id.controls_overlay);
@@ -823,11 +785,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         btnPlayPause.setOnClickListener(v -> togglePlayPause());
         findViewById(R.id.btn_settings).setOnClickListener(v -> showSettingsMenu());
-
-        TextView btnEngineToggle = findViewById(R.id.btn_engine_toggle);
-        if (btnEngineToggle != null) {
-            btnEngineToggle.setOnClickListener(v -> togglePlayerEngine(!useExoPlayerEngine));
-        }
 
         layoutAutoNextToast = findViewById(R.id.layout_auto_next_toast);
         textAutoNextCountdown = findViewById(R.id.text_auto_next_countdown);
@@ -952,14 +909,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             @Override public void onStopTrackingTouch(SeekBar s) { 
                 isDragging = false; 
-                if (isOfflineMode && exoPlayer != null) {
+                if (exoPlayer != null) {
                     long duration = exoPlayer.getDuration();
                     if (duration > 0 && duration != C.TIME_UNSET) {
                         long targetMs = s.getProgress() * 1000L;
                         exoPlayer.seekTo(Math.min(targetMs, duration));
                     }
-                } else {
-                    sendVideoCommand("v.currentTime = " + s.getProgress() + ";"); 
                 }
                 resetHideTimer(); 
                 scrubberContainer.setVisibility(View.GONE);
@@ -968,14 +923,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
         if (isOfflineMode) {
-            playerWebView.setVisibility(View.GONE);
-            exoPlayerView.setVisibility(View.VISIBLE);
             setupExoPlayer(getIntent().getStringExtra("localFilePath"), getIntent().getStringExtra("localSubPath"));
         } else {
-            exoPlayerView.setVisibility(View.GONE);
-            playerWebView.setVisibility(View.VISIBLE);
-            playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidScrubber");
-            setupHybridEngine(getIntent().getStringExtra("url") != null ? getIntent().getStringExtra("url") : "");
+            String streamUrl = getIntent().getStringExtra("videoUrl");
+            if (streamUrl == null) streamUrl = getIntent().getStringExtra("url");
+            String referer = getIntent().getStringExtra("referer");
+            setupExoPlayerOnline(streamUrl, referer, null);
         }
         startUpdateLoop();
         resetHideTimer();
@@ -1172,51 +1125,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @UnstableApi
     public void togglePlayerEngine(boolean enableExo) {
-        if (isOfflineMode) return;
-        runOnUiThread(() -> {
-            useExoPlayerEngine = enableExo;
-            TextView btnEngine = findViewById(R.id.btn_engine_toggle);
-            if (btnEngine != null) {
-                btnEngine.setText(useExoPlayerEngine ? "⚡ Exo" : "🌐 Web");
-                btnEngine.setTextColor(useExoPlayerEngine ? Color.parseColor("#818CF8") : Color.parseColor("#34D399"));
-            }
-
-            if (useExoPlayerEngine) {
-                if (playerWebView != null) {
-                    playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); return v ? v.currentTime : 0; })()", value -> {
-                        double currentSec = 0;
-                        try {
-                            if (value != null && !value.equals("null") && !value.isEmpty()) {
-                                currentSec = Double.parseDouble(value.replace("\"", ""));
-                            }
-                        } catch (Exception ignored) {}
-                        startTime = (int) currentSec;
-
-                        playerWebView.setVisibility(View.GONE);
-                        exoPlayerView.setVisibility(View.VISIBLE);
-
-                        playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); if (v) { v.pause(); v.muted = true; } })()", null);
-
-                        String streamUrl = getIntent().getStringExtra("videoUrl");
-                        if (streamUrl == null) streamUrl = getIntent().getStringExtra("url");
-                        String referer = getIntent().getStringExtra("referer");
-                        setupExoPlayerOnline(streamUrl, referer, null);
-                    });
-                }
-            } else {
-                double currentSec = 0;
-                if (exoPlayer != null) {
-                    currentSec = exoPlayer.getCurrentPosition() / 1000.0;
-                    exoPlayer.stop();
-                }
-
-                exoPlayerView.setVisibility(View.GONE);
-                playerWebView.setVisibility(View.VISIBLE);
-
-                final double targetSec = currentSec;
-                playerWebView.evaluateJavascript("(function() { var v = document.querySelector('video'); if (v) { v.muted = false; v.currentTime = " + targetSec + "; v.play(); } })()", null);
-            }
-        });
+        // 100% Native Media3 ExoPlayer Engine active
     }
 
     private void checkAutoNextEpisodeTrigger(long currentMs, long durationMs) {
@@ -1473,96 +1382,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void changeVideoQuality(String quality) {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var q = '" + quality.replace("'", "\\'") + "'; " +
-                "  function setQ(w) { try { " +
-                "    if (w.hls && w.hls.levels) { " +
-                "      if (q.toLowerCase() === 'auto') { w.hls.currentLevel = -1; return true; } " +
-                "      for (var i = 0; i < w.hls.levels.length; i++) { " +
-                "        var lvl = w.hls.levels[i]; " +
-                "        var lbl = (lvl.name || (lvl.height ? lvl.height + 'p' : '')).toLowerCase(); " +
-                "        if (lbl.indexOf(q.toLowerCase()) !== -1) { w.hls.currentLevel = i; return true; } " +
-                "      } " +
-                "    } " +
-                "    if (typeof w.jwplayer === 'function') { " +
-                "      var p = w.jwplayer(); " +
-                "      if (p && typeof p.getQualityLevels === 'function') { " +
-                "        var qList = p.getQualityLevels(); " +
-                "        for (var j = 0; j < qList.length; j++) { " +
-                "          var jLbl = (qList[j].label || (qList[j].height ? qList[j].height + 'p' : '')).toLowerCase(); " +
-                "          if (jLbl.indexOf(q.toLowerCase()) !== -1) { p.setCurrentQuality(j); return true; } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for (var f = 0; f < w.frames.length; f++) { try { if (setQ(w.frames[f])) return true; } catch(e) {} } " +
-                "  return false; } " +
-                "  setQ(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
+        currentSelectedQuality = quality;
     }
 
     private void changeAudioLanguage(String audioLang) {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var target = '" + audioLang.replace("'", "\\'").toLowerCase() + "'; " +
-                "  function match(name) { " +
-                "    if (!name) return false; " +
-                "    var n = name.toLowerCase(); " +
-                "    if (target.indexOf('hin') !== -1) return n.indexOf('hin') !== -1 || n.indexOf('hi') !== -1; " +
-                "    if (target.indexOf('eng') !== -1 || target.indexOf('dub') !== -1) return n.indexOf('eng') !== -1 || n.indexOf('en') !== -1 || n.indexOf('dub') !== -1; " +
-                "    if (target.indexOf('jpn') !== -1 || target.indexOf('sub') !== -1 || target.indexOf('jap') !== -1) return n.indexOf('jpn') !== -1 || n.indexOf('ja') !== -1 || n.indexOf('sub') !== -1 || n.indexOf('orig') !== -1; " +
-                "    if (target.indexOf('tam') !== -1) return n.indexOf('tam') !== -1 || n.indexOf('ta') !== -1; " +
-                "    if (target.indexOf('tel') !== -1) return n.indexOf('tel') !== -1 || n.indexOf('te') !== -1; " +
-                "    if (target.indexOf('mal') !== -1) return n.indexOf('mal') !== -1 || n.indexOf('ml') !== -1; " +
-                "    if (target.indexOf('kan') !== -1) return n.indexOf('kan') !== -1 || n.indexOf('kn') !== -1; " +
-                "    if (target.indexOf('ben') !== -1) return n.indexOf('ben') !== -1 || n.indexOf('bn') !== -1; " +
-                "    return n.indexOf(target) !== -1; " +
-                "  } " +
-                "  function setA(w) { try { " +
-                "    if (w.hls && w.hls.audioTracks) { " +
-                "      for (var i = 0; i < w.hls.audioTracks.length; i++) { " +
-                "        var at = w.hls.audioTracks[i]; " +
-                "        var all = ((at.name || '') + ' ' + (at.label || '') + ' ' + (at.lang || '')).toLowerCase(); " +
-                "        if (match(all)) { w.hls.audioTrack = i; return true; } " +
-                "      } " +
-                "    } " +
-                "    if (typeof w.jwplayer === 'function') { " +
-                "      var p = w.jwplayer(); " +
-                "      if (p && typeof p.getAudioTracks === 'function') { " +
-                "        var tracks = p.getAudioTracks(); " +
-                "        for (var j = 0; j < tracks.length; j++) { " +
-                "          var jAll = ((tracks[j].name || '') + ' ' + (tracks[j].label || '') + ' ' + (tracks[j].language || '')).toLowerCase(); " +
-                "          if (match(jAll)) { p.setCurrentAudioTrack(j); return true; } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "    var vids = w.document.querySelectorAll('video'); " +
-                "    for (var v = 0; v < vids.length; v++) { " +
-                "      var vid = vids[v]; " +
-                "      if (vid.audioTracks && vid.audioTracks.length > 0) { " +
-                "        for (var a = 0; a < vid.audioTracks.length; a++) { " +
-                "          var tr = vid.audioTracks[a]; " +
-                "          var trAll = ((tr.label || '') + ' ' + (tr.language || '')).toLowerCase(); " +
-                "          if (match(trAll)) { " +
-                "            for (var o = 0; o < vid.audioTracks.length; o++) vid.audioTracks[o].enabled = (o === a); " +
-                "            return true; " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "    var langBtns = w.document.querySelectorAll('.server-item, .language-item, .lang-btn, [data-lang], [data-audio]'); " +
-                "    for (var b = 0; b < langBtns.length; b++) { " +
-                "      var bTxt = (langBtns[b].innerText || langBtns[b].getAttribute('data-lang') || '').toLowerCase(); " +
-                "      if (match(bTxt)) { langBtns[b].click(); return true; } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for (var f = 0; f < w.frames.length; f++) { try { if (setA(w.frames[f])) return true; } catch(e) {} } " +
-                "  return false; } " +
-                "  setA(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
+        currentSelectedAudio = audioLang;
     }
 
     private void changeSubtitleTrack(String subTrack) {
@@ -1586,47 +1410,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             downloadAndParseVttFile(targetVttUrl);
             Log.i("CaptionSwitch", "Switched native subtitle track to: " + subTrack + " (" + targetVttUrl + ")");
         }
-        String js = "(function() { " +
-                "  var target = '" + subTrack.replace("'", "\\'").toLowerCase() + "'; " +
-                "  function setS(w) { try { " +
-                "    if (w.hls && w.hls.subtitleTracks) { " +
-                "      if (target === 'off') { w.hls.subtitleTrack = -1; return true; } " +
-                "      for (var i = 0; i < w.hls.subtitleTracks.length; i++) { " +
-                "        var st = w.hls.subtitleTracks[i]; " +
-                "        var sAll = ((st.name || '') + ' ' + (st.label || '') + ' ' + (st.lang || '')).toLowerCase(); " +
-                "        if (sAll.indexOf(target) !== -1) { w.hls.subtitleTrack = i; return true; } " +
-                "      } " +
-                "    } " +
-                "    if (typeof w.jwplayer === 'function') { " +
-                "      var p = w.jwplayer(); " +
-                "      if (p && typeof p.getCaptionsList === 'function') { " +
-                "        var cList = p.getCaptionsList(); " +
-                "        for (var j = 0; j < cList.length; j++) { " +
-                "          var cAll = ((cList[j].label || '') + ' ' + (cList[j].language || '')).toLowerCase(); " +
-                "          if (target === 'off' && cList[j].id === 'off') { p.setCurrentCaptions(j); return true; } " +
-                "          if (cAll.indexOf(target) !== -1) { p.setCurrentCaptions(j); return true; } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "    var vids = w.document.querySelectorAll('video'); " +
-                "    for (var v = 0; v < vids.length; v++) { " +
-                "      var vid = vids[v]; " +
-                "      if (vid.textTracks) { " +
-                "        for (var t = 0; t < vid.textTracks.length; t++) { " +
-                "          var tt = vid.textTracks[t]; " +
-                "          var ttAll = ((tt.label || '') + ' ' + (tt.language || '')).toLowerCase(); " +
-                "          if (target === 'off') { tt.mode = 'disabled'; } " +
-                "          else if (ttAll.indexOf(target) !== -1) { tt.mode = 'showing'; } " +
-                "          else { tt.mode = 'hidden'; } " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for (var f = 0; f < w.frames.length; f++) { try { if (setS(w.frames[f])) return true; } catch(e) {} } " +
-                "  return false; } " +
-                "  setS(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
     }
 
     private boolean isAudioMatch(String opt, String target) {
@@ -1688,62 +1471,18 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void togglePlayPause() {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             if (exoPlayer.isPlaying()) {
                 exoPlayer.pause();
+                isPlaying = false;
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
                 stopHideTimer();
             } else {
                 exoPlayer.play();
+                isPlaying = true;
                 btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
                 resetHideTimer();
             }
-            isPlaying = exoPlayer.isPlaying();
-            return;
-        }
-
-        if (isPlaying) {
-            isPlaying = false;
-            // Pause: set data-manual-pause on video AND _aniloveManualPause flag across all frames
-            sendVideoCommand("v.pause(); v.setAttribute('data-manual-pause', 'true');");
-            if (playerWebView != null) {
-                playerWebView.evaluateJavascript(
-                    "(function(){ " +
-                    "  function setP(w){ " +
-                    "    try { " +
-                    "      w._aniloveManualPause = true; " +
-                    "      var v = w.document.querySelector('video'); " +
-                    "      if (v) { v.pause(); v.setAttribute('data-manual-pause', 'true'); } " +
-                    "      if (typeof w.jwplayer === 'function') { try { w.jwplayer().pause(); } catch(e){} } " +
-                    "    } catch(e){} " +
-                    "    for(var i=0; i<w.frames.length; i++){ try{ setP(w.frames[i]); }catch(e){} } " +
-                    "  } " +
-                    "  setP(window); " +
-                    "})();", null);
-            }
-            btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
-            stopHideTimer();
-        } else {
-            isPlaying = true;
-            // Play: clear flags and play
-            sendVideoCommand("v.removeAttribute('data-manual-pause'); v.play().catch(function(){});");
-            if (playerWebView != null) {
-                playerWebView.evaluateJavascript(
-                    "(function(){ " +
-                    "  function setP(w){ " +
-                    "    try { " +
-                    "      w._aniloveManualPause = false; " +
-                    "      var v = w.document.querySelector('video'); " +
-                    "      if (v) { v.removeAttribute('data-manual-pause'); v.play().catch(function(){}); } " +
-                    "      if (typeof w.jwplayer === 'function') { try { w.jwplayer().play(); } catch(e){} } " +
-                    "    } catch(e){} " +
-                    "    for(var i=0; i<w.frames.length; i++){ try{ setP(w.frames[i]); }catch(e){} } " +
-                    "  } " +
-                    "  setP(window); " +
-                    "})();", null);
-            }
-            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-            resetHideTimer();
         }
     }
 
@@ -2202,63 +1941,22 @@ public class NativePlayerActivity extends AppCompatActivity {
     interface OnOptionSelected { void onSelected(String val); }
     private String getHexForColorName(String name) { if (name.equalsIgnoreCase("Yellow")) return "#FFFF00"; if (name.equalsIgnoreCase("Cyan")) return "#00FFFF"; if (name.equalsIgnoreCase("Green")) return "#00FF00"; if (name.equalsIgnoreCase("Magenta")) return "#FF00FF"; return "#FFFFFF"; }
     private void highlightButton(TextView btn, boolean selected) { GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(18f); if (selected) { shape.setColor(Color.WHITE); btn.setTextColor(Color.BLACK); } else { shape.setColor(Color.parseColor("#222222")); btn.setTextColor(Color.WHITE); } btn.setBackground(shape); }
-    private void applyVolumeBoost(boolean boosted) { playerWebView.evaluateJavascript("(function() { if (!window.audioCtx) { try { window.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); var v = document.querySelector('video'); if (v) { window.source = window.audioCtx.createMediaElementSource(v); window.gainNode = window.audioCtx.createGain(); window.source.connect(window.gainNode); window.gainNode.connect(window.audioCtx.destination); } } catch(e) {} } if (window.gainNode) window.gainNode.gain.value = " + (boosted ? "2.5" : "1.0") + "; })();", null); }
+    private void applyVolumeBoost(boolean boosted) {
+        isVolumeBoosted = boosted;
+        if (exoPlayer != null) {
+            exoPlayer.setVolume(1.0f);
+        }
+    }
     
     private void toggleWebSubtitles(boolean enabled) { 
         isSubtitlesEnabled = enabled;
-        String visibility = enabled ? "visible" : "hidden";
-        String opacity = enabled ? "1" : "0";
-
-        // Powerful selector that catches almost all player subtitles
-        String selectors = ".jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, " +
-                     ".subtitles, .captions, .art-subtitle, .artplayer-subtitles, .art-subtitles, .plyr__captions, " +
-                     ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, " +
-                     "[class*='subtitle'], [class*='caption'], [id*='subtitle'], [id*='caption']";
-
-        String css = selectors + " { visibility: " + visibility + " !important; opacity: " + opacity + " !important; display: block !important; } " +
-                     selectors + " * { visibility: " + visibility + " !important; opacity: " + opacity + " !important; }";
-
-        String js = "(function() { " +
-                "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "'; " +
-                "  var remoteSubLang = '" + (subtitleLang != null ? subtitleLang : "English") + "'; " +
-                "  function toggle(win) { try { " +
-                "    var doc = win.document; " +
-                "    var style = doc.getElementById('anilove-caption-toggle-style') || doc.createElement('style'); " +
-                "    style.id = 'anilove-caption-toggle-style'; " +
-                "    style.innerHTML = '" + css + "'; " +
-                "    if(!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "    var videos = doc.querySelectorAll('video'); " +
-                "    videos.forEach(function(v) { " +
-                "      var isVtt = remoteSubUrl && (remoteSubUrl.indexOf('.vtt') !== -1 || remoteSubUrl.indexOf('.srt') !== -1); " +
-                "      if (isVtt && !doc.querySelector('#anilove-universal-sub-track')) { " +
-                "        var t = doc.createElement('track'); " +
-                "        t.id = 'anilove-universal-sub-track'; " +
-                "        t.src = remoteSubUrl; t.kind = 'subtitles'; t.label = remoteSubLang; t.srclang = 'en'; t.default = true; " +
-                "        v.appendChild(t); " +
-                "      } " +
-                "      if (v.textTracks && v.textTracks.length > 0) { " +
-                "        for (var i = 0; i < v.textTracks.length; i++) { " +
-                "          var tr = v.textTracks[i]; " +
-                "          if (!" + enabled + ") { tr.mode = 'disabled'; } " +
-                "          else if (isVtt) { " +
-                "            if (tr.label === remoteSubLang || tr.src === remoteSubUrl || tr.id === 'anilove-universal-sub-track') { tr.mode = 'showing'; } " +
-                "            else { tr.mode = 'disabled'; } " +
-                "          } else { " +
-                "            if (i === 0) { tr.mode = 'showing'; } " +
-                "            else { tr.mode = 'disabled'; } " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    }); " +
-                "  } catch(e) {} " +
-                "  for (var i = 0; i < win.frames.length; i++) { try { toggle(win.frames[i]); } catch(e) {} } } " +
-                "  toggle(window); " +
-                "})();";
-
-        playerWebView.evaluateJavascript(js, null);
-
         if (enabled) {
             applyCaptionStyle();
+        } else {
+            runOnUiThread(() -> {
+                TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+                if (textOverlay != null) textOverlay.setVisibility(View.GONE);
+            });
         }
     }
 
@@ -2352,119 +2050,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             textOverlay.requestLayout();
             textOverlay.invalidate();
         });
-
-        if (!isSubtitlesEnabled) return;
-
-        float opacityVal = 0f;
-        if (!bgOpacity.equals("Off") && !bgOpacity.equals("0")) {
-            try { opacityVal = Integer.parseInt(bgOpacity.replace("%", "")) / 100f; } catch (Exception e) {}
-        }
-        String bgRgb = bgColor.equalsIgnoreCase("Gray") ? "128,128,128" :
-                (bgColor.equalsIgnoreCase("Navy") ? "0,0,128" :
-                (bgColor.equalsIgnoreCase("White") ? "255,255,255" : "0,0,0"));
-        String bgRgba = opacityVal > 0 ? "rgba(" + bgRgb + "," + opacityVal + ")" : "transparent";
-
-        String shadowCss = edgeStyle.equalsIgnoreCase("Outline") ?
-                "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000" :
-                (edgeStyle.equalsIgnoreCase("Shadow") ? "2.5px 2.5px 3px rgba(0,0,0,0.8)" : "none");
-        boolean isTop = captionPosition.equalsIgnoreCase("Top");
-
-        String posCss = isTop ?
-                "top: " + bottomMargin + "% !important; bottom: auto !important;" :
-                "bottom: " + bottomMargin + "% !important; top: auto !important;";
-
-        String containerSelectors = ".art-subtitle, .artplayer-subtitles, .art-subtitles, " +
-                ".jw-captions, .jw-text-track-container, .vjs-text-track-display, " +
-                ".ytp-caption-window-container, .caption-window, .subtitles, .captions, .plyr__captions, " +
-                ".shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay";
-
-        String containerSelectorsJs = containerSelectors.replace("'", "\\'");
-
-        String textSelectors = ".art-subtitle p, .art-subtitle span, .art-subtitle-item, " +
-                ".artplayer-subtitles p, .artplayer-subtitles span, " +
-                ".art-subtitles p, .art-subtitles span, " +
-                ".jw-text-track-cue, .jw-caption-content, .jw-captions span, " +
-                ".vjs-text-track-cue, .vjs-text-track-cue *, " +
-                ".ytp-caption-segment, .plyr__caption, " +
-                ".shaka-text-container span, .fluid_subtitles span, " +
-                ".caption-window span, .subtitles span, .captions span";
-
-        String padding = opacityVal > 0 ? "2px 8px !important;" : "0 !important;";
-        String borderRadius = opacityVal > 0 ? "4px !important;" : "0 !important;";
-
-        String css = "::cue { " +
-                "  color: " + captionColorHex + " !important; " +
-                "  background-color: " + bgRgba + " !important; " +
-                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
-                "  font-size: " + (captionFontSize * 0.01) + "em !important; " +
-                "  text-shadow: " + shadowCss + " !important; " +
-                "} " +
-                containerSelectors + " { " +
-                "  position: absolute !important; " +
-                "  left: 0 !important; " +
-                "  right: 0 !important; " +
-                "  width: 100% !important; " +
-                "  text-align: center !important; " +
-                "  margin: 0 !important; " +
-                "  pointer-events: none !important; " +
-                "  z-index: 2147483647 !important; " +
-                "  background: transparent !important; " +
-                "  background-color: transparent !important; " +
-                "  " + posCss + " " +
-                "} " +
-                containerSelectors + ", " + containerSelectors + " * { " +
-                "  color: " + captionColorHex + " !important; " +
-                "  -webkit-text-fill-color: " + captionColorHex + " !important; " +
-                "  font-size: " + (captionFontSize * 0.02) + "vw !important; " +
-                "  font-weight: " + captionWeight.toLowerCase() + " !important; " +
-                "  text-shadow: " + shadowCss + " !important; " +
-                "} " +
-                textSelectors + " { " +
-                "  background: " + bgRgba + " !important; " +
-                "  background-color: " + bgRgba + " !important; " +
-                "  padding: " + padding + " " +
-                "  border-radius: " + borderRadius + " " +
-                "  display: inline-block !important; " +
-                "} ";
-
-        // Escape single quotes in CSS so it's safe to embed inside JS single-quoted string
-        String cssEscaped = css.replace("\\", "\\\\").replace("'", "\\'");
-
-        String js = "(function() { " +
-                "  function apply(win) { try { " +
-                "    var doc = win.document; " +
-                "    var style = doc.getElementById('anilove-caption-style') || doc.createElement('style'); " +
-                "    style.id = 'anilove-caption-style'; " +
-                "    style.textContent = '" + cssEscaped + "'; " +
-                "    if(!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "    var artSubs = doc.querySelectorAll('.art-subtitle'); " +
-                "    artSubs.forEach(function(sub) { " +
-                "      sub.style.setProperty('position', 'absolute', 'important'); " +
-                "      " + (isTop ? "sub.style.setProperty('top', '" + bottomMargin + "%', 'important'); sub.style.setProperty('bottom', 'auto', 'important');" : "sub.style.setProperty('bottom', '" + bottomMargin + "%', 'important'); sub.style.setProperty('top', 'auto', 'important');") + " " +
-                "      if(sub.children.length === 0 && sub.innerText && sub.innerText.trim().length > 0) { " +
-                "        sub.style.setProperty('background', '" + bgRgba + "', 'important'); " +
-                "        sub.style.setProperty('background-color', '" + bgRgba + "', 'important'); " +
-                "        sub.style.setProperty('display', 'inline-block', 'important'); " +
-                "        sub.style.setProperty('padding', '" + (opacityVal > 0 ? "2px 8px" : "0") + "', 'important'); " +
-                "        sub.style.setProperty('border-radius', '" + (opacityVal > 0 ? "4px" : "0") + "', 'important'); " +
-                "      } " +
-                "    }); " +
-                "    var v = doc.querySelector('video'); " +
-                "    if (v && v.textTracks) { " +
-                "      var hasCustom = doc.querySelector('" + containerSelectorsJs + "'); " +
-                "      var customVisible = hasCustom && (hasCustom.offsetHeight > 0 || hasCustom.innerText.trim().length > 0); " +
-                "      if (customVisible) { " +
-                "        for(var i=0; i<v.textTracks.length; i++) { " +
-                "          if (v.textTracks[i].mode === 'showing') v.textTracks[i].mode = 'hidden'; " +
-                "        } " +
-                "      } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for(var i=0; i<win.frames.length; i++) { try { apply(win.frames[i]); } catch(e) {} } } " +
-                "  apply(window); " +
-                "})();";
-
-        playerWebView.evaluateJavascript(js, null);
     }
 
     private void setPlaybackSpeed(float speed, boolean permanent) { 
@@ -2487,87 +2072,21 @@ public class NativePlayerActivity extends AppCompatActivity {
                         .withEndAction(() -> indicator2x.setVisibility(View.GONE)).start();
             }
         } 
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             exoPlayer.setPlaybackParameters(new PlaybackParameters(speed));
-            return;
+            if (permanent) currentPermanentSpeed = speed;
         }
-        sendSpeedCommand(speed);
     }
 
-    private void sendSpeedCommand(float speed) {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var spd = " + speed + "; " +
-                "  function setSpd(w) { " +
-                "    try { " +
-                "      var v = w.document.querySelectorAll('video'); " +
-                "      v.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
-                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "      if (art) { " +
-                "        try { " +
-                "          if (art.video) art.video.playbackRate = spd; " +
-                "          art.playbackRate = spd; " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (typeof w.jwplayer === 'function') { " +
-                "        try { var jp = w.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } catch(e){} " +
-                "      } " +
-                "    } catch(e) {} " +
-                "    try { w.postMessage({ type: 'ANILOVE_CMD', action: 'speed', value: spd }, '*'); } catch(e){} " +
-                "    try { for (var i = 0; i < w.frames.length; i++) { try { setSpd(w.frames[i]); } catch(e){} } } catch(e){} " +
-                "  } " +
-                "  setSpd(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
-    }
-    
     private void navigateEpisode(boolean next) {
         if (navigationListener != null) {
             if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
             navigationListener.onNavigate(next);
-            return;
         }
-
-        String direction = next ? "Next" : "Prev";
-        String js = "(function() { " +
-                "  function findAndClick() { " +
-                "    var selectors = [" +
-                "      'a[title*=\"" + direction + "\"]', 'button[title*=\"" + direction + "\"]', " +
-                "      'a[aria-label*=\"" + direction + "\"]', 'button[aria-label*=\"" + direction + "\"]', " +
-                "      '." + direction.toLowerCase() + "-episode', '." + direction.toLowerCase() + "', " +
-                "      '.btn-" + direction.toLowerCase() + "', '.next', '.prev' " +
-                "    ]; " +
-                "    for (var i = 0; i < selectors.length; i++) { " +
-                "      var el = document.querySelector(selectors[i]); " +
-                "      if (el) { el.click(); return true; } " +
-                "    } " +
-                "    var all = document.querySelectorAll('a, button'); " +
-                "    for (var i = 0; i < all.length; i++) { " +
-                "      var txt = all[i].innerText || all[i].textContent; " +
-                "      if (txt && txt.toLowerCase().includes('" + direction.toLowerCase() + "')) { " +
-                "        all[i].click(); return true; " +
-                "      } " +
-                "    } " +
-                "    return false; " +
-                "  } " +
-                "  var found = findAndClick(); " +
-                "  if(!found) { " +
-                "    for(var i=0; i<window.frames.length; i++) { " +
-                "      try { " +
-                "        var f = window.frames[i].document.querySelectorAll('a, button'); " +
-                "        for(var j=0; j<f.length; j++) { " +
-                "           var t = f[j].innerText || f[j].textContent; " +
-                "           if(t && t.toLowerCase().includes('" + direction.toLowerCase() + "')) { f[j].click(); break; } " +
-                "        } " +
-                "      } catch(e) {} " +
-                "    } " +
-                "  } " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
     }
 
     private void seekVideo(int delta) {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             long duration = exoPlayer.getDuration();
             if (duration <= 0 || duration == C.TIME_UNSET) {
                 duration = Long.MAX_VALUE;
@@ -2578,41 +2097,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             long newPos = Math.max(0, Math.min(duration, current + (delta * 1000L)));
             exoPlayer.seekTo(newPos);
-            return;
         }
-        sendSeekCommand(delta);
-    }
-
-    private void sendSeekCommand(int delta) {
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var delta = " + delta + "; " +
-                "  function seekInWin(w) { " +
-                "    try { " +
-                "      var v = w.document.querySelector('video'); " +
-                "      if (v) { try { v.currentTime = Math.max(0, (v.currentTime || 0) + delta); } catch(e){} } " +
-                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "      if (art) { " +
-                "        try { " +
-                "          var cur = art.currentTime || (art.video ? art.video.currentTime : 0) || 0; " +
-                "          var target = Math.max(0, cur + delta); " +
-                "          if (typeof art.seek === 'function') { art.seek(target); } " +
-                "          else { art.currentTime = target; } " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (typeof w.jwplayer === 'function') { " +
-                "        try { " +
-                "          var jp = w.jwplayer(); " +
-                "          if (jp && typeof jp.seek === 'function') { jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
-                "        } catch(e){} " +
-                "      } " +
-                "    } catch(e) {} " +
-                "    try { w.postMessage({ type: 'ANILOVE_CMD', action: 'seek', value: delta }, '*'); } catch(e){} " +
-                "    try { for (var i = 0; i < w.frames.length; i++) { try { seekInWin(w.frames[i]); } catch(e) {} } } catch(e){} " +
-                "  } " +
-                "  seekInWin(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
     }
 
     private void startUpdateLoop() { 
@@ -2625,7 +2110,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void syncPlayerState() {
-        if ((isOfflineMode || useExoPlayerEngine) && exoPlayer != null) {
+        if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
             if (durationMs > 0 && durationMs != C.TIME_UNSET) {
@@ -2640,227 +2125,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                     seekBar.setMax(duration);
                     seekBar.setProgress(current);
                 }
+                updateNativeSubtitleOverlay(currentMs / 1000.0);
                 checkAutoNextEpisodeTrigger(currentMs, durationMs);
+                if (isPlaying && current > 0) {
+                    broadcastProgress(current, duration);
+                }
             }
-            return;
         }
-
-        if (playerWebView == null) return;
-
-        // Run continuous ad eraser sweep & auto-cleanse
-        injectAdEraser();
-
-        playerWebView.evaluateJavascript("(function() { " +
-                "function scan(w) { " +
-                "  var qualities = []; var audios = []; var subtitles = []; " +
-                "  var currentQuality = ''; var currentAudio = ''; var currentSub = ''; " +
-                "  function probe(win) { " +
-                "    try { " +
-                "      var d = win.document; " +
-                "      if (typeof win.jwplayer === 'function') { " +
-                "        var p = win.jwplayer(); " +
-                "        if (p && typeof p.getQualityLevels === 'function') { " +
-                "          var qList = p.getQualityLevels(); " +
-                "          if (qList && qList.length > 0) { " +
-                "            var curQ = p.getCurrentQuality(); " +
-                "            for (var i = 0; i < qList.length; i++) { " +
-                "              var lbl = qList[i].label || (qList[i].height ? qList[i].height + 'p' : 'Auto'); " +
-                "              if (qualities.indexOf(lbl) === -1) qualities.push(lbl); " +
-                "              if (curQ === i) currentQuality = lbl; " +
-                "            } " +
-                "          } " +
-                "        } " +
-                "        if (p && typeof p.getAudioTracks === 'function') { " +
-                "          var aList = p.getAudioTracks(); " +
-                "          if (aList && aList.length > 0) { " +
-                "            var curA = p.getCurrentAudioTrack(); " +
-                "            for (var j = 0; j < aList.length; j++) { " +
-                "              var aLbl = aList[j].name || aList[j].label || aList[j].language || ('Audio ' + (j + 1)); " +
-                "              if (audios.indexOf(aLbl) === -1) audios.push(aLbl); " +
-                "              if (curA === j) currentAudio = aLbl; " +
-                "            } " +
-                "          } " +
-                "        } " +
-                "        if (p && typeof p.getCaptionsList === 'function') { " +
-                "          var cList = p.getCaptionsList(); " +
-                "          if (cList && cList.length > 0) { " +
-                "            var curC = p.getCurrentCaptions(); " +
-                "            for (var k = 0; k < cList.length; k++) { " +
-                "              var cLbl = cList[k].label || cList[k].language || ('Caption ' + (k + 1)); " +
-                "              if (subtitles.indexOf(cLbl) === -1) subtitles.push(cLbl); " +
-                "              if (curC === k) currentSub = cLbl; " +
-                "            } " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "      if (win.hls) { " +
-                "        if (win.hls.levels && win.hls.levels.length > 0) { " +
-                "          if (qualities.indexOf('Auto') === -1) qualities.push('Auto'); " +
-                "          for (var l = 0; l < win.hls.levels.length; l++) { " +
-                "            var lvl = win.hls.levels[l]; " +
-                "            var hLbl = lvl.name || (lvl.height ? lvl.height + 'p' : ('Level ' + l)); " +
-                "            if (qualities.indexOf(hLbl) === -1) qualities.push(hLbl); " +
-                "            if (win.hls.currentLevel === l) currentQuality = hLbl; " +
-                "          } " +
-                "          if (win.hls.currentLevel === -1) currentQuality = 'Auto'; " +
-                "        } " +
-                "        if (win.hls.audioTracks && win.hls.audioTracks.length > 0) { " +
-                "          for (var m = 0; m < win.hls.audioTracks.length; m++) { " +
-                "            var at = win.hls.audioTracks[m]; " +
-                "            var atLbl = at.name || at.label || at.lang || ('Audio ' + (m + 1)); " +
-                "            if (audios.indexOf(atLbl) === -1) audios.push(atLbl); " +
-                "            if (win.hls.audioTrack === m) currentAudio = atLbl; " +
-                "          } " +
-                "        } " +
-                "        if (win.hls.subtitleTracks && win.hls.subtitleTracks.length > 0) { " +
-                "          for (var n = 0; n < win.hls.subtitleTracks.length; n++) { " +
-                "            var st = win.hls.subtitleTracks[n]; " +
-                "            var stLbl = st.name || st.label || st.lang || ('Sub ' + (n + 1)); " +
-                "            if (subtitles.indexOf(stLbl) === -1) subtitles.push(stLbl); " +
-                "            if (win.hls.subtitleTrack === n) currentSub = stLbl; " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "      var vids = d.querySelectorAll('video'); " +
-                "      for (var v = 0; v < vids.length; v++) { " +
-                "        var vid = vids[v]; " +
-                "        if (vid.audioTracks && vid.audioTracks.length > 0) { " +
-                "          for (var a = 0; a < vid.audioTracks.length; a++) { " +
-                "            var tr = vid.audioTracks[a]; " +
-                "            var trLbl = tr.label || tr.language || ('Audio ' + (a + 1)); " +
-                "            if (audios.indexOf(trLbl) === -1) audios.push(trLbl); " +
-                "            if (tr.enabled) currentAudio = trLbl; " +
-                "          } " +
-                "        } " +
-                "        if (vid.textTracks && vid.textTracks.length > 0) { " +
-                "          for (var t = 0; t < vid.textTracks.length; t++) { " +
-                "            var tt = vid.textTracks[t]; " +
-                "            var ttLbl = tt.label || tt.language || ('Subtitle ' + (t + 1)); " +
-                "            if (subtitles.indexOf(ttLbl) === -1) subtitles.push(ttLbl); " +
-                "            if (tt.mode === 'showing') currentSub = ttLbl; " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "      var langBtns = d.querySelectorAll('.server-item, .language-item, .lang-btn, [data-lang], [data-audio]'); " +
-                "      langBtns.forEach(function(b) { " +
-                "        var bTxt = (b.innerText || b.getAttribute('data-lang') || '').trim(); " +
-                "        if (bTxt && audios.indexOf(bTxt) === -1) audios.push(bTxt); " +
-                "      }); " +
-                "    } catch(e) {} " +
-                "    for (var f = 0; f < win.frames.length; f++) { try { probe(win.frames[f]); } catch(e) {} } " +
-                "  } " +
-                "  probe(w); " +
-                "  return { qualities: qualities, audios: audios, subtitles: subtitles, currentQuality: currentQuality, currentAudio: currentAudio, currentSub: currentSub }; " +
-                "} " +
-                "var primaryVideo = null; " +
-                "function penetrateAndPlay(win) { " +
-                "  try { " +
-                "    var form = win.document.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
-                "    if (form && !form.hasAttribute('data-auto-sub')) { " +
-                "      form.setAttribute('data-auto-sub', 'true'); " +
-                "      form.submit(); " +
-                "      return; " +
-                "    } " +
-                "    if (!primaryVideo) { " +
-                "      var vids = win.document.querySelectorAll('video'); " +
-                "      for (var vi = 0; vi < vids.length; vi++) { " +
-                "        if (vids[vi].readyState >= 1 || vids[vi].src || vids[vi].currentSrc) { primaryVideo = vids[vi]; break; } " +
-                "      } " +
-                "      if (!primaryVideo && vids.length > 0) primaryVideo = vids[0]; " +
-                "    } " +
-                "    var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true) || " +
-                "                      (typeof win._aniloveManualPause !== 'undefined' && win._aniloveManualPause === true); " +
-                "    if (primaryVideo) { " +
-                "      var manualPause = primaryVideo.hasAttribute('data-manual-pause') || globalPause; " +
-                "      if (primaryVideo.muted) { primaryVideo.muted = false; } " +
-                "      if (primaryVideo.volume < 1.0) { primaryVideo.volume = 1.0; } " +
-                "      if (primaryVideo.paused && !manualPause) { " +
-                "        primaryVideo.play().catch(function(){}); " +
-                "      } " +
-                "    } " +
-                "    if (win.playerInstance && typeof win.playerInstance.play === 'function' && !globalPause) { " +
-                "      try { win.playerInstance.play(); } catch(e){} " +
-                "    } " +
-                "    if (!globalPause) { " +
-                "      var bigPlays = win.document.querySelectorAll('#overlay, #playback, #vid_play, #play_btn, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
-                "      bigPlays.forEach(function(bp) { " +
-                "        try { bp.click(); bp.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); } catch(e){} " +
-                "      }); " +
-                "      if (typeof win.jwplayer === 'function') { " +
-                "        try { " +
-                "          var jp = win.jwplayer(); " +
-                "          if (jp) { " +
-                "            if (jp.getMute && jp.getMute()) jp.setMute(false); " +
-                "            if (jp.setVolume && jp.getVolume && jp.getVolume() < 100) jp.setVolume(100); " +
-                "            if (jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) jp.play(); " +
-                "          } " +
-                "        } catch(e){} " +
-                "      } " +
-                "    } " +
-                "  } catch(e) {} " +
-                "  for (var i = 0; i < win.frames.length; i++) { try { penetrateAndPlay(win.frames[i]); } catch(e) {} } " +
-                "} " +
-                "penetrateAndPlay(window); " +
-                "var mediaOpts = scan(window); " +
-                "if (window.AndroidScrubber && typeof window.AndroidScrubber.onMediaOptions === 'function') { " +
-                "  try { window.AndroidScrubber.onMediaOptions(JSON.stringify(mediaOpts)); } catch(e) {} " +
-                "} " +
-                "if (primaryVideo) { " +
-                "  return [primaryVideo.currentTime, primaryVideo.duration, primaryVideo.paused]; " +
-                "} " +
-                "if (typeof window.jwplayer === 'function') { " +
-                "  try { " +
-                "    var jp = window.jwplayer(); " +
-                "    if (jp && typeof jp.getPosition === 'function') { " +
-                "      var st = jp.getState ? jp.getState() : ''; " +
-                "      return [jp.getPosition() || 0, jp.getDuration() || 0, st === 'paused' || st === 'idle']; " +
-                "    } " +
-                "  } catch(e){} " +
-                "} " +
-                "var art = window.playerInstance || window.artPlayerInstance || window.art; " +
-                "if (art) { " +
-                "  try { " +
-                "    return [art.currentTime || 0, art.duration || 0, art.playing === false || art.isPause]; " +
-                "  } catch(e){} " +
-                "} " +
-                "return null; " +
-                "})();", value -> { 
-            if (value != null && !value.equals("null") && !value.isEmpty()) { 
-                try { 
-                    String[] parts = value.replace("[", "").replace("]", "").replace("\"", "").split(","); 
-                    if (parts.length >= 3) { 
-                        double current = Double.parseDouble(parts[0].trim()); 
-                        double duration = Double.parseDouble(parts[1].trim()); 
-                        boolean pausedInWeb = Boolean.parseBoolean(parts[2].trim()); 
-                        
-                        if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
-                            loadingProgress.setVisibility(View.GONE);
-                        }
-
-                        textCurrentTime.setText(formatTime((int) current)); 
-                        textTotalTime.setText(formatTime((int) duration)); 
-                        
-                        int timeLeft = (int) (duration - current);
-                        textTimeLeft.setText("-" + formatTime(timeLeft));
-
-                        if (!isDragging && duration > 0) { 
-                            seekBar.setMax((int) duration); 
-                            seekBar.setProgress((int) current); 
-                        } 
-                        if (pausedInWeb == isPlaying) { 
-                            isPlaying = !pausedInWeb; 
-                            btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play); 
-                            if (isPlaying) resetHideTimer(); else stopHideTimer(); 
-                        }
-
-                        // Broadcast progress to main app for "Continue Watching" sync
-                        if (isPlaying && current > 0) {
-                            broadcastProgress(current, duration);
-                        }
-                    } 
-                } catch (Exception e) {} 
-            } 
-        }); 
     }
 
     private void broadcastProgress(double current, double duration) {
@@ -2894,45 +2165,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void sendVideoCommand(String jsAction) {
-        if (playerWebView == null) return;
-        // Determine JW and Artplayer commands from Java side
-        final String jwAction;
-        final String artAction;
-        if (jsAction.contains(".pause()") && !jsAction.contains(".play()")) {
-            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().pause(); } catch(e) {} }";
-            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art && typeof art.pause === 'function') { try { art.pause(); } catch(e) {} }";
-        } else if (jsAction.contains(".play()")) {
-            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().play(); } catch(e) {} }";
-            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art && typeof art.play === 'function') { try { art.play(); } catch(e) {} }";
-        } else if (jsAction.contains("currentTime")) {
-            String seekStr = jsAction.replaceAll(".*currentTime\\s*=\\s*([0-9.]+).*", "$1");
-            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().seek(" + seekStr + "); } catch(e) {} }";
-            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art) { try { if (typeof art.seek === 'function') art.seek(" + seekStr + "); else art.currentTime = " + seekStr + "; } catch(e) {} }";
-        } else if (jsAction.contains("playbackRate")) {
-            String speedStr = jsAction.replaceAll(".*playbackRate\\s*=\\s*([0-9.]+).*", "$1");
-            jwAction = "if (typeof win.jwplayer === 'function') { try { win.jwplayer().setPlaybackRate(" + speedStr + "); } catch(e) {} }";
-            artAction = "var art = win.playerInstance || win.artPlayerInstance || win.art; if (art) { try { if (art.video) art.video.playbackRate = " + speedStr + "; art.playbackRate = " + speedStr + "; } catch(e) {} }";
-        } else {
-            jwAction = "";
-            artAction = "";
-        }
-        playerWebView.evaluateJavascript("(function() { " +
-                "function findAndExec(win) { " +
-                "  try { " +
-                "    var v = win.document.querySelector('video'); " +
-                "    if (v) { " + jsAction + " } " +
-                "    " + jwAction + " " +
-                "    " + artAction + " " +
-                "  } catch(e) {} " +
-                "  try { win.postMessage({ type: 'ANILOVE_CMD', action: 'exec', js: \"" + jsAction.replace("\"", "\\\"") + "\" }, '*'); } catch(e){} " +
-                "  for (var i = 0; i < win.frames.length; i++) { " +
-                "    try { findAndExec(win.frames[i]); } catch(e) {} " +
-                "  } " +
-                "} " +
-                "findAndExec(window); " +
-                "})();", null);
-    }
+    private void sendVideoCommand(String jsAction) {}
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", Math.max(0, seconds) / 60, Math.max(0, seconds) % 60); }
     private boolean isDirectHls = false;
@@ -2941,38 +2174,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     private double aniSkipEdStart = -1, aniSkipEdEnd = -1;
 
     private void seekVideoToAbsolute(int targetSeconds) {
-        if (isOfflineMode && exoPlayer != null) {
+        if (exoPlayer != null) {
             exoPlayer.seekTo(targetSeconds * 1000L);
-            return;
         }
-        if (playerWebView == null) return;
-        String js = "(function() { " +
-                "  var target = " + targetSeconds + "; " +
-                "  function seekInWin(w) { " +
-                "    try { " +
-                "      var v = w.document.querySelector('video'); " +
-                "      if (v) { try { v.currentTime = target; } catch(e){} } " +
-                "      var art = w.playerInstance || w.artPlayerInstance || w.art; " +
-                "      if (art) { " +
-                "        try { " +
-                "          if (typeof art.seek === 'function') art.seek(target); " +
-                "          else art.currentTime = target; " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (typeof w.jwplayer === 'function') { " +
-                "        try { " +
-                "          var jp = w.jwplayer(); " +
-                "          if (jp && typeof jp.seek === 'function') jp.seek(target); " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (w.frames && w.frames.length) { " +
-                "        for (var i = 0; i < w.frames.length; i++) { seekInWin(w.frames[i]); } " +
-                "      } " +
-                "    } catch(e) {} " +
-                "  } " +
-                "  seekInWin(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
     }
 
     private void fetchAniSkipIntervals(int idMal, int episodeNumber) {
@@ -3248,7 +2452,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void attachCapturedVttTrack(String vttUrl, String langName) {
-        if (playerWebView == null || vttUrl == null || !vttUrl.contains(".vtt")) return;
+        if (vttUrl == null || !vttUrl.contains(".vtt")) return;
         subtitleUrl = vttUrl;
         if (langName != null && !langName.isEmpty()) {
             subtitleLang = langName;
@@ -3258,43 +2462,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
         downloadAndParseVttFile(vttUrl);
-        final String label = (subtitleLang != null ? subtitleLang : "English");
-
-        String js = "(function() { " +
-                "  var vttUrl = '" + vttUrl.replace("'", "\\'") + "'; " +
-                "  var labelStr = '" + label.replace("'", "\\'") + "'; " +
-                "  function attach(win) { try { " +
-                "    var doc = win.document; " +
-                "    var videos = doc.querySelectorAll('video'); " +
-                "    videos.forEach(function(v) { " +
-                "      var trackId = 'anilove-sub-' + labelStr.toLowerCase().replace(/[^a-z0-9]/g, ''); " +
-                "      var oldTrack = doc.getElementById(trackId); " +
-                "      if (!oldTrack) { " +
-                "        var t = doc.createElement('track'); " +
-                "        t.id = trackId; " +
-                "        t.src = vttUrl; t.kind = 'subtitles'; t.label = labelStr; t.srclang = 'en'; " +
-                "        v.appendChild(t); " +
-                "      } else { " +
-                "        oldTrack.src = vttUrl; " +
-                "      } " +
-                "      if (v.textTracks && v.textTracks.length > 0) { " +
-                "        for (var i = 0; i < v.textTracks.length; i++) { " +
-                "          var tr = v.textTracks[i]; " +
-                "          if (tr.src === vttUrl || tr.id === trackId || tr.label === labelStr) { " +
-                "            tr.mode = 'showing'; " +
-                "          } else if (!tr.id || !tr.id.startsWith('anilove-sub-')) { " +
-                "            tr.mode = 'disabled'; " +
-                "          } " +
-                "        } " +
-                "      } " +
-                "    }); " +
-                "  } catch(e) {} " +
-                "  for (var f = 0; f < win.frames.length; f++) { try { attach(win.frames[f]); } catch(e){} } } " +
-                "  attach(window); " +
-                "})();";
-        playerWebView.evaluateJavascript(js, null);
         applyCaptionStyle();
-        applySubtitleTimingOffsetInWeb();
     }
 
     private boolean isAdUrl(String lower) {
@@ -3315,8 +2483,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                lower.contains("taboola");
     }
 
+    @UnstableApi
     private void setupHybridEngine(String url) {
-        if (url == null || url.isEmpty() || playerWebView == null) return;
+        if (url == null || url.isEmpty()) return;
 
         int anilistId = getIntent().getIntExtra("anilistId", 0);
         int idMal = getIntent().getIntExtra("idMal", 0);
@@ -3331,306 +2500,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             fetchAniSkipIntervals(idMal, episodeNumber);
         }
 
-        WebSettings settings = playerWebView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        settings.setSupportMultipleWindows(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-
-        try {
-            CookieManager cookieManager = CookieManager.getInstance();
-            cookieManager.setAcceptCookie(true);
-            cookieManager.setAcceptThirdPartyCookies(playerWebView, true);
-        } catch (Exception ignored) {}
-        
-        playerWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
-                return false; // Block popup ads
-            }
-
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                Log.d("PlayerDiagnostics", consoleMessage.message() + " -- From line "
-                        + consoleMessage.lineNumber() + " of "
-                        + consoleMessage.sourceId());
-                return true;
-            }
-        });
-
-        playerWebView.setWebViewClient(new WebViewClient() { 
-            @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.proceed();
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String reqUrl = request.getUrl().toString();
-                String lower = reqUrl.toLowerCase();
-
-                // Block any external hijack, ad redirect, YouTube, social, or ad networks
-                if (lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("blinkit") ||
-                    lower.contains("probationthimbledespite") || lower.contains("abyss.to") || lower.contains("decafeligiblyhad") ||
-                    lower.contains("adsterra") || lower.contains("popads") || lower.contains("monetag") ||
-                    lower.contains("highperformancegate") || lower.contains("morphify.net") || lower.contains("doubleclick") ||
-                    lower.contains("google-analytics") || lower.contains("googlesyndication") || lower.contains("adservice") ||
-                    lower.contains("turnstile") || lower.contains("challenge-platform") || lower.contains("amazon.") ||
-                    lower.contains("flipkart.") || lower.contains("play.google.com") || lower.contains("market://") ||
-                    lower.contains("intent://")) {
-                    return true; // Block off-target navigation
-                }
-
-                // Allow streaming video hosts and same-origin embeds
-                if (lower.contains("blakiteapi") || lower.contains("abyssplayer") || lower.contains("piratexplay") ||
-                    lower.contains("rubystm") || lower.contains("short.icu") || lower.contains("iqsmart") ||
-                    lower.contains("pro.iqsmartgames.com") || lower.contains("svid") || lower.contains("emturbovid") ||
-                    lower.contains("vidmoly") || lower.contains("cloudy.upns") || lower.contains("strmup.to") ||
-                    lower.contains("gdmirrorbot") || lower.contains("megaplay") || lower.contains("nexabloom") ||
-                    lower.contains("justanime") || lower.contains("watchanimeworld") || lower.contains("anikototv") ||
-                    lower.contains("zephyrix") || lower.contains("vidsrc") || lower.contains("vidlink") ||
-                    lower.contains("autoembed") || lower.contains(".m3u8") || lower.contains(".mp4") ||
-                    lower.contains(".ts") || lower.contains(".m4s")) {
-                    return false;
-                }
-
-                if (reqUrl.startsWith("http://") || reqUrl.startsWith("https://")) {
-                    // Check if it's the current player URL host
-                    try {
-                        String currentHost = new URL(getIntent().getStringExtra("url")).getHost();
-                        String reqHost = new URL(reqUrl).getHost();
-                        if (currentHost != null && currentHost.equalsIgnoreCase(reqHost)) {
-                            return false;
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                return true; // Block unknown redirects
-            }
-
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                String reqUrl = request.getUrl().toString();
-                String lower = reqUrl.toLowerCase();
-
-                if (isAdUrl(lower)) {
-                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                }
-
-                int anilistId = getIntent().getIntExtra("anilistId", 0);
-                int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
-                String audio = getIntent().getStringExtra("audio");
-
-                if (anilistId > 0 && episodeNumber > 0) {
-                    if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                        StreamCache.putSubtitle(anilistId, episodeNumber, audio, reqUrl);
-                    }
-                    if ((lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m4s")) &&
-                        !lower.contains("/ads/") && !lower.contains("google-analytics") && !lower.contains("doubleclick")) {
-                        StreamCache.put(anilistId, episodeNumber, audio, reqUrl);
-                    }
-                }
-                return super.shouldInterceptRequest(view, request);
-            }
-
-            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) { 
-                super.onPageStarted(view, url, favicon); 
-                if (!isDirectHls) {
-                    injectAdEraser(); 
-                    for (int delay : new int[]{100, 300, 600, 1000, 1500, 2200}) {
-                        updateHandler.postDelayed(() -> injectAdEraser(), delay);
-                    }
-                }
-            } 
-            @Override public void onPageFinished(WebView view, String url) { 
-                super.onPageFinished(view, url); 
-                loadingProgress.setVisibility(View.GONE); 
-                if (!isDirectHls) {
-                    injectAdEraser(); 
-                    for (int delay : new int[]{150, 400, 800, 1500}) {
-                        updateHandler.postDelayed(() -> injectAdEraser(), delay);
-                    }
-
-                    if (startTime > 0) {
-                        String resumeScript = "(function() {" +
-                                "  var startT = " + startTime + ";" +
-                                "  var seeked = false;" +
-                                "  function trySeek(win) {" +
-                                "    try {" +
-                                "      var videos = win.document.querySelectorAll('video');" +
-                                "      for (var i = 0; i < videos.length; i++) {" +
-                                "        var v = videos[i];" +
-                                "        if (v && v.duration > 0 && !seeked) {" +
-                                "          v.currentTime = startT;" +
-                                "          seeked = true;" +
-                                "          return true;" +
-                                "        } else if (v && !seeked) {" +
-                                "          v.addEventListener('loadedmetadata', function() {" +
-                                "            if (!seeked) { this.currentTime = startT; seeked = true; }" +
-                                "          }, {once: true});" +
-                                "        }" +
-                                "      }" +
-                                "    } catch(e) {}" +
-                                "    for (var j = 0; j < win.frames.length; j++) {" +
-                                "      try { if (trySeek(win.frames[j])) return true; } catch(e) {}" +
-                                "    }" +
-                                "    return false;" +
-                                "  }" +
-                                "  trySeek(window);" +
-                                "  var interval = setInterval(function() {" +
-                                "    if (trySeek(window) || seeked) clearInterval(interval);" +
-                                "  }, 500);" +
-                                "  setTimeout(function() { clearInterval(interval); }, 10000);" +
-                                "  })()";
-                        view.evaluateJavascript(resumeScript, null);
-                    }
-                }
-                applyCaptionStyle(); 
-                toggleWebSubtitles(true); 
-
-                String audio = getIntent().getStringExtra("audio");
-                final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
-                changeAudioLanguage(targetAudio);
-            } 
-        }); 
-
-        if (url.contains(".m3u8") || url.contains(".mp4") || url.contains("/cdn/hls/") || url.contains("/hls/")) {
-            isDirectHls = true;
-            String audio = getIntent().getStringExtra("audio");
-            final String targetAudio = audio != null ? audio.toLowerCase() : "dub";
-
-            String hlsHtml = "<!DOCTYPE html>" +
-                    "<html><head>" +
-                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
-                    "<script src='https://cdn.jsdelivr.net/npm/hls.js@latest'></script>" +
-                    "<style>" +
-                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
-                    "  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }" +
-                    "  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; position: fixed; top: 0; left: 0; }" +
-                    "</style>" +
-                    "</head><body>" +
-                    "<video id='player' playsinline autoplay controlsList='nodownload'>" +
-                    (subtitleUrl != null && !subtitleUrl.isEmpty() ? "<track label='" + subtitleLang + "' kind='subtitles' srclang='en' src='" + subtitleUrl + "' default>" : "") +
-                    "</video>" +
-                    "<script>" +
-                    "  var v = document.getElementById('player');" +
-                    "  var streamUrl = '" + url.replace("'", "\\'") + "';" +
-                    "  var targetAudio = '" + targetAudio + "';" +
-                    "  var startT = " + startTime + ";" +
-                    "  var remoteSubUrl = '" + (subtitleUrl != null ? subtitleUrl : "") + "';" +
-                    "  var hasSeeked = false;" +
-                    "  function matchHlsTrack(t) {" +
-                    "    var all = ((t.lang || '') + ' ' + (t.name || '') + ' ' + (t.label || '') + ' ' + (t.url || '')).toLowerCase();" +
-                    "    if (targetAudio === 'dub' || targetAudio === 'eng' || targetAudio === 'english') return all.indexOf('eng') !== -1 || all.indexOf('en') !== -1 || all.indexOf('dub') !== -1;" +
-                    "    if (targetAudio === 'sub' || targetAudio === 'jpn' || targetAudio === 'japanese') return all.indexOf('jpn') !== -1 || all.indexOf('jap') !== -1 || all.indexOf('ja') !== -1 || all.indexOf('sub') !== -1 || all.indexOf('orig') !== -1;" +
-                    "    if (targetAudio === 'hin' || targetAudio === 'hindi') return all.indexOf('hin') !== -1 || all.indexOf('hi') !== -1;" +
-                    "    return false;" +
-                    "  }" +
-                    "  if (Hls.isSupported()) {" +
-                    "    var hls = new Hls({ enableWorker: false, lowLatencyMode: true, startFragPrefetch: true, maxBufferLength: 120, maxMaxBufferLength: 300, maxBufferSize: 120 * 1024 * 1024, manifestLoadingTimeOut: 15000, levelLoadingTimeOut: 15000, fragLoadingTimeOut: 20000 });" +
-                    "    hls.loadSource(streamUrl);" +
-                    "    hls.attachMedia(v);" +
-                    "    function selectAudioTrack() {" +
-                    "      var tracks = hls.audioTracks;" +
-                    "      if (tracks && tracks.length > 0) {" +
-                    "        for (var i = 0; i < tracks.length; i++) {" +
-                    "          if (matchHlsTrack(tracks[i])) {" +
-                    "            hls.audioTrack = i;" +
-                    "            break;" +
-                    "          }" +
-                    "        }" +
-                    "      }" +
-                    "    }" +
-                    "    hls.on(Hls.Events.MANIFEST_PARSED, function() { " +
-                    "      selectAudioTrack(); " +
-                    "      if (hls.subtitleTracks && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } " +
-                    "      if (startT > 0 && !hasSeeked) { v.currentTime = startT; hasSeeked = true; } " +
-                    "      v.play().catch(function(){}); " +
-                    "    });" +
-                    "    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function() { selectAudioTrack(); });" +
-                    "    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function() { if (hls.subtitleTrack === -1 && hls.subtitleTracks.length > 0) { hls.subtitleTrack = 0; } });" +
-                    "    hls.on(Hls.Events.ERROR, function(event, data) {" +
-                    "      if (data && data.fatal) {" +
-                    "        switch(data.type) {" +
-                    "          case Hls.ErrorTypes.NETWORK_ERROR: try { hls.startLoad(); } catch(e){} break;" +
-                    "          case Hls.ErrorTypes.MEDIA_ERROR: try { hls.recoverMediaError(); } catch(e){} break;" +
-                    "          default: try { hls.destroy(); } catch(e){} break;" +
-                    "        }" +
-                    "      }" +
-                    "    });" +
-                    "  } else if (v.canPlayType('application/vnd.apple.mpegurl')) {" +
-                    "    v.src = streamUrl;" +
-                    "    v.addEventListener('loadedmetadata', function() { v.play().catch(function(){}); });" +
-                    "  } else {" +
-                    "    v.src = streamUrl;" +
-                    "    v.play().catch(function(){});" +
-                    "  }" +
-                    "</script></body></html>";
-
-            String baseUrl = "https://play.zephyrix.org/";
-            if (url.contains("nexabloom.top") || url.contains("megaplay.buzz")) {
-                baseUrl = "https://megaplay.buzz/";
-            } else if (url.contains("justanime.to")) {
-                baseUrl = "https://justanime.to/";
-            } else {
-                try {
-                    baseUrl = new URL(url).getProtocol() + "://" + new URL(url).getHost() + "/";
-                } catch (Exception ignored) {}
-            }
-
-            playerWebView.loadDataWithBaseURL(baseUrl, hlsHtml, "text/html", "UTF-8", null);
-            return;
-        }
-
-        // Wrap embed players in clean 100vw/100vh iframe container with same-origin referrer context
-        if (url.contains("abyssplayer") || url.contains("short.icu") || url.contains("piratexplay") ||
-            url.contains("iqsmart") || url.contains("rubystm") || url.contains("vidsrc") ||
-            url.contains("vidlink") || url.contains("autoembed") || url.contains("blakite") ||
-            url.contains("turbovid") || url.contains("vidmoly") || url.contains("cloudy") ||
-            url.contains("strmup") || url.contains("gdmirrorbot") || url.contains("megaplay")) {
-            isDirectHls = false;
-            String iframeHtml = "<!DOCTYPE html>" +
-                    "<html><head>" +
-                    "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
-                    "<style>" +
-                    "  * { margin: 0; padding: 0; box-sizing: border-box; }" +
-                    "  html, body { width: 100vw; height: 100vh; background: #000; overflow: hidden; }" +
-                    "  iframe { width: 100vw; height: 100vh; border: none; position: fixed; top: 0; left: 0; }" +
-                    "</style>" +
-                    "</head><body>" +
-                    "<iframe id='videoFrame' src='" + url.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media; picture-in-picture' allowfullscreen referrerpolicy='no-referrer-when-downgrade'></iframe>" +
-                    "</body></html>";
-
-            String baseUrl = "https://piratexplay.cc/";
-            if (url.contains("vidlink")) baseUrl = "https://vidlink.pro/";
-            else if (url.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
-            else if (url.contains("autoembed")) baseUrl = "https://autoembed.co/";
-            else if (url.contains("rubystm")) baseUrl = "https://rubystm.com/";
-            else if (url.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
-            else if (url.contains("blakite")) baseUrl = "https://blakiteapi.xyz/";
-
-            playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
-            return;
-        }
-
-        final String rawUrl = url;
-        loadResolvedUrl(rawUrl);
+        String referer = getIntent().getStringExtra("referer");
+        setupExoPlayerOnline(url, referer, null);
     }
 
+    @UnstableApi
     private void loadResolvedUrl(String url) {
-        if (url == null || url.isEmpty() || playerWebView == null) return;
-        isDirectHls = false;
+        if (url == null || url.isEmpty()) return;
         String referer = "https://www.google.com/";
         if (url.contains("watchanimeworld")) {
             referer = "https://watchanimeworld.one/";
@@ -3655,261 +2531,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                 referer = "https://www.google.com/";
             }
         }
-        Map<String, String> headers = new HashMap<>(); 
-        headers.put("Referer", referer); 
-        headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        playerWebView.loadUrl(url, headers); 
+        setupExoPlayerOnline(url, referer, null);
     }
-    
-    private void injectAdEraser() { 
-        if (isDirectHls || playerWebView == null) return;
-        playerWebView.evaluateJavascript("(function() { " +
-                "  try { " +
-                "    var dOpen = function() { return null; }; " +
-                "    dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
-                "    window.open = dOpen; " +
-                "    try { " +
-                "      Object.defineProperty(window, 'top', { " +
-                "        get: function() { return {}; }, " +
-                "        configurable: true " +
-                "      }); " +
-                "    } catch(err){} " +
-                "    try { " +
-                "      Object.defineProperty(document, 'referrer', { " +
-                "        get: function() { return 'https://piratexplay.cc/'; }, " +
-                "        configurable: true " +
-                "      }); " +
-                "    } catch(err){} " +
-                "  } catch(e){} " +
-                "  var globalPause = (typeof window._aniloveManualPause !== 'undefined' && window._aniloveManualPause === true); " +
-                "  function autoTrigger(win) { " +
-                "    try { " +
-                "      try { " +
-                "        var dOpen2 = function() { return null; }; " +
-                "        dOpen2.toString = function() { return 'function open() { [native code] }'; }; " +
-                "        win.open = dOpen2; " +
-                "      } catch(e){} " +
-                "      if (!win._aniloveMsgListenerAdded) { " +
-                "        win._aniloveMsgListenerAdded = true; " +
-                "        win.addEventListener('message', function(ev) { " +
-                "          if (ev && ev.data && ev.data.type === 'ANILOVE_CMD') { " +
-                "            try { " +
-                "              if (ev.data.action === 'speed') { " +
-                "                var spd = ev.data.value; " +
-                "                var vs = win.document.querySelectorAll('video'); " +
-                "                vs.forEach(function(el) { try { el.playbackRate = spd; } catch(e){} }); " +
-                "                var a = win.playerInstance || win.artPlayerInstance || win.art; " +
-                "                if (a) { if (a.video) a.video.playbackRate = spd; a.playbackRate = spd; } " +
-                "                if (typeof win.jwplayer === 'function') { var jp = win.jwplayer(); if (jp && jp.setPlaybackRate) jp.setPlaybackRate(spd); } " +
-                "              } else if (ev.data.action === 'seek') { " +
-                "                var delta = ev.data.value; " +
-                "                var vs = win.document.querySelectorAll('video'); " +
-                "                vs.forEach(function(el) { try { el.currentTime = Math.max(0, (el.currentTime || 0) + delta); } catch(e){} }); " +
-                "                var a = win.playerInstance || win.artPlayerInstance || win.art; " +
-                "                if (a) { var c = a.currentTime || 0; if (typeof a.seek === 'function') a.seek(Math.max(0, c + delta)); else a.currentTime = Math.max(0, c + delta); } " +
-                "                if (typeof win.jwplayer === 'function') { var jp = win.jwplayer(); if (jp && jp.seek) jp.seek(Math.max(0, (jp.getPosition() || 0) + delta)); } " +
-                "              } else if (ev.data.action === 'exec') { " +
-                "                var v = win.document.querySelector('video'); " +
-                "                eval(ev.data.js); " +
-                "              } " +
-                "            } catch(e) {} " +
-                "          } " +
-                "        }); " +
-                "      } " +
-                "      try { " +
-                "        if (typeof win.jwplayer === 'function') { " +
-                "          var jp = win.jwplayer(); " +
-                "          if (jp && typeof jp.getCaptionsList === 'function') { " +
-                "            var cList = jp.getCaptionsList(); " +
-                "            if (cList && cList.length > 0) { " +
-                "              for (var i = 0; i < cList.length; i++) { " +
-                "                var c = cList[i]; " +
-                "                if (c && c.file && c.label && c.label.toLowerCase() !== 'off' && c.label.toLowerCase() !== 'id3 metadata') { " +
-                "                  if (window.AndroidScrubber && typeof window.AndroidScrubber.onTrackFound === 'function') { " +
-                "                    window.AndroidScrubber.onTrackFound(c.label, c.file); " +
-                "                  } " +
-                "                } " +
-                "              } " +
-                "            } " +
-                "          } " +
-                "        } " +
-                "      } catch(e){} " +
-                "      var doc = win.document; " +
-                "      var junkOverlays = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
-                "      junkOverlays.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
-                "      try { " +
-                "        var allEls = doc.querySelectorAll('div, section, dialog, iframe, a'); " +
-                "        allEls.forEach(function(el) { " +
-                "          if (el.tagName !== 'VIDEO') { " +
-                "            var txt = (el.innerText || el.textContent || '').toLowerCase(); " +
-                "            if (txt.indexOf('verify you are human') !== -1 || txt.indexOf('are you human') !== -1 || txt.indexOf('human verification') !== -1 || txt.indexOf('security check') !== -1 || txt.indexOf('one quick check') !== -1) { " +
-                "              try { el.remove(); } catch(e){ el.style.setProperty('display', 'none', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); } " +
-                "            } " +
-                "          } " +
-                "        }); " +
-                "      } catch(e){} " +
-                "      var form = doc.querySelector('form#F1, form#f1, form[action*=\"/dl\"], form[name=\"F1\"]'); " +
-                "      if (form && !form.hasAttribute('data-auto-sub')) { " +
-                "        form.setAttribute('data-auto-sub', 'true'); " +
-                "        try { form.submit(); } catch(e){} " +
-                "      } " +
-                "      var countdown = doc.querySelector('#countdownOverlay, .countdown-overlay, #loadingIndicator, .loading-overlay'); " +
-                "      if (countdown) { try { countdown.style.setProperty('display', 'none', 'important'); } catch(e){} } " +
-                "      var artApp = doc.querySelector('.artplayer-app'); " +
-                "      if (artApp) { " +
-                "        try { " +
-                "          artApp.classList.add('show'); " +
-                "          artApp.style.setProperty('display', 'block', 'important'); " +
-                "          artApp.style.setProperty('opacity', '1', 'important'); " +
-                "        } catch(e){} " +
-                "      } " +
-                "      var vf = doc.querySelector('iframe#videoFrame, iframe[src*=\"abyss\"], iframe[src*=\"short.icu\"]'); " +
-                "      if (vf) { " +
-                "        try { " +
-                "          vf.style.setProperty('opacity', '1', 'important'); " +
-                "          vf.style.setProperty('pointer-events', 'auto', 'important'); " +
-                "          vf.style.setProperty('visibility', 'visible', 'important'); " +
-                "        } catch(e){} " +
-                "      } " +
-                "      var v = doc.querySelector('video'); " +
-                "      var isVideoActive = v && (v.currentTime > 0 || !v.paused); " +
-                "      if (v) { " +
-                "        if (v.textTracks && v.textTracks.length > 0 && v.textTracks[0].mode !== 'showing') { " +
-                "          try { v.textTracks[0].mode = 'showing'; } catch(e){} " +
-                "        } " +
-                "        if (v.paused && !globalPause && !v.hasAttribute('data-manual-pause') && v.currentTime === 0) { " +
-                "          try { v.muted = true; } catch(e){} " +
-                "          var p = v.play(); " +
-                "          if (p && typeof p.then === 'function') { " +
-                "            p.then(function() { setTimeout(function() { try { v.muted = false; if (v.volume < 1.0) v.volume = 1.0; } catch(e){} }, 150); }).catch(function(){}); " +
-                "          } else { " +
-                "            setTimeout(function() { try { v.muted = false; if (v.volume < 1.0) v.volume = 1.0; } catch(e){} }, 150); " +
-                "          } " +
-                "        } else if (!v.paused) { " +
-                "          if (v.muted) v.muted = false; " +
-                "          if (v.volume < 1.0) v.volume = 1.0; " +
-                "        } " +
-                "      } " +
-                "      if (!win._aniloveObserverSet) { " +
-                "        win._aniloveObserverSet = true; " +
-                "        try { " +
-                "          var observer = new MutationObserver(function() { " +
-                "            try { " +
-                "              var badEls = doc.querySelectorAll('.top-gradient, .glass-panel, .bottom-bar-panel, .skin-controls, .skin-timeline, .skin-menu, .art-controls, .art-bottom, .art-mask, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, vds-controls, media-controls, [data-part=\"controls\"], [class*=\"Controls-module\"], [class*=\"TimeSlider-module\"], [class*=\"CenterControls-module\"], [class*=\"TopRightControls-module\"], [class*=\"VideoLayout-module\"], [class*=\"SettingsMenu-module\"], .vds-controls, .vds-time-slider, iframe[src*=\"cloudflare\"], iframe[src*=\"turnstile\"], .cf-turnstile, #cf-wrapper, .verification-modal, .verify-container, div[class*=\"top-0\"], button[class*=\"z-50\"], div[class*=\"z-50\"]'); " +
-                "              badEls.forEach(function(el) { try { el.style.setProperty('display', 'none', 'important'); el.style.setProperty('visibility', 'hidden', 'important'); el.style.setProperty('opacity', '0', 'important'); el.style.setProperty('pointer-events', 'none', 'important'); } catch(e){} }); " +
-                "              var vObs = doc.querySelector('video'); " +
-                "              if (vObs && vObs.textTracks && vObs.textTracks.length > 0 && vObs.textTracks[0].mode !== 'showing') { " +
-                "                try { vObs.textTracks[0].mode = 'showing'; } catch(e){} " +
-                "              } " +
-                "            } catch(e){} " +
-                "          }); " +
-                "          if (doc.body) { observer.observe(doc.body, { childList: true, subtree: true }); } " +
-                "        } catch(e){} " +
-                "      } " +
-                "      var art = win.playerInstance || win.artPlayerInstance || win.art; " +
-                "      if (art && typeof art.play === 'function' && !globalPause && !isVideoActive) { " +
-                "        try { " +
-                "          if (art.playing === false || art.isPause) { " +
-                "            art.muted = true; " +
-                "            art.play(); " +
-                "            setTimeout(function() { try { art.muted = false; } catch(e){} }, 200); " +
-                "          } " +
-                "        } catch(e){} " +
-                "      } " +
-                "      if (!isVideoActive) { " +
-                "        var allBtns = doc.querySelectorAll('button, [role=\"button\"], .jw-button-color, a, input[type=\"button\"], .btn'); " +
-                "        allBtns.forEach(function(b) { " +
-                "          var t = (b.textContent || b.innerText || b.value || '').toLowerCase().trim(); " +
-                "          if (t === 'continue' || t === 'yes' || t === 'resume' || t === 'ok' || t.indexOf('continue') === 0 || t.indexOf('resume') === 0) { " +
-                "            try { b.click(); } catch(e){} " +
-                "          } " +
-                "        }); " +
-                "      } " +
-                "      if (!globalPause && !isVideoActive) { " +
-                "        var playBtns = doc.querySelectorAll('#playback, #overlay, #vid_play, #play_btn, #play, .play-btn, #desk, .jw-display-icon-container, .vjs-big-play-button, .art-icon-play, .plyr__control--overlaid'); " +
-                "        playBtns.forEach(function(btn) { " +
-                "          try { " +
-                "            btn.click(); " +
-                "            btn.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); " +
-                "            btn.dispatchEvent(new TouchEvent('touchstart', {bubbles: true, cancelable: true})); " +
-                "            btn.dispatchEvent(new TouchEvent('touchend', {bubbles: true, cancelable: true})); " +
-                "          } catch(e){} " +
-                "        }); " +
-                "      } " +
-                "      if (typeof win.jwplayer === 'function') { " +
-                "        try { " +
-                "          var jp = win.jwplayer(); " +
-                "          if (jp) { " +
-                "            var jwOver = doc.querySelectorAll('.jw-nextup-container, .jw-nextup, .jw-overlay, .jw-dialog'); " +
-                "            jwOver.forEach(function(el) { try { el.remove(); } catch(e){} }); " +
-                "            if (!win._jwAniLoveListenerAdded) { " +
-                "              win._jwAniLoveListenerAdded = true; " +
-                "              try { jp.on('ready', function() { try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); jp.setVolume(100); }, 200); } catch(e){} }); } catch(e){} " +
-                "              try { jp.on('pause', function() { " +
-                "                if (!win._aniloveManualPause) { " +
-                "                  setTimeout(function() { " +
-                "                    if (!win._aniloveManualPause && jp.getState && (jp.getState() === 'paused' || jp.getState() === 'idle')) { try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); }, 200); } catch(e){} } " +
-                "                  }, 350); " +
-                "                } " +
-                "              }); } catch(e){} " +
-                "            } " +
-                "            if (!globalPause && jp.getState && (jp.getState() === 'idle' || jp.getState() === 'paused')) { " +
-                "              try { jp.setMute(true); jp.play(); setTimeout(function() { jp.setMute(false); jp.setVolume(100); }, 200); } catch(e){} " +
-                "            } " +
-                "          } " +
-                "        } catch(e) {} " +
-                "      } " +
-                "      if (window.AndroidScrubber && typeof window.AndroidScrubber.onStateUpdate === 'function') { " +
-                "        if (v && (v.duration > 0 || v.currentTime > 0)) { " +
-                "          window.AndroidScrubber.onStateUpdate(v.currentTime || 0, v.duration || 0, v.paused); " +
-                "        } else if (typeof win.jwplayer === 'function') { " +
-                "          var jp2 = win.jwplayer(); " +
-                "          if (jp2 && typeof jp2.getPosition === 'function') { " +
-                "            var st2 = jp2.getState ? jp2.getState() : ''; " +
-                "            window.AndroidScrubber.onStateUpdate(jp2.getPosition() || 0, jp2.getDuration() || 0, st2 === 'paused' || st2 === 'idle'); " +
-                "          } " +
-                "        } else if (art) { " +
-                "          window.AndroidScrubber.onStateUpdate(art.currentTime || 0, art.duration || 0, art.playing === false || art.isPause); " +
-                "        } " +
-                "      } " +
-                "    } catch(e) {} " +
-                "    for (var i = 0; i < win.frames.length; i++) { try { autoTrigger(win.frames[i]); } catch(e) {} } " +
-                "  } " +
-                "  autoTrigger(window); " +
-                "  function absoluteCleanse(win) { " +
-                "    try { " +
-                "      try { " +
-                "        var dOpen = function() { return null; }; " +
-                "        dOpen.toString = function() { return 'function open() { [native code] }'; }; " +
-                "        win.open = dOpen; " +
-                "      } catch(e){} " +
-                "      var doc = win.document; " +
-                "      var style = doc.getElementById('anilove-hybrid-base-style') || doc.createElement('style'); " +
-                "      style.id = 'anilove-hybrid-base-style'; " +
-                "      style.innerHTML = 'html, body { background: #000 !important; background-color: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; width: 100% !important; height: 100% !important; } ' + " +
-                "        '.player-wrapper, .player-container, .artplayer-app, .art-video-player, .jwplayer, .video-js, #artPlayer, #player { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; background: #000 !important; background-color: #000 !important; display: block !important; opacity: 1 !important; visibility: visible !important; } ' + " +
-                "        'iframe#playerFrame, iframe#videoFrame, iframe[src*=\"iqsmart\"], iframe[src*=\"piratex\"], iframe[src*=\"abyss\"], iframe[src*=\"blakite\"], iframe[src*=\"rubystm\"], iframe[src*=\"embed\"], iframe[src*=\"player\"], iframe[src*=\"v2\"], iframe[src*=\"public\"] { width: 100% !important; height: 100% !important; border: none !important; margin: 0 !important; padding: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important; z-index: 9999 !important; } ' + " +
-                "        'video, .jw-video, .vjs-tech, .art-video { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; display: block !important; visibility: visible !important; opacity: 1 !important; } ' + " +
-                "        '.art-subtitle, .artplayer-subtitles, .art-subtitles, .jw-captions, .jw-text-track-container, .vjs-text-track-display, .ytp-caption-window-container, .plyr__captions, .caption-window, .subtitles, .captions, .shaka-text-container, .fluid_subtitles, .bitmovin-player-subtitle-overlay, .jw-captions-text, .vjs-caption-content, .art-subtitle p { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } ' + " +
-                "        '#overlay, #playback, #vid_play, #play_btn, #desk, .art-state, .art-icon-state, .art-poster, .art-poster-img, .art-notice, .art-layer-state, [class*=\"art-state\"], [class*=\"art-icon\"], [class*=\"art-poster\"], .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-dock, .jw-nextup-container, .jw-breakpoint-7, .jw-logo, .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .art-controls, .art-mask, .art-icon, .art-backdrop, .art-bottom, .art-layers, .plyr__controls, .plyr__control--overlaid, .top-left, .top-button, .top-bar, .top-icon, #btn-server, .btn-server, .server-toggle, #server-select, .server-list, #servers, .server-btn, .btn-servers, .icon-server, button.server, .servers-list, .player-btn, .player-options, div[class*=\"server-select\"], div[class*=\"servers\"], button[class*=\"server\"], .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, ::-webkit-scrollbar, #downloadButton, #moreOptionsBtn, .video-links-modal, .download-btn, #btn-download, #download, .menuButton, #menuButton, iframe[src*=\"probation\"], iframe[src*=\"doubleclick\"], iframe[src*=\"googlesyndication\"], iframe[src*=\"decafeligiblyhad\"], iframe[src*=\"exosrv\"], iframe[src*=\"adsterra\"], iframe[src*=\"popads\"], iframe[src*=\"popcash\"], iframe[src*=\"clocid\"], iframe[src*=\"challenges.cloudflare.com\"], iframe[src*=\"turnstile\"], iframe[src*=\"captcha\"], iframe[src*=\"recaptcha\"], iframe[src*=\"verify\"], .cf-turnstile, #cf-wrapper, #challenge-stage, .verification-modal, .verify-container, .human-verify, #human-verification, .captcha-box, .ad-captcha, #ad-container, .ad-overlay, div[class*=\"popup\"], div[id*=\"popup\"], div[class*=\"modal\"]:not(#audioModal), div[id*=\"modal\"]:not(#audioModal), div[class*=\"banner\"], div[id*=\"banner\"], div[class*=\"countdown\"], .countdown-overlay, #countdownOverlay, #loadingIndicator, .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], div[class*=\"access\"], div[class*=\"confirm\"], div[class*=\"check\"], div[id*=\"check\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; }'; " +
-                "      if (!style.parentNode && doc.head) doc.head.appendChild(style); " +
-                "      var popups = doc.querySelectorAll('.countdown-overlay, #countdownOverlay, #loadingIndicator, .loading-overlay, #loadingOverlay, .video-title-overlay, #titleOverlay, .ad-container, .ad-iframe, #downloadButton, #moreOptionsBtn, .video-links-modal, div[class*=\"popup\"], div[id*=\"popup\"], .adsbygoogle, div[class*=\"turnstile\"], div[class*=\"cf-turnstile\"], div[class*=\"human\"], div[id*=\"human\"], div[class*=\"verify\"], div[id*=\"verify\"], div[class*=\"step\"], iframe[src*=\"challenge\"], iframe[src*=\"turnstile\"], iframe[src*=\"probation\"]'); " +
-                "      popups.forEach(function(p) { try { p.remove(); } catch(e){} }); " +
-                "      var allEls = doc.querySelectorAll('div, section, article, iframe, form'); " +
-                "      allEls.forEach(function(el) { " +
-                "        var txt = (el.innerText || el.textContent || '').toLowerCase(); " +
-                "        if (txt.indexOf('security check') !== -1 || txt.indexOf('verify you are human') !== -1 || txt.indexOf('verification required') !== -1 || txt.indexOf('confirm you are human') !== -1 || txt.indexOf('one tap to confirm') !== -1) { " +
-                "          if (!el.querySelector('video') && !el.classList.contains('player-wrapper') && !el.classList.contains('art-video-player')) { " +
-                "            try { el.remove(); } catch(e) { el.style.setProperty('display', 'none', 'important'); } " +
-                "          } " +
-                "        } " +
-                "      }); " +
-                "    } catch(e) {} " +
-                "    for (var j = 0; j < win.frames.length; j++) { try { absoluteCleanse(win.frames[j]); } catch(e) {} } " +
-                "  } " +
-                "  absoluteCleanse(window); " +
-                "})();", null); 
-    }
+
+    private void injectAdEraser() {}
 
 
     @Override
@@ -3942,18 +2567,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 exoPlayer.setPlayWhenReady(false);
                 exoPlayer.pause();
             } catch (Exception ignored) {}
-        }
-        // Mute and pause any background WebView audio immediately
-        if (playerWebView != null) {
-            playerWebView.evaluateJavascript(
-                "(function(){" +
-                "  var els=document.querySelectorAll('video,audio');" +
-                "  for(var i=0;i<els.length;i++){els[i].muted=true;els[i].pause();}" +
-                "  if(window.frames){for(var j=0;j<window.frames.length;j++){" +
-                "    try{var fe=window.frames[j].document.querySelectorAll('video,audio');" +
-                "    for(var k=0;k<fe.length;k++){fe[k].muted=true;fe[k].pause();}}catch(e){}" +
-                "  }}" +
-                "})();", null);
         }
     }
 
@@ -4036,17 +2649,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
             exoPlayer = null;
         }
-        if (playerWebView != null) { 
-            try {
-                playerWebView.evaluateJavascript(
-                    "(function(){var e=document.querySelectorAll('video,audio');" +
-                    "for(var i=0;i<e.length;i++){e[i].pause();e[i].src='';e[i].load();}})();", null);
-                playerWebView.stopLoading();
-                playerWebView.loadUrl("about:blank");
-                playerWebView.destroy(); 
-            } catch (Exception ignored) {}
-            playerWebView = null;
-        } 
         super.onDestroy(); 
         overridePendingTransition(0, 0);
     }
