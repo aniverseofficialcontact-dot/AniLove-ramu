@@ -29,7 +29,6 @@ import {
   saveStoredReelsSession,
   EnrichedReelMetadata
 } from '../services/reelsService';
-import bundledReelsRaw from '../data/animeReels.json';
 import { reelMediaCache } from '../services/reelMediaCache';
 import { DownloadPlugin } from '../services/downloadManager';
 
@@ -99,8 +98,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [feedHistory, setFeedHistory] = useState<AnimeReel[]>(() => {
     const session = getStartingReelsFeed(initialReelId, initialFilterMode);
     if (session.feed && session.feed.length > 0) return session.feed;
-    const fallback = getBundledReels(true);
-    return fallback.length > 0 ? fallback : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
+    return getBundledReels(true);
   });
 
   const [historyIndex, setHistoryIndex] = useState<number>(() => {
@@ -146,6 +144,24 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapTimeRef = useRef<number>(0);
   const isManuallyPausedRef = useRef<boolean>(false);
+
+  // Derived variables & memoized sources
+  const currentReel = feedHistory[historyIndex] || null;
+  const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
+  const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
+
+  const activeVideoUrl = useMemo(() => {
+    if (videoSrcOverride) return videoSrcOverride;
+    if (resolvedVideoUrl) return resolvedVideoUrl;
+    if (!currentReel?.id) return '';
+    return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
+  }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
+
+  // Poster Image Source
+  const activePosterUrl = useMemo(() => {
+    if (!currentReel?.id) return '';
+    return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
+  }, [currentReel?.id]);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -203,7 +219,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       const now = Date.now();
       if (video.currentTime === lastCurrentTimeRef.current) {
         if (now - lastTimeUpdateRef.current > 800) {
-          // Auto-reconnect kick
           video.play().catch(() => {});
           if (now - lastTimeUpdateRef.current > 2000 && currentReel?.id && !videoSrcOverride) {
             setVideoSrcOverride(`https://drive.usercontent.google.com/download?id=${currentReel.id}&export=view`);
@@ -231,13 +246,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       setHistoryIndex(0);
     } else {
       const bundled = getBundledReels(true);
-      const fallback = bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage);
-      setFeedHistory(fallback);
+      setFeedHistory(bundled);
       setHistoryIndex(0);
     }
   }, [filterMode]);
-
-  const currentReel = feedHistory[historyIndex] || null;
 
   // Save session state to restore position when switching tabs in app
   useEffect(() => {
@@ -268,19 +280,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     return () => { isMounted = false; };
   }, [currentReel?.id, historyIndex]);
-
-  const activeVideoUrl = useMemo(() => {
-    if (videoSrcOverride) return videoSrcOverride;
-    if (resolvedVideoUrl) return resolvedVideoUrl;
-    if (!currentReel?.id) return '';
-    return `https://drive.google.com/uc?export=view&id=${currentReel.id}`;
-  }, [currentReel?.id, resolvedVideoUrl, videoSrcOverride]);
-
-  // Poster Image Source
-  const activePosterUrl = useMemo(() => {
-    if (!currentReel?.id) return '';
-    return `https://lh3.googleusercontent.com/d/${currentReel.id}`;
-  }, [currentReel?.id]);
 
   // Fetch enriched metadata from Cloud/Cache
   useEffect(() => {
@@ -402,9 +401,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       onShowToast('info', isNowSaved ? 'Saved to Bookmarks' : 'Removed from Bookmarks', 'Saved Reels');
     }
   }, [currentReel, onShowToast]);
-
-  const currentMeta = currentReel ? enrichedMetadata[currentReel.id] : null;
-  const displayTitle = currentMeta?.animeTitle || currentReel?.cleanTitle || 'Anime Edit';
 
   // Native Android & Web Download Handler
   const handleDownloadReel = () => {
@@ -751,7 +747,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               <button
                 onClick={() => {
                   const bundled = getBundledReels(true);
-                  setFeedHistory(bundled.length > 0 ? bundled : (bundledReelsRaw as any[]).map(sanitizeReelForStorage));
+                  setFeedHistory(bundled);
                   setHistoryIndex(0);
                 }}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 transition-all"
