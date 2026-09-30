@@ -125,7 +125,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
     if (!Capacitor.isNativePlatform()) return;
 
     const id = anime.id || 1;
-    const ep = currentEpisode || 1;
+    const ep = episodeNumber || 1;
     const isDub = srvName.toLowerCase().includes('dub');
 
     let targetUrl = `https://vidlink.pro/anime/${id}/${ep}?dub=${isDub}`;

@@ -1030,7 +1030,37 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    public static String sanitizeStreamUrl(String url) {
+        if (url == null || url.trim().isEmpty()) return url;
+        String trimmed = url.trim();
+
+        if (trimmed.contains("#")) {
+            String[] parts = trimmed.split("#", 2);
+            String baseUrl = parts[0];
+            String fragment = parts[1];
+
+            if (fragment.contains("?")) {
+                String[] fragParts = fragment.split("\\?", 2);
+                String query = fragParts[1];
+                if (baseUrl.contains("?")) {
+                    trimmed = baseUrl + "&" + query;
+                } else {
+                    trimmed = baseUrl + "?" + query;
+                }
+            } else {
+                trimmed = baseUrl;
+            }
+        }
+        return trimmed;
+    }
+
     private String getBestRefererForUrl(String videoUrl, String embedUrl) {
+        if (videoUrl != null) {
+            String vLower = videoUrl.toLowerCase();
+            if (vLower.contains("googleapis.com") || vLower.contains("googleusercontent.com") || vLower.contains("googlevideo.com")) {
+                return ""; // Direct Google CDN bucket URLs fail if 3rd party referer is passed
+            }
+        }
         String primary = (embedUrl != null && !embedUrl.isEmpty()) ? embedUrl : videoUrl;
         if (primary == null || primary.trim().isEmpty()) {
             return "https://google.com/";
@@ -1038,6 +1068,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         try {
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
+            if (host.contains("googleapis.com") || host.contains("googleusercontent.com") || host.contains("googlevideo.com")) {
+                return "";
+            }
             if (host.contains("dramahot")) return "https://dramahot.top/";
             if (host.contains("mikora") || host.contains("nexabloom") || host.contains("silverorbit")) return "https://megaplay.buzz/";
             if (host.contains("vidnest")) return "https://vidnest.fun/";
@@ -1281,8 +1314,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @UnstableApi
-    private void setupExoPlayerOnlineDirect(String hlsUrl, String referer, Map<String, String> headers) {
-        if (hlsUrl == null || hlsUrl.isEmpty()) return;
+    private void setupExoPlayerOnlineDirect(String hlsUrlInput, String referer, Map<String, String> headers) {
+        if (hlsUrlInput == null || hlsUrlInput.isEmpty()) return;
+        final String hlsUrl = sanitizeStreamUrl(hlsUrlInput);
         currentLoadedStreamUrl = hlsUrl;
         try {
             if (exoPlayer != null) {
@@ -1301,11 +1335,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .setAllowCrossProtocolRedirects(true);
 
             Map<String, String> requestHeaders = new HashMap<>();
-            requestHeaders.put("Referer", effectiveReferer);
-            try {
-                URL refUrl = new URL(effectiveReferer);
-                requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
-            } catch (Exception ignored) {}
+            if (effectiveReferer != null && !effectiveReferer.trim().isEmpty()) {
+                requestHeaders.put("Referer", effectiveReferer);
+                try {
+                    URL refUrl = new URL(effectiveReferer);
+                    requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
+                } catch (Exception ignored) {}
+            }
 
             requestHeaders.put("Accept", "*/*");
             requestHeaders.put("Sec-Fetch-Dest", "empty");

@@ -94,10 +94,11 @@ public class VideoSniffer {
                 if (isVideoUrl(url)) {
                     if (!found) {
                         found = true;
-                        Log.i(TAG, "SUCCESS! Caught Video URL: " + url);
+                        final String cleanUrl = NativePlayerActivity.sanitizeStreamUrl(url);
+                        Log.i(TAG, "SUCCESS! Caught Video URL: " + cleanUrl);
                         cleanup();
                         new Handler(Looper.getMainLooper()).post(() -> {
-                            if (listener != null) listener.onVideoFound(url, capturedSubtitleUrl);
+                            if (listener != null) listener.onVideoFound(cleanUrl, capturedSubtitleUrl);
                         });
                     }
                 }
@@ -148,10 +149,11 @@ public class VideoSniffer {
                 }
                 if (isVideoUrl(url) && !found) {
                     found = true;
-                    Log.i(TAG, "Script found Video URL: " + url);
+                    final String cleanUrl = NativePlayerActivity.sanitizeStreamUrl(url);
+                    Log.i(TAG, "Script found Video URL: " + cleanUrl);
                     cleanup();
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        if (listener != null) listener.onVideoFound(url, capturedSubtitleUrl);
+                        if (listener != null) listener.onVideoFound(cleanUrl, capturedSubtitleUrl);
                     });
                 }
             }
