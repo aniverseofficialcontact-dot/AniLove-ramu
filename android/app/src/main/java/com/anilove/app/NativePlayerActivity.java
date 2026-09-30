@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.Set;
 import java.util.LinkedHashSet;
@@ -1192,6 +1193,26 @@ public class NativePlayerActivity extends AppCompatActivity {
         setupExoPlayerOnlineDirect(hlsUrl, referer, headers);
     }
 
+    private String getUnwrappedProxyUrl(String url) {
+        if (url == null) return null;
+        if (url.contains("proxy") && url.contains("url=")) {
+            try {
+                int urlIdx = url.indexOf("url=");
+                if (urlIdx != -1) {
+                    String target = url.substring(urlIdx + 4);
+                    int ampIdx = target.indexOf('&');
+                    if (ampIdx != -1) target = target.substring(0, ampIdx);
+                    String decoded = URLDecoder.decode(target, "UTF-8");
+                    if (decoded != null && !decoded.isEmpty() && decoded.contains(".m3u8")) {
+                        Log.i("AniLove", "Unwrapped proxy stream target: " + decoded);
+                        return decoded;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return url;
+    }
+
     @UnstableApi
     private void setupExoPlayerOnlineDirect(String hlsUrl, String referer, Map<String, String> headers) {
         if (hlsUrl == null || hlsUrl.isEmpty()) return;
@@ -1204,8 +1225,9 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             String effectiveReferer = getBestRefererForUrl(hlsUrl, referer);
 
+            // Set desktop User-Agent to match VideoSniffer so proxy signature (sig) validation passes
             DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                     .setConnectTimeoutMs(25000)
                     .setReadTimeoutMs(25000)
                     .setAllowCrossProtocolRedirects(true);
@@ -1295,6 +1317,14 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                     if (isSourceOrNetworkError && !hasRetriedSniffer) {
                         hasRetriedSniffer = true;
+
+                        String unwrapped = getUnwrappedProxyUrl(hlsUrl);
+                        if (unwrapped != null && !unwrapped.equals(hlsUrl)) {
+                            Log.w("AniLove", "Proxy 400 error — retrying with unwrapped target stream: " + unwrapped);
+                            setupExoPlayerOnlineDirect(unwrapped, getBestRefererForUrl(unwrapped, null), headers);
+                            return;
+                        }
+
                         String originalUrl = getIntent().getStringExtra("url");
                         if (originalUrl == null) originalUrl = getIntent().getStringExtra("videoUrl");
                         if (originalUrl == null) originalUrl = hlsUrl;
