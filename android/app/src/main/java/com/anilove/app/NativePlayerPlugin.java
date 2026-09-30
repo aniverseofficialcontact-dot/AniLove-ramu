@@ -135,15 +135,8 @@ public class NativePlayerPlugin extends Plugin {
         call.resolve();
     }
 
-    @UnstableApi
     @PluginMethod
     public void togglePlayerEngine(PluginCall call) {
-        Boolean enableExo = call.getBoolean("enableExo");
-        if (enableExo != null && NativePlayerActivity.currentInstance != null) {
-            NativePlayerActivity.currentInstance.togglePlayerEngine(enableExo);
-            call.resolve();
-        } else {
-            call.resolve();
-        }
+        call.resolve();
     }
 }

@@ -10,7 +10,6 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -51,17 +50,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.net.http.SslError;
-import android.webkit.SslErrorHandler;
-import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -1047,6 +1038,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             String host = parsed.getHost().toLowerCase();
             if (host.contains("vidnest")) return "https://vidnest.fun/";
             if (host.contains("tryembed")) return "https://tryembed.us.cc/";
+            if (host.contains("anixx") || host.contains("dramahot")) return "https://tryembed.us.cc/";
             if (host.contains("rubystm")) return "https://rubystm.com/";
             if (host.contains("vidlink")) return "https://vidlink.pro/";
             if (host.contains("vidsrc")) return "https://vidsrc.cc/";
@@ -1156,6 +1148,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
             } catch (Exception ignored) {}
 
+            try {
+                String cookieStr = CookieManager.getInstance().getCookie(hlsUrl);
+                if (cookieStr != null && !cookieStr.isEmpty()) {
+                    requestHeaders.put("Cookie", cookieStr);
+                }
+            } catch (Exception ignored) {}
+
             if (headers != null && !headers.isEmpty()) {
                 requestHeaders.putAll(headers);
             }
@@ -1243,10 +1242,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
-    @UnstableApi
-    public void togglePlayerEngine(boolean enableExo) {
-        // 100% Native Media3 ExoPlayer Engine active
-    }
+
 
     private void checkAutoNextEpisodeTrigger(long currentMs, long durationMs) {
         if (durationMs <= 0 || isAutoNextCanceled || isAutoNextTriggered) return;
@@ -2366,7 +2362,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private void sendVideoCommand(String jsAction) {}
+
 
     private String formatTime(int seconds) { return String.format(Locale.getDefault(), "%02d:%02d", Math.max(0, seconds) / 60, Math.max(0, seconds) % 60); }
     private boolean isDirectHls = false;

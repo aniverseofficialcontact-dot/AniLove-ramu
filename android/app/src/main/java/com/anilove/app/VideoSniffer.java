@@ -208,6 +208,11 @@ public class VideoSniffer {
         if (url == null || url.trim().isEmpty()) return false;
         String lowerUrl = url.toLowerCase().trim();
 
+        // Block dummy wrapper token URLs on tryembed and vidnest that return HTTP 400 to non-browser requests
+        if (lowerUrl.contains("tryembed.us.cc/s/") || lowerUrl.contains("vidnest.fun/s/")) {
+            return false;
+        }
+
         // 1. Block analytics, telemetry, and tracking domains / paths
         if (lowerUrl.contains("jwpltx.com") || lowerUrl.contains("ping.gif") ||
             lowerUrl.contains("google-analytics") || lowerUrl.contains("googletagmanager") ||
