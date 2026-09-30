@@ -1110,13 +1110,78 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @UnstableApi
+    private boolean attemptServer2DirectExtract(String embedUrl, String referer, Map<String, String> headers) {
+        if (embedUrl == null || (!embedUrl.contains("tryembed.us.cc") && !embedUrl.contains("vidnest.fun"))) {
+            return false;
+        }
+        try {
+            boolean isTryEmbed = embedUrl.contains("tryembed.us.cc");
+            String baseHost = isTryEmbed ? "https://tryembed.us.cc" : "https://vidnest.fun";
+
+            Pattern pattern = Pattern.compile("anime/(\\d+)/(\\d+)/(sub|dub)");
+            Matcher matcher = pattern.matcher(embedUrl);
+            if (!matcher.find()) return false;
+
+            String animeId = matcher.group(1);
+            String epNum = matcher.group(2);
+            String audioType = matcher.group(3);
+
+            String apiUrl = baseHost + "/api/stream_data?id=" + animeId + "&episode=" + epNum + "&audio=" + audioType + "&player=jw";
+
+            Executors.newSingleThreadExecutor().execute(() -> {
+                try {
+                    URL u = new URL(apiUrl);
+                    HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                    conn.setRequestProperty("Referer", baseHost + "/");
+
+                    if (conn.getResponseCode() == 200) {
+                        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) sb.append(line);
+                        in.close();
+
+                        JSONObject json = new JSONObject(sb.toString());
+                        String streamFile = json.optString("file", "");
+                        if (streamFile.isEmpty()) streamFile = json.optString("url", "");
+                        if (streamFile.isEmpty()) {
+                            JSONArray sources = json.optJSONArray("sources");
+                            if (sources != null && sources.length() > 0) {
+                                streamFile = sources.getJSONObject(0).optString("file", "");
+                            }
+                        }
+
+                        if (!streamFile.isEmpty() && isDirectMediaStream(streamFile)) {
+                            final String finalStream = streamFile;
+                            Log.i("AniLove_DirectExtract", "Successfully extracted direct Server 2 stream: " + finalStream);
+                            runOnUiThread(() -> setupExoPlayerOnlineDirect(finalStream, baseHost + "/", headers));
+                            return;
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.d("AniLove_DirectExtract", "Direct extract failed, falling back to VideoSniffer: " + e.getMessage());
+                }
+                runSnifferFallback(embedUrl, referer, headers);
+            });
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @UnstableApi
     public void setupExoPlayerOnline(String hlsUrl, String referer, Map<String, String> headers) {
         if (hlsUrl == null || hlsUrl.isEmpty()) return;
         hasRetriedSniffer = false;
 
         if (!isDirectMediaStream(hlsUrl)) {
-            Log.i("AniLove", "Embed page detected — running VideoSniffer for: " + hlsUrl);
-            runSnifferFallback(hlsUrl, referer, headers);
+            Log.i("AniLove", "Embed page detected — attempting Server 2 direct extract for: " + hlsUrl);
+            if (!attemptServer2DirectExtract(hlsUrl, referer, headers)) {
+                runSnifferFallback(hlsUrl, referer, headers);
+            }
             return;
         }
 

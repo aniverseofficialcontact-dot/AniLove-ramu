@@ -213,6 +213,13 @@ public class VideoSniffer {
             return false;
         }
 
+        // Reject audio-only track variants (e.g. index-a1.m3u8, -v1-a1.m3u8, audio.m3u8, audio_only)
+        if (lowerUrl.contains("-a1.m3u8") || lowerUrl.contains("-a2.m3u8") ||
+            lowerUrl.contains("-v1-a1.m3u8") || lowerUrl.contains("/audio/") ||
+            lowerUrl.contains("audio.m3u8") || lowerUrl.contains("audio_only")) {
+            return false;
+        }
+
         // 1. Block analytics, telemetry, and tracking domains / paths
         if (lowerUrl.contains("jwpltx.com") || lowerUrl.contains("ping.gif") ||
             lowerUrl.contains("google-analytics") || lowerUrl.contains("googletagmanager") ||
