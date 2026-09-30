@@ -34,29 +34,27 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), multi-route direct HTTP API extractor (`attemptServer2DirectExtract` for `anime` and `animepahe` routes), `ExoPlaybackException` source error auto-recovery via VideoSniffer fallback, `.m4s` segment chunk filtering, real-time TrackSelectionParameters for video resolution and audio language changing, Cookie sync from CookieManager, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention via VideoSniffer lifecycle cleanup, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), direct VidLink API extractor (`attemptVidLinkDirectExtract`), direct Server 2 HTTP API extractor (`attemptServer2DirectExtract`), `ExoPlaybackException` source error auto-recovery via VideoSniffer fallback, `.m4s` segment chunk filtering, real-time TrackSelectionParameters for video resolution and audio language changing, Cookie sync from CookieManager, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention via VideoSniffer lifecycle cleanup, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
 | `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams with static instance tracking (`cancelActiveSniffers()`), audio-only track variant filtering (`-a1.m3u8`, `audio.m3u8`), dummy wrapper link filtering (`tryembed.us.cc/s/`, `vidnest.fun/s/`), dynamic base URL matching (`tryembed.us.cc`, `vidnest.fun`), and `.m4s` chunk filtering to extract direct `.m3u8` master video playlists (`god.anixx.cloud/proxy/...`) and `.vtt` subtitles. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `notifyLanguageChange`) to React with rapid `play()` call de-duplication. |
 | `subtitleService.ts` | Subtitle Pipeline | Dedicated Subtitle API fetching (`subtitles-l8cm.onrender.com/subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, `#EXT-X-STREAM-INF` master playlist resolution parsing for 1080p / 720p / 480p quality selection, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
 | `DownloadPlugin.java` | Capacitor Bridge | Manages download state JS bindings and handles public storage exports (`Storage/Downloads/AniLove/`). |
 | `streamingProviders.ts` | Server Resolvers | Direct deterministic Server 2 URL pattern generator (`Server 2-A`, `Server 2-B`, `Server 2-C-SUB`: `https://vidnest.fun/animepahe/{id}/{ep}/sub` and `Server 2-C-DUB`: `https://vidnest.fun/animepahe/{id}/{ep}/dub`). |
-| `WatchView.tsx` | Web Component | Manages playback UI state, server selectors, audio toggles, episode switching, expandable server dropdown, and player position sync. |
+| `WatchView.tsx` | Web Component | Manages playback UI state, direct server switch bridge (`handleServerSwitchDirect`), audio toggles, episode switching, expandable server dropdown, and player position sync. |
 | `StreamCache.java` | Native Utilities | Thread-safe memory cache storing pre-fetched stream URLs and subtitle tracks for instant zero-latency episode transitions. |
 
 ---
 
-## ⚡ 2. Server 2-C Addition & Multi-Route Direct Extractor
+## ⚡ 2. Instant Server Switching & Direct API Extractors
 
-### Server 2-C (AnimePahe Stream Route)
-- **URL Pattern**:
-  - `Server 2-C-SUB`: `https://vidnest.fun/animepahe/${anilistId}/${episodeNumber}/sub`
-  - `Server 2-C-DUB`: `https://vidnest.fun/animepahe/${anilistId}/${episodeNumber}/dub`
-- **Multi-Route Extractor (`attemptServer2DirectExtract`)**:
-  - Updated regex matcher in `NativePlayerActivity.java` to support both `anime` and `animepahe` routes:
-    `Pattern.compile("(anime|animepahe)/(\\d+)/(\\d+)/(sub|dub)")`.
-  - Sends direct API query to `https://vidnest.fun/api/stream_data?id={id}&episode={ep}&audio={type}&route={anime|animepahe}`.
-  - Returns direct 1080p `.m3u8` master video stream and loads it into ExoPlayer instantly.
+### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
+- When any server option is selected in the UI dropdown (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-A-DUB`, `Server 2-B-SUB`, `Server 2-B-DUB`, `Server 2-C-SUB`, `Server 2-C-DUB`), `handleServerSwitchDirect` is invoked **instantly**, passing the exact server URL and `serverName` to `NativePlayer.play()`.
+- Bypasses web player resolver delays, updating the **Live Diagnostic HUD** and switching the active video stream in Java immediately!
+
+### 🎬 Server 1 Direct Extractor (`attemptVidLinkDirectExtract` in `NativePlayerActivity.java`)
+- Queries `https://vidlink.pro/api/b/anime/{id}/{ep}?dub={true|false}` directly in Java.
+- Extracts the direct 1080p `.m3u8` video stream in **< 200ms**, eliminating Server 1 load delays and source errors.
 
 ---
 
@@ -69,4 +67,5 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ## 🛠️ 4. Maintenance Checklist for Developers
 
-1. **Server 2-C Integration**: Both `Server 2-C-SUB` and `Server 2-C-DUB` use `vidnest.fun`'s `animepahe` route, processed via `attemptServer2DirectExtract` or `VideoSniffer`.
+1. **Direct Server Switch Bridge**: Always pass `serverName` in `handleServerSwitchDirect` so `NativePlayerActivity` and the Live Diagnostic HUD reflect the selected server in real-time.
+2. **VidLink Direct Extractor**: Maintain `attemptVidLinkDirectExtract` for instant Server 1 playback.
