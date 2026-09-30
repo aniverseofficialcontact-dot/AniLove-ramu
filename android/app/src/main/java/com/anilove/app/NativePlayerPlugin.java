@@ -38,10 +38,23 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
+    private static String lastPlayUrl = null;
+    private static long lastPlayTime = 0;
+
     @PluginMethod
     public void play(PluginCall call) {
         currentInstance = this;
         String url = call.getString("url");
+        long now = System.currentTimeMillis();
+
+        if (url != null && url.equals(lastPlayUrl) && (now - lastPlayTime < 2000)) {
+            Log.i("NativePlayerPlugin", "Ignoring rapid duplicate play() call for: " + url);
+            call.resolve();
+            return;
+        }
+        lastPlayUrl = url;
+        lastPlayTime = now;
+
         Log.e("AniLove_Diagnostic", ">>> RECEIVED URL FROM WEB: " + url);
         
         if (url == null) {
