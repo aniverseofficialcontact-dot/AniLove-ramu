@@ -466,6 +466,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           if (result.source.availableServers?.length) {
             episodeCacheKey.current = cacheKey;
             serverUrlCache.current = {};
+            (window as any).__lastAvailableServers = result.source.availableServers;
             result.source.availableServers.forEach(srv => {
               if (srv.name && srv.linkId) {
                 serverUrlCache.current[srv.name] = srv.linkId;

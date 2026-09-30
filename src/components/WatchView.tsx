@@ -479,37 +479,39 @@ export const WatchView: React.FC<WatchViewProps> = ({
               </button>
 
               {isServerMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 overflow-hidden py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
-                  {[
-                    'Server 1',
-                    'Server 1-B',
-                    'Server 2-A-SUB',
-                    'Server 2-B-SUB',
-                    'Server 2-C-SUB',
-                    'Server 2-A-DUB',
-                    'Server 2-B-DUB',
-                    'Server 2-C-DUB',
-                  ].map((srvName) => {
-                    const isSelected = (selectedSubServer || 'Server 1').toLowerCase().trim() === srvName.toLowerCase().trim();
-                    return (
-                      <button
-                        key={srvName}
-                        onClick={() => {
-                          setSelectedSubServer(srvName);
-                          setIsServerMenuOpen(false);
-                          handleServerSwitchDirect(srvName);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-600/20 text-indigo-300 font-bold'
-                            : 'text-neutral-300 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <span>{srvName}</span>
-                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
-                      </button>
-                    );
-                  })}
+                <div className="absolute right-0 top-full mt-1.5 w-48 max-h-64 overflow-y-auto rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
+                  {(() => {
+                    const cachedServers: any[] = (window as any).__lastAvailableServers || [];
+                    let serverList = cachedServers.map(s => s.name);
+                    if (!serverList || serverList.length === 0) {
+                      serverList = [
+                        'Server 1-A', 'Server 1-B', 'Server 1-C', 'Server 1-D', 'Server 1-E', 'Server 1-F',
+                        'Server 2-A-SUB', 'Server 2-B-SUB', 'Server 2-C-SUB',
+                        'Server 2-A-DUB', 'Server 2-B-DUB', 'Server 2-C-DUB'
+                      ];
+                    }
+                    return serverList.map((srvName) => {
+                      const isSelected = (selectedSubServer || 'Server 1-A').toLowerCase().trim() === srvName.toLowerCase().trim();
+                      return (
+                        <button
+                          key={srvName}
+                          onClick={() => {
+                            setSelectedSubServer(srvName);
+                            setIsServerMenuOpen(false);
+                            handleServerSwitchDirect(srvName);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-600/20 text-indigo-300 font-bold'
+                              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <span>{srvName}</span>
+                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                        </button>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>

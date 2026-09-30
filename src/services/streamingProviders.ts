@@ -533,55 +533,30 @@ export async function resolveEpisodeSource({
     const streamInfo = data.stream;
     const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
 
-    let targetServers: Array<{ name: string; url: string }> = [];
-
-    // Filter raw servers: Server 3 is completely purged. Server 2 becomes Server 1-B.
-    const filteredRaw = rawServers.filter(s => s.name === 'Server 1' || s.name === 'Server 2');
-
-    if (filteredRaw.length > 0) {
-      targetServers = filteredRaw.map(s => ({
-        name: s.name === 'Server 2' ? 'Server 1-B' : s.name,
-        url: s.url,
-      }));
-    } else if (rawServers.length > 0) {
-      targetServers = rawServers
-        .filter(s => s.name !== 'Server 3')
-        .slice(0, 2)
-        .map((s, idx) => ({
-          name: idx === 1 ? 'Server 1-B' : 'Server 1',
-          url: s.url,
-        }));
-    } else if (streamInfo.streamLink || streamInfo.file) {
-      targetServers = [{ name: 'Server 1', url: streamInfo.streamLink || streamInfo.file }];
-    }
-
-    const availableLangs = extractAvailableLanguagesFromStreamData(rawServers);
-
-    // Unpack URLs and apply STRICT RUBYSTM DOMAIN RULE for Server 1-B
     const processedServers: Array<{ name: string; url: string }> = [];
 
-    for (const s of targetServers) {
-      const unpackedUrl = unpackServerUrl(s.url, language);
-
-      if (s.name === 'Server 1-B') {
-        // STRICT RULE: Server 1-B appears ONLY IF its URL originates from rubystm (e.g. rubystm.com)
-        const isRubyStm = unpackedUrl && unpackedUrl.toLowerCase().includes('rubystm');
-        if (isRubyStm) {
-          processedServers.push({ name: 'Server 1-B', url: unpackedUrl });
+    // Map ALL raw servers from AnimeWorld API (Server 1-A, Server 1-B, Server 1-C, Server 1-D ... up to Server 1-S)
+    if (rawServers && rawServers.length > 0) {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      rawServers.forEach((srv, idx) => {
+        const letter = letters[idx] || `${idx + 1}`;
+        const cleanName = `Server 1-${letter}`;
+        const unpackedUrl = unpackServerUrl(srv.url, language);
+        if (unpackedUrl) {
+          processedServers.push({
+            name: cleanName,
+            url: unpackedUrl,
+          });
         }
-        // If not rubystm (e.g. piratexplay.com), Server 1-B is omitted entirely!
-      } else {
-        processedServers.push({ name: s.name, url: unpackedUrl });
-      }
-    }
-
-    // Ensure at least Server 1 exists
-    if (processedServers.length === 0 && (streamInfo.streamLink || streamInfo.file)) {
+      });
+    } else if (streamInfo.streamLink || streamInfo.file) {
       processedServers.push({
-        name: 'Server 1',
+        name: 'Server 1-A',
         url: unpackServerUrl(streamInfo.streamLink || streamInfo.file, language),
       });
     }
+
+    const availableLangs = extractAvailableLanguagesFromStreamData(rawServers);
 
     const availableServers: AvailableServerOption[] = processedServers.map(srv => ({
       name: srv.name,
@@ -589,7 +564,7 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
-    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all 6 Server 2 options)
+    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all Server 2 options)
     const tier1Servers = generateTier1HiAnimeServers(anilistId, episodeNumber);
 
     // Tier 2: Check if remote API cache or fresh remote fetch overrides Tier 1
@@ -624,39 +599,29 @@ export async function resolveEpisodeSource({
 
     // Select requested server URL strictly
     let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
-    let selectedServerName = processedServers[0]?.name || 'Server 1';
+    let selectedServerName = processedServers[0]?.name || 'Server 1-A';
 
     if (serverName) {
-      const norm = serverName.toLowerCase().trim();
+      const norm = serverName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-      if (norm === 'server 1') {
-        const s1 = processedServers.find(s => s.name.toLowerCase() === 'server 1');
-        if (s1) {
-          selectedUrl = s1.url;
-          selectedServerName = s1.name;
-        }
-      } else if (norm === 'server 1-b' || norm === 'server 1b') {
-        const s1b = processedServers.find(s => s.name.toLowerCase() === 'server 1-b');
-        if (s1b) {
-          selectedUrl = s1b.url;
-          selectedServerName = s1b.name;
-        }
-      } else if (norm.includes('server 2')) {
+      // Match exact API server (Server 1-A, Server 1-B, Server 1-C, Server 1-D, etc.)
+      const matchedApi = processedServers.find(s => {
+        const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return sNorm === norm || sNorm.startsWith(norm);
+      });
+
+      if (matchedApi) {
+        selectedUrl = matchedApi.url;
+        selectedServerName = matchedApi.name;
+      } else {
         const matchedHi = hiAnimeServers.find(s => {
-          const sNorm = s.name.toLowerCase().trim();
-          return sNorm === norm || sNorm.replace(/[^a-z0-9]/g, '') === norm.replace(/[^a-z0-9]/g, '');
+          const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return sNorm === norm || sNorm.startsWith(norm);
         });
 
         if (matchedHi) {
           selectedUrl = matchedHi.linkId;
           selectedServerName = matchedHi.name;
-        } else {
-          // Fallback to Server 2-A sub/dub if short server name supplied
-          const fallbackHi = hiAnimeServers.find(s => s.name.toLowerCase().includes(norm.replace('server 2-', '')));
-          if (fallbackHi) {
-            selectedUrl = fallbackHi.linkId;
-            selectedServerName = fallbackHi.name;
-          }
         }
       }
     }
