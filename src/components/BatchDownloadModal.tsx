@@ -56,8 +56,10 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     { name: 'Server 1-B', linkId: '' },
     { name: 'Server 2-A-SUB', linkId: '' },
     { name: 'Server 2-B-SUB', linkId: '' },
+    { name: 'Server 2-C-SUB', linkId: '' },
     { name: 'Server 2-A-DUB', linkId: '' },
     { name: 'Server 2-B-DUB', linkId: '' },
+    { name: 'Server 2-C-DUB', linkId: '' },
   ]);
 
   // Sync available languages, qualities, and servers dynamically from stream API

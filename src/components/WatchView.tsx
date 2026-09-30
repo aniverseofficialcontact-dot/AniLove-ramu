@@ -443,8 +443,10 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     'Server 1-B',
                     'Server 2-A-SUB',
                     'Server 2-B-SUB',
+                    'Server 2-C-SUB',
                     'Server 2-A-DUB',
                     'Server 2-B-DUB',
+                    'Server 2-C-DUB',
                   ].map((srvName) => {
                     const isSelected = (selectedSubServer || 'Server 1').toLowerCase().trim() === srvName.toLowerCase().trim();
                     return (
