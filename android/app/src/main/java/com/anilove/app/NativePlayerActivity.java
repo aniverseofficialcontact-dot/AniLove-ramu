@@ -39,7 +39,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Message;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
@@ -2956,9 +2955,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         setupExoPlayerOnline(url, referer, null);
     }
-
-    private void injectAdEraser() {}
-
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
