@@ -34,8 +34,8 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), real-time TrackSelectionParameters for video resolution and audio language changing, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention via VideoSniffer lifecycle cleanup, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
-| `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams with static instance tracking (`cancelActiveSniffers()`) to extract direct `.m3u8` / `.mp4` video links and prevent duplicate background audio playback. |
+| `NativePlayerActivity.java` | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), `.m4s` segment chunk filtering, real-time TrackSelectionParameters for video resolution and audio language changing, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention via VideoSniffer lifecycle cleanup, shared-element landscape transitions, auto-next countdown toast, gesture overlays, floating layout, PiP mode, AniSkip skip buttons, yellow seekbar OP/ED indicators, independent subtitle overlay, and caption controls. |
+| `VideoSniffer.java` | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams with static instance tracking (`cancelActiveSniffers()`), dynamic base URL matching (`tryembed.us.cc`, `vidnest.fun`), and `.m4s` chunk filtering to extract direct `.m3u8` master video playlists and `.vtt` subtitles. |
 | `subtitleService.ts` | Subtitle Pipeline | Dedicated Subtitle API fetching (`subtitles-l8cm.onrender.com/subtitles.php`), 3-day local caching, provider anonymization, priority sorting, and pre-download batch validation. |
 | `NativePlayerPlugin.java` | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `notifyLanguageChange`) to React. |
 | `EpisodeDownloadService.java` | Foreground Service | Handles multi-threaded background episode downloads, `#EXT-X-STREAM-INF` master playlist resolution parsing for 1080p / 720p / 480p quality selection, notification actions (Pause/Resume/Cancel), and byte-range HTTP resumption. |
@@ -46,17 +46,13 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ---
 
-## ⚡ 2. Real-Time Settings Sync & Dual Audio Prevention
+## ⚡ 2. 100% Pure Native Media3 ExoPlayer Engine & Server 2-A / 2-B Fixes
 
-### Real-Time Video Quality & Audio Language Selector
-- **ExoPlayer TrackSelectionParameters**: Changing video quality (1080p, 720p, 480p, 360p) or audio language (Hindi, English Dub, Japanese Sub, Tamil, Telugu) in `NativePlayerActivity` dynamically invokes `exoPlayer.setTrackSelectionParameters()`:
-  - Video Quality: `builder.setMaxVideoSize(1920, targetHeight)`.
-  - Audio Language: `builder.setPreferredAudioLanguage(targetLangCode)`.
-- **ExoPlayer Track Extraction (`populateTracksFromExoPlayer`)**: When ExoPlayer reaches `Player.STATE_READY`, it inspects `exoPlayer.getCurrentTracks()` and populates available resolutions and audio languages directly from the active HLS stream into the settings sheet.
+### Black Screen Fix (Server 2-A VidNest)
+- **Segment Chunk Filtering (`.m4s` / `.ts`)**: Previously, VideoSniffer captured 2-second `.m4s` / `.ts` audio segment fragments, causing ExoPlayer to load an audio-only track with a black screen. `.m4s` and `.ts` chunk files are now strictly filtered out in both `VideoSniffer.java` and `NativePlayerActivity.java`, forcing VideoSniffer to wait for the real `.m3u8` master playlist (which contains full 1080p video + multi-audio tracks).
 
-### Dual Audio Prevention Mechanics
-- **Active Sniffer Lifecycle (`VideoSniffer.cancelActiveSniffers()`)**: Whenever `NativePlayerActivity` launches a new stream or switches servers (Server 1 $\leftrightarrow$ Server 2), `VideoSniffer.cancelActiveSniffers()` halts and destroys all running background sniffers, muting and pausing their WebViews to eliminate duplicate background audio playback.
-- **ExoPlayer Instance Release**: `setupExoPlayerOnlineDirect` and `onNewIntent` call `exoPlayer.stop()` and `exoPlayer.release()` before initializing a new stream, guaranteeing only 1 single audio/video instance runs at any time.
+### Embed Sniffing & Base URL Resolution (Server 2-B TryEmbed)
+- **Host Base URL Matching**: Added `tryembed.us.cc` (`https://tryembed.us.cc/`) and `vidnest.fun` (`https://vidnest.fun/`) to `VideoSniffer` iframe base URL resolution and HTTP headers (`Referer` & `Origin`), ensuring same-origin security policies pass smoothly and direct `.m3u8` playlists and `.vtt` subtitles are sniffed successfully.
 
 ---
 
@@ -65,10 +61,6 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 - **Dedicated API Priority**: `fetchUnifiedSubtitlesJava(anilistId, episodeNumber)` queries `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=...&ep=...`.
 - **Protected Subtitle Track**: VideoSniffer is explicitly prevented from overwriting `subtitleUrl` if a track from the dedicated Subtitle API is already loaded.
 - **VTT/SRT Cue Reset (`downloadAndParseVttFile`)**: `parsedVttCues.clear()` is called immediately before downloading new `.vtt` / `.srt` files to ensure stale cues from previous episodes or servers do not persist.
-- **Native Overlay Styling Sync**:
-  - `applyCaptionStyle()` applies custom styles to `text_native_subtitle_overlay`:
-    - **Bottom Margin**: Dynamic bottom margin calculation (`(int) (12 + (bmPercentage * 2.2f)) * density`).
-    - **Outline / Shadow**: Sets `textOverlay.setShadowLayer()` based on `"Shadow"`, `"Outline"`, or `"None"`.
 
 ---
 
@@ -90,18 +82,7 @@ AniLove is built as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** applic
 
 ---
 
-## ⏩ 5. AniSkip Integration, OP/ED Seekbar Highlights & Auto-Next Countdown Toast
+## 🛠️ 5. Maintenance Checklist for Developers
 
-- **AniSkip API Parameter Fix**: AniSkip API v2 requires the `episodeLength` parameter (`&episodeLength=1440`). Adding `episodeLength` resolved `HTTP 400 Bad Request` errors, returning exact OP/ED skip intervals.
-- **Permanent Yellow Seekbar Highlight (`OpEdSeekBarDrawable`)**:
-  - Draws a vibrant **yellow highlight bar** (`#FFD700`) on the seekbar track across the exact Opening (`aniSkipOpStart` to `aniSkipOpEnd`) and Ending (`aniSkipEdStart` to `aniSkipEdEnd`) intervals.
-- **Auto-Next Episode Countdown Toast (`layout_auto_next_toast`)**:
-  - When `duration - position <= 10s` (10 seconds remaining), a non-intrusive pill toast appears with `"Next in X s"`, `"Play Now"`, and `"✕ Cancel"` buttons.
-
----
-
-## 🛠️ 6. Maintenance Checklist for Developers
-
-1. **Dual Audio Prevention**: Always call `VideoSniffer.cancelActiveSniffers()` and release `exoPlayer` before starting new streams.
-2. **Subtitles**: The dedicated Subtitle API (`subtitles-l8cm.onrender.com/subtitles.php`) is the primary subtitle provider. Do not allow VideoSniffer to overwrite `subtitleUrl` when dedicated API subtitles are loaded.
-3. **ExoPlayer Tracks**: Use `exoPlayer.setTrackSelectionParameters()` to update video quality and audio language dynamically at runtime.
+1. **Segment Chunk Filtering**: Never allow 2-second `.m4s` or `.ts` chunks to be captured as video URLs in `VideoSniffer`. VideoSniffer must always capture master or variant `.m3u8` playlists or complete `.mp4` files.
+2. **Server Base URLs**: Ensure any new embed provider domain is registered in `VideoSniffer.sniff()` and `getBestRefererForUrl()` so same-origin iframe security policies pass without HTTP 403 errors.

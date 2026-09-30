@@ -15,6 +15,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -40,9 +41,9 @@ public class VideoSniffer {
     private Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
 
-    // Notice: .ts is purposely excluded so we capture .m3u8 playlists or .mp4 files, not individual 2-second transport chunks
+    // Notice: .ts and .m4s are purposely excluded so we capture .m3u8 playlists or .mp4 files, not individual 2-second transport/fragment chunks
     private static final List<String> VIDEO_EXTENSIONS = Arrays.asList(
-            ".m3u8", ".mp4", ".m4s", ".mpd", ".m4v", "googlevideo.com",
+            ".m3u8", ".mp4", ".mpd", ".m4v", "googlevideo.com",
             "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u"
     );
 
@@ -240,8 +241,8 @@ public class VideoSniffer {
             return false;
         }
 
-        // Must not be an individual 2-second .ts segment (we want playlist or full video)
-        if (cleanPath.endsWith(".ts") && !cleanPath.contains(".m3u8")) {
+        // Must not be an individual 2-second .ts or .m4s segment (we want playlist or full video)
+        if ((cleanPath.endsWith(".ts") || cleanPath.endsWith(".m4s")) && !cleanPath.contains(".m3u8")) {
             return false;
         }
 
@@ -294,6 +295,14 @@ public class VideoSniffer {
                     else if (pageUrl.contains("autoembed")) baseUrl = "https://autoembed.co/";
                     else if (pageUrl.contains("rubystm")) baseUrl = "https://rubystm.com/";
                     else if (pageUrl.contains("iqsmart")) baseUrl = "https://pro.iqsmartgames.com/";
+                    else if (pageUrl.contains("vidnest")) baseUrl = "https://vidnest.fun/";
+                    else if (pageUrl.contains("tryembed")) baseUrl = "https://tryembed.us.cc/";
+                    else {
+                        try {
+                            URL u = new URL(pageUrl);
+                            baseUrl = u.getProtocol() + "://" + u.getHost() + "/";
+                        } catch (Exception ignored) {}
+                    }
 
                     Log.i(TAG, "Loading embed in sniffer iframe via loadDataWithBaseURL: " + baseUrl);
                     webView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
@@ -308,8 +317,18 @@ public class VideoSniffer {
                         referer = "https://rubystm.com/";
                     } else if (pageUrl.contains("iqsmart")) {
                         referer = "https://pro.iqsmartgames.com/";
+                    } else if (pageUrl.contains("vidnest")) {
+                        referer = "https://vidnest.fun/";
+                    } else if (pageUrl.contains("tryembed")) {
+                        referer = "https://tryembed.us.cc/";
+                    } else {
+                        try {
+                            URL u = new URL(pageUrl);
+                            referer = u.getProtocol() + "://" + u.getHost() + "/";
+                        } catch (Exception ignored) {}
                     }
                     headers.put("Referer", referer);
+                    headers.put("Origin", referer.endsWith("/") ? referer.substring(0, referer.length() - 1) : referer);
                     headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
                     webView.loadUrl(pageUrl, headers);
                 }

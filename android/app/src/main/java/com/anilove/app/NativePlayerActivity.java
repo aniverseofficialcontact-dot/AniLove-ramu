@@ -1067,12 +1067,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         int hIdx = lower.indexOf('#');
         if (hIdx != -1) lower = lower.substring(0, hIdx);
 
-        if (lower.endsWith(".js") || lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".htm")) {
+        if (lower.endsWith(".js") || lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".m4s") || lower.endsWith(".ts")) {
             return false;
         }
 
         return lower.endsWith(".m3u8") || lower.endsWith(".mp4") || lower.endsWith(".m3u") ||
-               lower.endsWith(".m4s") || lower.endsWith(".mpd") || lower.contains("/cdn/hls/") ||
+               lower.endsWith(".mpd") || lower.contains("/cdn/hls/") ||
                lower.contains("/hls/") || lower.contains("manifest.m3u8") || lower.contains("master.m3u8") ||
                lower.contains("index.m3u8") || lower.contains("googlevideo.com");
     }
