@@ -1037,9 +1037,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         try {
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
+            if (host.contains("dramahot")) return "https://dramahot.top/";
+            if (host.contains("mikora") || host.contains("nexabloom") || host.contains("silverorbit")) return "https://megaplay.buzz/";
             if (host.contains("vidnest")) return "https://vidnest.fun/";
-            if (host.contains("tryembed")) return "https://tryembed.us.cc/";
-            if (host.contains("anixx") || host.contains("dramahot")) return "https://tryembed.us.cc/";
+            if (host.contains("tryembed") || host.contains("anixx")) return "https://tryembed.us.cc/";
             if (host.contains("rubystm")) return "https://rubystm.com/";
             if (host.contains("vidlink")) return "https://vidlink.pro/";
             if (host.contains("vidsrc")) return "https://vidsrc.cc/";
@@ -1238,6 +1239,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                 URL refUrl = new URL(effectiveReferer);
                 requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
             } catch (Exception ignored) {}
+
+            requestHeaders.put("Accept", "*/*");
+            requestHeaders.put("Sec-Fetch-Dest", "empty");
+            requestHeaders.put("Sec-Fetch-Mode", "cors");
+            requestHeaders.put("Sec-Fetch-Site", "cross-site");
 
             try {
                 String cookieStr = CookieManager.getInstance().getCookie(hlsUrl);
