@@ -56,19 +56,28 @@ AniLove is engineered as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** a
 
 ---
 
-## ⚡ 3. Instant Server Switching & Direct API Extractors
+## ⚡ 3. Verified Server 1 Configuration & Direct API Extractors
+
+### 📺 Server 1 Active Server Selection
+Server 1 has been cleaned to keep strictly the **4 verified working & promising servers**:
+1. **Server 1-C (`piratexplay.cc Multi`)**: Multi-audio proxy server providing Hindi, Tamil, Telugu, English, and Japanese audio links. Unpacks language choices directly into target `abyssplayer.com` stream URLs.
+2. **Server 1-P (`blakiteapi.xyz`)**: Direct API embed stream server.
+3. **Server 1-Q (`abyssplayer.com`)**: High-performance Abyss Player server.
+4. **Server 1-R (`vidmoly.biz`)**: Ultra-reliable HLS video stream server.
+
+*(All non-working legacy Server 1 options—A, B, D, E, F, G, H, I, J, K, L, M, N, O, S—have been removed to ensure 100% playback reliability).*
+
+### 🛡️ Abyss Player Frame-Busting & Anti-Redirect Fix
+Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-busting check:
+`if(top.location == self.location && !/^(.+?)\.abyss\.to$/.test(document.location.hostname)) { window.location = "https://abyss.to"; }`
+- **Solution in `VideoSniffer.java`**:
+  - `injectAntiRedirectScript()` overrides the `window.top` getter dynamically so `top.location == self.location` evaluates to `false`.
+  - `shouldOverrideUrlLoading()` intercepts and aborts any navigation attempt to `https://abyss.to/`.
+  - This keeps `abyssplayer.com` executing its `SoTrym` payload on page, decoding `datas` and requesting the raw video stream for ExoPlayer!
 
 ### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
-- When any server option is selected in the UI dropdown (`Server 1`, `Server 1-B`, `Server 2-A-SUB`, `Server 2-A-DUB`, `Server 2-B-SUB`, `Server 2-B-DUB`, `Server 2-C-SUB`, `Server 2-C-DUB`), `handleServerSwitchDirect` is invoked **instantly**, passing the exact server URL and `serverName` to `NativePlayer.play()`.
+- When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A-SUB`, `Server 2-A-DUB`, `Server 2-B-SUB`, `Server 2-B-DUB`, `Server 2-C-SUB`, `Server 2-C-DUB`), `handleServerSwitchDirect` is invoked **instantly**, passing the exact server URL and `serverName` to `NativePlayer.play()`.
 - Bypasses web player resolver delays, updating the **Live Diagnostic HUD** and switching the active video stream in Java immediately!
-
-### 🎬 Server 1 Direct Extractor (`attemptVidLinkDirectExtract` in `NativePlayerActivity.java`)
-- Queries `https://vidlink.pro/api/b/anime/{id}/{ep}?dub={true|false}` directly in Java.
-- Extracts the direct 1080p `.m3u8` video stream in **< 200ms**, eliminating Server 1 load delays and source errors.
-
-### 🔌 Server 2 Direct Extractor (`attemptServer2DirectExtract` in `NativePlayerActivity.java`)
-- For Server 2 URLs matching `vidnest.fun` or `animepahe`, queries the direct stream HTTP API.
-- Converts embed pages directly into raw `.m3u8` master playlists without opening headless WebViews, yielding near-zero startup latency.
 
 ---
 

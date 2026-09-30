@@ -105,6 +105,18 @@ public class VideoSniffer {
             }
 
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    String u = request.getUrl().toString().toLowerCase();
+                    if (u.equals("https://abyss.to") || u.equals("https://abyss.to/")) {
+                        Log.i(TAG, "Prevented anti-frame redirect to abyss.to homepage!");
+                        return true; // Abort homepage redirect
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     Log.w(TAG, "Main frame warning/error: " + error.getDescription());
@@ -114,12 +126,14 @@ public class VideoSniffer {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                injectAntiRedirectScript(view);
                 injectRequestSniffer(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                injectAntiRedirectScript(view);
                 injectRequestSniffer(view);
             }
         });
@@ -142,6 +156,19 @@ public class VideoSniffer {
                 }
             }
         }, "VideoBridge");
+    }
+
+    private void injectAntiRedirectScript(WebView view) {
+        String script =
+            "(function() {" +
+            "  try {" +
+            "    Object.defineProperty(window, 'top', {" +
+            "      get: function() { return { location: { href: 'https://abyss.to/embedded_player' } }; }," +
+            "      configurable: true" +
+            "    });" +
+            "  } catch(e) {}" +
+            "})();";
+        view.evaluateJavascript(script, null);
     }
 
     private void injectRequestSniffer(WebView view) {

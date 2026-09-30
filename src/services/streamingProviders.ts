@@ -535,23 +535,38 @@ export async function resolveEpisodeSource({
 
     const processedServers: Array<{ name: string; url: string }> = [];
 
-    // Map ALL raw servers from AnimeWorld API (Server 1-A, Server 1-B, Server 1-C, Server 1-D ... up to Server 1-S)
+    // Map and filter raw servers from AnimeWorld API
+    // Strictly keep only the 4 verified working Server 1 options: Server 1-C, Server 1-P, Server 1-Q, Server 1-R
+    const ALLOWED_SERVER1_CODES = new Set(['Server 1-C', 'Server 1-P', 'Server 1-Q', 'Server 1-R']);
+
     if (rawServers && rawServers.length > 0) {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       rawServers.forEach((srv, idx) => {
         const letter = letters[idx] || `${idx + 1}`;
         const cleanName = `Server 1-${letter}`;
-        const unpackedUrl = unpackServerUrl(srv.url, language);
-        if (unpackedUrl) {
-          processedServers.push({
-            name: cleanName,
-            url: unpackedUrl,
-          });
+        const rawUrlLower = (srv.url || '').toLowerCase();
+
+        // Keep strictly Server 1-C, 1-P, 1-Q, 1-R or matching domain signatures
+        const isAllowed =
+          ALLOWED_SERVER1_CODES.has(cleanName) ||
+          rawUrlLower.includes('multi.php') ||
+          rawUrlLower.includes('blakiteapi') ||
+          rawUrlLower.includes('abyssplayer') ||
+          rawUrlLower.includes('vidmoly');
+
+        if (isAllowed) {
+          const unpackedUrl = unpackServerUrl(srv.url, language);
+          if (unpackedUrl) {
+            processedServers.push({
+              name: cleanName,
+              url: unpackedUrl,
+            });
+          }
         }
       });
     } else if (streamInfo.streamLink || streamInfo.file) {
       processedServers.push({
-        name: 'Server 1-A',
+        name: 'Server 1-C',
         url: unpackServerUrl(streamInfo.streamLink || streamInfo.file, language),
       });
     }
@@ -599,7 +614,7 @@ export async function resolveEpisodeSource({
 
     // Select requested server URL strictly
     let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
-    let selectedServerName = processedServers[0]?.name || 'Server 1-A';
+    let selectedServerName = processedServers[0]?.name || 'Server 1-R';
 
     if (serverName) {
       const norm = serverName.toLowerCase().replace(/[^a-z0-9]/g, '');
