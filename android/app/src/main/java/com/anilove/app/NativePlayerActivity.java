@@ -1056,19 +1056,23 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isDirectMediaStream(String url) {
         if (url == null || url.trim().isEmpty()) return false;
         String lower = url.toLowerCase().trim();
-        int qIdx = lower.indexOf('?');
-        if (qIdx != -1) lower = lower.substring(0, qIdx);
-        int hIdx = lower.indexOf('#');
-        if (hIdx != -1) lower = lower.substring(0, hIdx);
 
-        if (lower.endsWith(".js") || lower.endsWith(".css") || lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".m4s") || lower.endsWith(".ts")) {
+        if (lower.contains("tryembed.us.cc/s/") || lower.contains("vidnest.fun/s/")) {
             return false;
         }
 
-        return lower.endsWith(".m3u8") || lower.endsWith(".mp4") || lower.endsWith(".m3u") ||
-               lower.endsWith(".mpd") || lower.contains("/cdn/hls/") ||
+        if (lower.contains(".js") || lower.contains(".css") || lower.contains(".html") || lower.contains(".htm") || lower.contains(".vtt") || lower.contains(".srt")) {
+            return false;
+        }
+
+        if ((lower.contains(".ts") || lower.contains(".m4s")) && !lower.contains(".m3u8")) {
+            return false;
+        }
+
+        return lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m3u") ||
+               lower.contains(".mpd") || lower.contains("/cdn/hls/") ||
                lower.contains("/hls/") || lower.contains("manifest.m3u8") || lower.contains("master.m3u8") ||
-               lower.contains("index.m3u8") || lower.contains("googlevideo.com");
+               lower.contains("index.m3u8") || lower.contains("googlevideo.com") || lower.contains("/proxy?");
     }
 
     @UnstableApi

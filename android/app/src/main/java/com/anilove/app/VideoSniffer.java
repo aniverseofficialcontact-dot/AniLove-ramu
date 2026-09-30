@@ -234,40 +234,32 @@ public class VideoSniffer {
             return false;
         }
 
-        // 2. Strip query params and hash to check the clean URL path extension
-        String cleanPath = lowerUrl;
-        int qIdx = cleanPath.indexOf('?');
-        if (qIdx != -1) cleanPath = cleanPath.substring(0, qIdx);
-        int hIdx = cleanPath.indexOf('#');
-        if (hIdx != -1) cleanPath = cleanPath.substring(0, hIdx);
-
-        // Block static web resources based on clean file extension
-        if (cleanPath.endsWith(".js") || cleanPath.endsWith(".css") ||
-            cleanPath.endsWith(".png") || cleanPath.endsWith(".jpg") ||
-            cleanPath.endsWith(".jpeg") || cleanPath.endsWith(".webp") ||
-            cleanPath.endsWith(".svg") || cleanPath.endsWith(".gif") ||
-            cleanPath.endsWith(".ico") || cleanPath.endsWith(".woff") ||
-            cleanPath.endsWith(".woff2") || cleanPath.endsWith(".ttf") ||
-            cleanPath.endsWith(".html") || cleanPath.endsWith(".htm") ||
-            cleanPath.endsWith(".php") || cleanPath.endsWith(".json")) {
+        // 2. Block static web resources
+        if (lowerUrl.contains(".js") || lowerUrl.contains(".css") ||
+            lowerUrl.contains(".png") || lowerUrl.contains(".jpg") ||
+            lowerUrl.contains(".jpeg") || lowerUrl.contains(".webp") ||
+            lowerUrl.contains(".svg") || lowerUrl.contains(".gif") ||
+            lowerUrl.contains(".ico") || lowerUrl.contains(".woff") ||
+            lowerUrl.contains(".woff2") || lowerUrl.contains(".ttf") ||
+            lowerUrl.contains(".html") || lowerUrl.contains(".htm") ||
+            lowerUrl.contains(".vtt") || lowerUrl.contains(".srt") ||
+            lowerUrl.contains(".php") || lowerUrl.contains(".json")) {
             return false;
         }
 
-        // Must not be an individual 2-second .ts or .m4s segment (we want playlist or full video)
-        if ((cleanPath.endsWith(".ts") || cleanPath.endsWith(".m4s")) && !cleanPath.contains(".m3u8")) {
+        // 3. Must not be an isolated 2-second .ts or .m4s segment chunk
+        if ((lowerUrl.contains(".ts") || lowerUrl.contains(".m4s")) && !lowerUrl.contains(".m3u8")) {
             return false;
         }
 
-        // 3. Must have valid video or playlist extension in the clean path or query
+        // 4. Must contain a valid video or playlist extension anywhere in path OR query params!
         for (String ext : VIDEO_EXTENSIONS) {
-            if (cleanPath.contains(ext)) {
+            if (lowerUrl.contains(ext)) {
                 return true;
             }
         }
-        if (cleanPath.endsWith(".mp4") || cleanPath.endsWith(".m4s") || cleanPath.endsWith(".mpd") || cleanPath.endsWith(".m3u8")) {
-            return true;
-        }
-        return false;
+
+        return lowerUrl.contains(".m3u8") || lowerUrl.contains(".mp4") || lowerUrl.contains(".mpd");
     }
 
     public void sniff(String pageUrl, OnVideoFoundListener listener) {
