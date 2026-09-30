@@ -423,7 +423,7 @@ export function App() {
   // 2. Fetch Initial Catalog from AniList GraphQL (Live AniList Sync with 24h Cache)
   const loadHomeContent = useCallback(async () => {
     const cachedFeed = getHomeFeedCache();
-    if (cachedFeed) {
+    if (cachedFeed && cachedFeed.trending && cachedFeed.trending.length > 0) {
       setTrendingAnime(cachedFeed.trending || []);
       setPopularAnime(cachedFeed.popular || []);
       setTopRatedAnime(cachedFeed.topRated || []);
@@ -440,16 +440,18 @@ export function App() {
     setIsMainLoading(true);
     try {
       const feed = await fetchHomeFeed(24);
-      setTrendingAnime(feed.trending);
-      setPopularAnime(feed.popular);
-      setTopRatedAnime(feed.topRated);
-      setNewestAnime(feed.newest);
-      setUpcomingAnime(feed.upcoming);
-      setMoviesAnime(feed.movies);
-      setActionAnime(feed.action);
-      setFantasyAnime(feed.fantasy);
-      setRomComAnime(feed.romcom);
-      saveHomeFeedCache(feed);
+      if (feed && feed.trending && feed.trending.length > 0) {
+        setTrendingAnime(feed.trending);
+        setPopularAnime(feed.popular);
+        setTopRatedAnime(feed.topRated);
+        setNewestAnime(feed.newest);
+        setUpcomingAnime(feed.upcoming);
+        setMoviesAnime(feed.movies);
+        setActionAnime(feed.action);
+        setFantasyAnime(feed.fantasy);
+        setRomComAnime(feed.romcom);
+        saveHomeFeedCache(feed);
+      }
     } catch (err: any) {
       console.error('Error loading home content:', err);
       // Only notify if we don't already have catalog in state

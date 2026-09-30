@@ -146,6 +146,68 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
+        <!-- Live Diagnostic HUD Overlay -->
+        <LinearLayout
+            android:id="@+id/hud_diagnostic_overlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginTop="52dp"
+            android:layout_marginStart="14dp"
+            android:background="@drawable/indicator_pill_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:orientation="vertical"
+            android:elevation="30dp"
+            android:translationZ="30dp"
+            android:visibility="visible">
+
+            <TextView
+                android:id="@+id/hud_server_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SERVER: Loading..."
+                android:textColor="#FFD700"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hud_stream_url"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:text="URL: https://..."
+                android:textColor="#34D399"
+                android:textSize="10sp"
+                android:ellipsize="middle"
+                android:singleLine="true" />
+
+            <TextView
+                android:id="@+id/hud_referer"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:text="REFERER: https://..."
+                android:textColor="#818CF8"
+                android:textSize="10sp"
+                android:ellipsize="middle"
+                android:singleLine="true" />
+
+            <TextView
+                android:id="@+id/hud_playback_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="STATE: BUFFERING | 1080p"
+                android:textColor="@android:color/white"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/hud_buffer_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BUFFER: 0s (0%)"
+                android:textColor="#FBBF24"
+                android:textSize="10sp" />
+        </LinearLayout>
+
         <!-- Native Control Overlay -->
         <RelativeLayout
             android:id="@+id/controls_overlay"

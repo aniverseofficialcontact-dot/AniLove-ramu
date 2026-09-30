@@ -103,6 +103,7 @@ import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.FileDataSource;
 import androidx.media3.datasource.HttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -161,6 +162,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean hasRetriedSniffer = false;
 
     // Real-Time Dynamic Media Track States
+    private String currentLoadedStreamUrl = "";
     private List<String> detectedQualities = new ArrayList<>();
     private List<String> detectedAudios = new ArrayList<>();
     private List<String> detectedSubtitles = new ArrayList<>();
@@ -1218,6 +1220,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     private void setupExoPlayerOnlineDirect(String hlsUrl, String referer, Map<String, String> headers) {
         if (hlsUrl == null || hlsUrl.isEmpty()) return;
+        currentLoadedStreamUrl = hlsUrl;
         try {
             if (exoPlayer != null) {
                 exoPlayer.stop();
@@ -1258,7 +1261,19 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             httpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
 
-            exoPlayer = new ExoPlayer.Builder(this).build();
+            DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                            15000, // Min buffer: 15s
+                            50000, // Max buffer: 50s
+                            1200,  // Buffer for playback: 1.2s
+                            2500   // Buffer for playback after rebuffer: 2.5s
+                    )
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build();
+
+            exoPlayer = new ExoPlayer.Builder(this)
+                    .setLoadControl(loadControl)
+                    .build();
             exoPlayerView.setPlayer(exoPlayer);
 
             MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
@@ -2412,7 +2427,51 @@ public class NativePlayerActivity extends AppCompatActivity {
         }, 1000); 
     }
 
+    private String currentActiveServerName = "Server 1";
+
+    private void updateDiagnosticHud() {
+        TextView hudServer = findViewById(R.id.hud_server_name);
+        TextView hudUrl = findViewById(R.id.hud_stream_url);
+        TextView hudRef = findViewById(R.id.hud_referer);
+        TextView hudStatus = findViewById(R.id.hud_playback_status);
+        TextView hudBuffer = findViewById(R.id.hud_buffer_info);
+
+        if (hudServer == null) return;
+
+        String serverName = getIntent().getStringExtra("serverName");
+        if (serverName == null || serverName.isEmpty()) serverName = currentActiveServerName;
+
+        hudServer.setText("SERVER: " + serverName);
+
+        String urlText = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : "Loading...";
+        hudUrl.setText("URL: " + urlText);
+
+        String refText = getBestRefererForUrl(currentLoadedStreamUrl, null);
+        hudRef.setText("REFERER: " + refText);
+
+        if (exoPlayer != null) {
+            int state = exoPlayer.getPlaybackState();
+            String stateStr = "UNKNOWN";
+            if (state == Player.STATE_BUFFERING) stateStr = "BUFFERING ⏳";
+            else if (state == Player.STATE_READY) stateStr = "READY ▶️";
+            else if (state == Player.STATE_ENDED) stateStr = "ENDED 🏁";
+            else if (state == Player.STATE_IDLE) stateStr = "IDLE ⏸️";
+
+            String q = (currentSelectedQuality != null) ? currentSelectedQuality : "1080p";
+            hudStatus.setText("STATE: " + stateStr + " | " + q + " | " + currentSelectedAudio);
+
+            long posMs = exoPlayer.getCurrentPosition();
+            long durMs = exoPlayer.getDuration();
+            long bufMs = exoPlayer.getBufferedPosition();
+            long bufferedSec = Math.max(0, (bufMs - posMs) / 1000L);
+            int bufPercent = (durMs > 0) ? (int) ((bufMs * 100) / durMs) : 0;
+
+            hudBuffer.setText("BUFFER: " + bufferedSec + "s (" + bufPercent + "%) | " + formatTime((int) (posMs / 1000)) + " / " + formatTime((int) (durMs / 1000)));
+        }
+    }
+
     private void syncPlayerState() {
+        updateDiagnosticHud();
         if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
