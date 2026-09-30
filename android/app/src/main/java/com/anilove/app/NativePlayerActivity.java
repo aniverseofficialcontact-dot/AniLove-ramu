@@ -25,6 +25,7 @@ import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.net.Uri;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -160,11 +161,12 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isVolumeBoosted = false;
     private boolean isSubtitlesEnabled = true;
 
-    // Auto-Next Toast State
+    // Auto-Next Toast & Sniffer Retry State
     private View layoutAutoNextToast;
     private TextView textAutoNextCountdown;
     private boolean isAutoNextCanceled = false;
     private boolean isAutoNextTriggered = false;
+    private boolean hasRetriedSniffer = false;
 
     // Real-Time Dynamic Media Track States
     private List<String> detectedQualities = new ArrayList<>();
@@ -1118,6 +1120,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     public void setupExoPlayerOnline(String hlsUrl, String referer, Map<String, String> headers) {
         if (hlsUrl == null || hlsUrl.isEmpty()) return;
+        hasRetriedSniffer = false;
 
         if (!isDirectMediaStream(hlsUrl)) {
             Log.i("AniLove", "Embed page detected — running VideoSniffer for: " + hlsUrl);
@@ -1142,8 +1145,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             DefaultHttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
                     .setUserAgent("Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .setConnectTimeoutMs(20000)
-                    .setReadTimeoutMs(20000)
+                    .setConnectTimeoutMs(25000)
+                    .setReadTimeoutMs(25000)
                     .setAllowCrossProtocolRedirects(true);
 
             Map<String, String> requestHeaders = new HashMap<>();
@@ -1204,6 +1207,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
                     } else if (playbackState == Player.STATE_READY) {
                         if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                        populateTracksFromExoPlayer();
                     } else if (playbackState == Player.STATE_ENDED) {
                         isPlaying = false;
                         btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
@@ -1213,21 +1217,21 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
-                    Log.e("AniLove", "ExoPlayer error: " + error.getMessage(), error);
+                    Log.e("AniLove", "ExoPlayer error (code " + error.errorCode + "): " + error.getMessage(), error);
                     if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
 
-                    boolean is403 = false;
-                    if (error.getCause() instanceof HttpDataSource.InvalidResponseCodeException) {
-                        HttpDataSource.InvalidResponseCodeException httpError = (HttpDataSource.InvalidResponseCodeException) error.getCause();
-                        if (httpError.responseCode == 403 || httpError.responseCode == 401) {
-                            is403 = true;
-                        }
-                    }
+                    boolean isSourceOrNetworkError = (error.getCause() instanceof IOException) ||
+                                                     (error.getCause() instanceof HttpDataSource.HttpDataSourceException) ||
+                                                     (error.getCause() instanceof UnrecognizedInputFormatException) ||
+                                                     (error.errorCode >= 2000 && error.errorCode <= 2008);
 
-                    if (is403 || error.getCause() instanceof UnrecognizedInputFormatException ||
-                        error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED) {
-                        Log.w("AniLove", "HTTP 403 or Unrecognized Format — retrying via VideoSniffer for: " + hlsUrl);
-                        runSnifferFallback(hlsUrl, effectiveReferer, headers);
+                    if (isSourceOrNetworkError && !hasRetriedSniffer) {
+                        hasRetriedSniffer = true;
+                        String originalUrl = getIntent().getStringExtra("url");
+                        if (originalUrl == null) originalUrl = getIntent().getStringExtra("videoUrl");
+                        if (originalUrl == null) originalUrl = hlsUrl;
+                        Log.w("AniLove", "Source/Network error — auto-retrying with VideoSniffer for: " + originalUrl);
+                        runSnifferFallback(originalUrl, getBestRefererForUrl(originalUrl, null), headers);
                     } else {
                         Toast.makeText(NativePlayerActivity.this, "Playback error: Try selecting Server 2-A or Server 2-B from the menu.", Toast.LENGTH_LONG).show();
                     }
