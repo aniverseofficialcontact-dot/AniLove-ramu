@@ -445,6 +445,57 @@ export async function fetchHiAnimeApiServers(
 }
 
 /**
+ * Fetch Server 3 stream embed from AnimeSalt API
+ */
+export async function fetchAnimeSaltStream(
+  animeTitle: string,
+  episodeNumber: number
+): Promise<AvailableServerOption[]> {
+  const cleanTitle = (animeTitle || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const candidateIds = [
+    `${cleanTitle}-season-1`,
+    cleanTitle,
+    `${cleanTitle}-s1`,
+  ];
+
+  for (const idSlug of candidateIds) {
+    const apiUrl = `https://animesalt-api-omega.vercel.app/api/stream?id=${encodeURIComponent(idSlug)}&ep=ep-${episodeNumber}`;
+    try {
+      let data: any = null;
+      if (Capacitor.isNativePlatform()) {
+        const httpRes = await CapacitorHttp.get({ url: apiUrl, headers: { Accept: 'application/json' } });
+        if (httpRes.status === 200 && httpRes.data) {
+          data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+        }
+      } else {
+        const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } });
+        if (res.ok) data = await res.json();
+      }
+
+      if (data && data.success && data.data && data.data.embedUrl) {
+        return [
+          {
+            name: 'Server 3-A',
+            type: 'SUB',
+            linkId: data.data.embedUrl,
+          }
+        ];
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return [
+    {
+      name: 'Server 3-A',
+      type: 'SUB',
+      linkId: `https://animesalt-api-omega.vercel.app/api/stream?id=${cleanTitle}-season-1&ep=ep-${episodeNumber}`,
+    }
+  ];
+}
+
+/**
  * Stream resolver using AnimeWorld India v1 PHP API & HiAnime API with numeric anilistId + ep parameter.
  */
 export async function resolveEpisodeSource({
@@ -603,9 +654,13 @@ export async function resolveEpisodeSource({
       }
     }
 
+    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    const animeSaltServers = await fetchAnimeSaltStream(englishTitle, episodeNumber);
+
     const combinedAvailableServers: AvailableServerOption[] = [
       ...availableServers,
       ...hiAnimeServers,
+      ...animeSaltServers,
     ];
 
     // Universal Background Multi-Language Subtitle Track (Powered by Server 2-B Sub: tryembed.us.cc)
@@ -619,7 +674,7 @@ export async function resolveEpisodeSource({
     if (serverName) {
       const norm = serverName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-      // Match exact API server (Server 1-A, Server 1-B, Server 1-C, Server 1-D, etc.)
+      // Match exact API server (Server 1-C, Server 1-P, Server 1-Q, Server 1-R, Server 3-A, etc.)
       const matchedApi = processedServers.find(s => {
         const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
         return sNorm === norm || sNorm.startsWith(norm);
@@ -637,6 +692,15 @@ export async function resolveEpisodeSource({
         if (matchedHi) {
           selectedUrl = matchedHi.linkId;
           selectedServerName = matchedHi.name;
+        } else {
+          const matchedSalt = animeSaltServers.find(s => {
+            const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return sNorm === norm || sNorm.startsWith(norm) || norm.includes('server3');
+          });
+          if (matchedSalt) {
+            selectedUrl = matchedSalt.linkId;
+            selectedServerName = matchedSalt.name;
+          }
         }
       }
     }

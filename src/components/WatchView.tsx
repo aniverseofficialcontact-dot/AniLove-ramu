@@ -121,46 +121,25 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const [selectedSubServer, setSelectedSubServer] = useState<string>('Server 1');
   const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);
 
-  const handleServerSwitchDirect = (srvName: string) => {
+  const handleServerSwitchDirect = async (srvName: string) => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const id = anime.id || 1;
     const ep = episodeNumber || 1;
     const isDub = srvName.toLowerCase().includes('dub');
 
-    let targetUrl = `https://vidlink.pro/anime/${id}/${ep}?dub=${isDub}`;
-    if (srvName.toLowerCase() === 'server 1-b') {
-      targetUrl = `https://vidsrc.cc/v2/embed/anime/${id}/${ep}`;
-    } else if (srvName.includes('2-A-SUB')) {
-      targetUrl = `https://vidnest.fun/anime/${id}/${ep}/sub`;
-    } else if (srvName.includes('2-A-DUB')) {
-      targetUrl = `https://vidnest.fun/anime/${id}/${ep}/dub`;
-    } else if (srvName.includes('2-B-SUB')) {
-      targetUrl = `https://tryembed.us.cc/embed/anime/${id}/${ep}/sub`;
-    } else if (srvName.includes('2-B-DUB')) {
-      targetUrl = `https://tryembed.us.cc/embed/anime/${id}/${ep}/dub`;
-    } else if (srvName.includes('2-C-SUB')) {
-      targetUrl = `https://vidnest.fun/animepahe/${id}/${ep}/sub`;
-    } else if (srvName.includes('2-C-DUB')) {
-      targetUrl = `https://vidnest.fun/animepahe/${id}/${ep}/dub`;
+    console.log(`[WatchView] Direct Native Server Switch -> ${srvName}`);
+
+    try {
+      await launchNativePlayer({
+        anime,
+        episodeNumber: ep,
+        audio: isDub ? 'DUB' : selectedLanguage || 'SUB',
+        serverName: srvName,
+        totalEpisodes: episodesList.length,
+      });
+    } catch (e) {
+      console.warn('Direct server switch error:', e);
     }
-
-    console.log(`[WatchView] Direct Native Server Switch -> ${srvName}: ${targetUrl}`);
-
-    NativePlayer.play({
-      url: targetUrl,
-      title: `${anime.title?.english || anime.title?.romaji || 'Anime'} - Ep ${ep}`,
-      hasNext: episodesList.length > ep,
-      hasPrev: ep > 1,
-      startFullscreen: false,
-      anilistId: anime.id,
-      idMal: anime.idMal || 0,
-      episodeNumber: Number(ep),
-      audio: isDub ? 'DUB' : 'SUB',
-      serverName: srvName,
-      advancePlayer: settings?.advancePlayerEnabled ?? false,
-      startTime: 0,
-    }).catch((e) => console.warn('Direct server switch error:', e));
   };
 
   // Derive initial audio preference (English DUB or Japanese SUB by default)

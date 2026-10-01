@@ -75,9 +75,15 @@ Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-bu
   - `shouldOverrideUrlLoading()` intercepts and aborts any navigation attempt to `https://abyss.to/`.
   - This keeps `abyssplayer.com` executing its `SoTrym` payload on page, decoding `datas` and requesting the raw video stream for ExoPlayer!
 
+### 🧂 Server 3 Integration (AnimeSalt API)
+- **API Endpoint**: `https://animesalt-api-omega.vercel.app/api/stream?id=$animeSlug&ep=ep-$episodeNumber`
+- **Embed URL Sniffing**: Queries `data.embedUrl` from AnimeSalt API and passes it to `VideoSniffer.java`.
+- **Iframe Wrapper**: Embed URLs from AnimeSalt (such as `abyssplayer.com` or `megaplay.buzz`) are loaded inside an `<iframe>` HTML wrapper with `loadDataWithBaseURL("https://animesalt.me/", iframeHtml, "text/html", "UTF-8", null)`.
+- **ExoPlayer Header Authorization**: Captures the `.m3u8` master playlist and passes `Referer: https://animesalt.me/` and desktop/mobile User-Agent to ExoPlayer's `DefaultHttpDataSource.Factory`.
+- **RAM Optimization**: As soon as the `.m3u8` stream URL is captured, `VideoSniffer.cleanup()` immediately stops, clears (`about:blank`), and destroys (`destroy()`) the background WebView to free mobile RAM!
+
 ### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
-- When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A-SUB`, `Server 2-A-DUB`, `Server 2-B-SUB`, `Server 2-B-DUB`, `Server 2-C-SUB`, `Server 2-C-DUB`), `handleServerSwitchDirect` is invoked **instantly**, passing the exact server URL and `serverName` to `NativePlayer.play()`.
-- Bypasses web player resolver delays, updating the **Live Diagnostic HUD** and switching the active video stream in Java immediately!
+- When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A/B/C`, `Server 3-A (AnimeSalt)`), `handleServerSwitchDirect` is invoked **instantly**, delegating to `launchNativePlayer` and switching the active video stream in Java immediately!
 
 ---
 

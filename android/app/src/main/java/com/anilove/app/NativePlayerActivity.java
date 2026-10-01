@@ -1079,6 +1079,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (host.contains("vidlink")) return "https://vidlink.pro/";
             if (host.contains("vidsrc")) return "https://vidsrc.cc/";
             if (host.contains("iqsmart")) return "https://pro.iqsmartgames.com/";
+            if (host.contains("animesalt")) return "https://animesalt.me/";
             if (host.contains("abyssplayer") || host.contains("abyss") || host.contains("short.icu")) return "https://abyssplayer.com/";
             if (host.contains("vidmoly")) return "https://vidmoly.biz/";
             if (host.contains("blakiteapi")) return "https://blakiteapi.xyz/";

@@ -321,8 +321,9 @@ public class VideoSniffer {
                             "<iframe id='videoFrame' src='" + pageUrl.replace("'", "\\'") + "' allow='autoplay; fullscreen; encrypted-media' allowfullscreen referrerpolicy='no-referrer'></iframe>" +
                             "</body></html>";
 
-                    String baseUrl = "https://piratexplay.cc/";
-                    if (pageUrl.contains("vidlink")) baseUrl = "https://vidlink.pro/";
+                    String baseUrl = "https://animesalt.me/";
+                    if (pageUrl.contains("animesalt")) baseUrl = "https://animesalt.me/";
+                    else if (pageUrl.contains("vidlink")) baseUrl = "https://vidlink.pro/";
                     else if (pageUrl.contains("vidsrc")) baseUrl = "https://vidsrc.cc/";
                     else if (pageUrl.contains("autoembed")) baseUrl = "https://autoembed.co/";
                     else if (pageUrl.contains("rubystm")) baseUrl = "https://rubystm.com/";
@@ -340,8 +341,10 @@ public class VideoSniffer {
                     webView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
                 } else {
                     Map<String, String> headers = new HashMap<>();
-                    String referer = "https://piratexplay.cc/";
-                    if (pageUrl.contains("justanime.to")) {
+                    String referer = "https://animesalt.me/";
+                    if (pageUrl.contains("animesalt")) {
+                        referer = "https://animesalt.me/";
+                    } else if (pageUrl.contains("justanime.to")) {
                         referer = "https://justanime.to/";
                     } else if (pageUrl.contains("vidlink.pro")) {
                         referer = "https://vidlink.pro/";
