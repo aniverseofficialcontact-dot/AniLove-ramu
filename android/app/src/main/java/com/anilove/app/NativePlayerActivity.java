@@ -1060,16 +1060,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             return "https://google.com/";
         }
         try {
+            if (videoUrl != null) {
+                String vHost = new URL(videoUrl).getHost().toLowerCase();
+                if (vHost.contains("rumble.cloud") || vHost.contains("rumble")) return "https://blakiteapi.xyz/";
+                if (vHost.contains("googleapis.com") || vHost.contains("googleusercontent.com")) {
+                    if (primary.contains("animesalt")) return "https://animesalt.me/";
+                    return "https://abyssplayer.com/";
+                }
+            }
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
-            if (host.contains("dramahot")) return "https://dramahot.top/";
-            if (host.contains("mikora") || host.contains("nexabloom") || host.contains("silverorbit")) return "https://megaplay.buzz/";
-            if (host.contains("vidnest")) return "https://vidnest.fun/";
-            if (host.contains("tryembed") || host.contains("anixx")) return "https://tryembed.us.cc/";
-            if (host.contains("rubystm")) return "https://rubystm.com/";
-            if (host.contains("vidlink")) return "https://vidlink.pro/";
-            if (host.contains("vidsrc")) return "https://vidsrc.cc/";
-            if (host.contains("iqsmart")) return "https://pro.iqsmartgames.com/";
             if (host.contains("animesalt")) return "https://animesalt.me/";
             if (host.contains("abyssplayer") || host.contains("abyss") || host.contains("short.icu")) return "https://abyssplayer.com/";
             if (host.contains("vidmoly")) return "https://vidmoly.biz/";
