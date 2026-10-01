@@ -173,8 +173,52 @@ public class NativePlayerActivity extends AppCompatActivity {
             "      els.forEach(function(el) { try { el.remove(); } catch(e){} });" +
             "    });" +
             "  } catch(e) {}" +
+            "  function autoDismissPrompts(win) {" +
+            "    try {" +
+            "      var buttons = win.document.querySelectorAll('button, a, div[role=\"button\"], span');" +
+            "      for (var i = 0; i < buttons.length; i++) {" +
+            "        var text = (buttons[i].textContent || '').trim().toLowerCase();" +
+            "        if (text === 'continue' || text.startsWith('continue (') || text === 'resume' || text.startsWith('resume (')) {" +
+            "          buttons[i].click();" +
+            "        }" +
+            "      }" +
+            "      var divs = win.document.querySelectorAll('div, section, dialog');" +
+            "      for (var j = 0; j < divs.length; j++) {" +
+            "        var html = (divs[j].innerHTML || '').toLowerCase();" +
+            "        if (html.includes('continue watching') || html.includes('do you want to continue') || html.includes('resume watching')) {" +
+            "          var btn = divs[j].querySelector('button, .btn, a');" +
+            "          if (btn) btn.click();" +
+            "          else divs[j].style.display = 'none';" +
+            "        }" +
+            "      }" +
+            "    } catch(e) {}" +
+            "    for (var k = 0; k < win.frames.length; k++) {" +
+            "      try { autoDismissPrompts(win.frames[k]); } catch(e) {}" +
+            "    }" +
+            "  }" +
+            "  autoDismissPrompts(window);" +
+            "  if (!window.promptInterval) { window.promptInterval = setInterval(function() { autoDismissPrompts(window); }, 300); }" +
             "})();";
         webView.evaluateJavascript(script, null);
+    }
+
+    private void setPlaybackSpeedWebView(float speed) {
+        if (playerWebView == null) return;
+        is2xSpeed = (speed > 1.0f);
+        String script =
+            "(function() {" +
+            "  function setSpeed(win, spd) {" +
+            "    try {" +
+            "      var vids = win.document.querySelectorAll('video');" +
+            "      for (var i = 0; i < vids.length; i++) { vids[i].playbackRate = spd; }" +
+            "    } catch(e) {}" +
+            "    for (var k = 0; k < win.frames.length; k++) {" +
+            "      try { setSpeed(win.frames[k], spd); } catch(e) {}" +
+            "    }" +
+            "  }" +
+            "  setSpeed(window, " + speed + ");" +
+            "})();";
+        playerWebView.evaluateJavascript(script, null);
     }
 
     private boolean isPlaying = true;
@@ -878,6 +922,51 @@ public class NativePlayerActivity extends AppCompatActivity {
                     super.onPageFinished(view, url);
                     injectAdEraserScript(view);
                 }
+            });
+
+            GestureDetector webViewGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+                @Override
+                public boolean onDoubleTap(MotionEvent e) {
+                    if (!isWebViewPlayerMode) return false;
+                    float x = e.getX();
+                    int width = playerWebView != null ? playerWebView.getWidth() : getPhysicalScreenWidth();
+                    final boolean isForward = x > (width / 2.0f);
+                    showSeekIndicator(isForward);
+
+                    String seekScript =
+                        "(function() {" +
+                        "  function seekAll(win, delta) {" +
+                        "    try {" +
+                        "      var vids = win.document.querySelectorAll('video');" +
+                        "      for (var i = 0; i < vids.length; i++) { vids[i].currentTime = Math.max(0, vids[i].currentTime + delta); }" +
+                        "    } catch(e) {}" +
+                        "    for (var k = 0; k < win.frames.length; k++) {" +
+                        "      try { seekAll(win.frames[k], delta); } catch(e) {}" +
+                        "    }" +
+                        "  }" +
+                        "  seekAll(window, " + (isForward ? 10 : -10) + ");" +
+                        "})();";
+                    if (playerWebView != null) playerWebView.evaluateJavascript(seekScript, null);
+                    return true;
+                }
+
+                @Override
+                public void onLongPress(MotionEvent e) {
+                    if (!isWebViewPlayerMode) return;
+                    setPlaybackSpeedWebView(2.0f);
+                    if (indicator2x != null) indicator2x.setVisibility(View.VISIBLE);
+                }
+            });
+
+            playerWebView.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                    if (is2xSpeed) {
+                        setPlaybackSpeedWebView(currentPermanentSpeed);
+                        if (indicator2x != null) indicator2x.setVisibility(View.GONE);
+                    }
+                }
+                webViewGestureDetector.onTouchEvent(event);
+                return false;
             });
         }
         
