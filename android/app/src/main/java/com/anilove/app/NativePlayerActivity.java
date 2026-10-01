@@ -176,16 +176,26 @@ public class NativePlayerActivity extends AppCompatActivity {
             "    style.appendChild(document.createTextNode(css));" +
             "    (document.head || document.documentElement).appendChild(style);" +
             "  } catch(e) {}" +
-            "  function disableContextMenu(win) {" +
+            "  function disableContextMenuAndBindVideo(win) {" +
             "    try {" +
             "      win.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); return false; }, true);" +
             "      if (win.jwplayer) { try { win.jwplayer().on('contextmenu', function(e) { e.preventDefault(); }); } catch(err){} }" +
+            "      var v = win.document.querySelector('video');" +
+            "      if (v && !v.dataset.aniskipBound) {" +
+            "        v.dataset.aniskipBound = 'true';" +
+            "        v.addEventListener('timeupdate', function() {" +
+            "          if (window.AndroidBridge && typeof window.AndroidBridge.onStateUpdate === 'function') {" +
+            "            window.AndroidBridge.onStateUpdate(v.currentTime, v.duration || 0, v.paused);" +
+            "          }" +
+            "        });" +
+            "      }" +
             "    } catch(e) {}" +
             "    for (var k = 0; k < win.frames.length; k++) {" +
-            "      try { disableContextMenu(win.frames[k]); } catch(e) {}" +
+            "      try { disableContextMenuAndBindVideo(win.frames[k]); } catch(e) {}" +
             "    }" +
             "  }" +
-            "  disableContextMenu(window);" +
+            "  disableContextMenuAndBindVideo(window);" +
+            "  if (!window.aniskipInterval) { window.aniskipInterval = setInterval(function() { disableContextMenuAndBindVideo(window); }, 800); }" +
             "})();";
         webView.evaluateJavascript(script, null);
     }
@@ -604,11 +614,16 @@ public class NativePlayerActivity extends AppCompatActivity {
     private int currentY = 0;
     private int startTime = 0;
 
+    private boolean hasInitializedWindowSettings = false;
+
     private void applyWindowSettings(Intent intent) {
         if (intent == null) intent = getIntent();
-        isFullscreenMode = intent.getBooleanExtra("startFullscreen", false);
-        isOfflineMode = intent.getBooleanExtra("offlineMode", isOfflineMode);
-        if (intent.hasExtra("yOffset")) {
+        if (!hasInitializedWindowSettings) {
+            isFullscreenMode = intent != null && intent.getBooleanExtra("startFullscreen", false);
+            hasInitializedWindowSettings = true;
+        }
+        isOfflineMode = intent != null && intent.getBooleanExtra("offlineMode", isOfflineMode);
+        if (intent != null && intent.hasExtra("yOffset")) {
             currentY = intent.getIntExtra("yOffset", 0);
         }
         Log.i("AniLove", "applyWindowSettings | isFullscreen: " + isFullscreenMode + " | isOffline: " + isOfflineMode);
@@ -876,6 +891,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerWebView = findViewById(R.id.player_webview);
         if (playerWebView != null) {
+            playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidBridge");
             playerWebView.setLongClickable(false);
             playerWebView.setOnLongClickListener(v -> true);
 
