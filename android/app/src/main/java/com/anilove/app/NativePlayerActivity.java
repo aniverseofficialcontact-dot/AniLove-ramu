@@ -2480,9 +2480,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
                     }
                 }
-                if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+                if (touchWall != null) touchWall.setVisibility(View.GONE);
                 if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-                showControlsExplicitly();
+                hideControlsQuietly();
                 Toast.makeText(this, "Switched to Embedded Web Player Mode", Toast.LENGTH_SHORT).show();
             } else {
                 if (playerWebView != null) {
@@ -2497,6 +2497,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         exoPlayer.setPlayWhenReady(true);
                     } catch (Exception ignored) {}
                 }
+                showControlsExplicitly();
                 Toast.makeText(this, "Switched to Media3 ExoPlayer Mode", Toast.LENGTH_SHORT).show();
             }
             updateDiagnosticHud();
