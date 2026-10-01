@@ -2188,6 +2188,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void toggleControlsVisibility() { isControlsVisible = !isControlsVisible; controlsOverlay.setVisibility(isControlsVisible ? View.VISIBLE : View.GONE); if (isControlsVisible) resetHideTimer(); }
+    private void showControlsExplicitly() { isControlsVisible = true; if (controlsOverlay != null) controlsOverlay.setVisibility(View.VISIBLE); resetHideTimer(); }
     private void hideControlsQuietly() { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); stopHideTimer(); }
     private void resetHideTimer() { stopHideTimer(); if (isPlaying && isControlsVisible && !isDragging) { hideHandler.postDelayed(() -> { if (isControlsVisible && isPlaying) { isControlsVisible = false; controlsOverlay.setVisibility(View.GONE); } }, 5000); } }
     private void stopHideTimer() { hideHandler.removeCallbacksAndMessages(null); }
@@ -2453,8 +2454,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
                     }
                 }
-                if (touchWall != null) touchWall.setVisibility(View.GONE);
+                if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
                 if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                showControlsExplicitly();
                 Toast.makeText(this, "Switched to Embedded Web Player Mode", Toast.LENGTH_SHORT).show();
             } else {
                 if (playerWebView != null) {
