@@ -17,6 +17,7 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.PixelFormat;
+import android.content.res.Configuration;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -879,26 +880,53 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     customView = view;
                     customViewCallback = callback;
-                    if (!isFullscreenMode) {
-                        toggleFullscreenInPlace();
-                    } else {
-                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+
+                    FrameLayout mediaContainer = findViewById(R.id.player_media_container);
+                    if (mediaContainer != null && view != null) {
+                        mediaContainer.addView(view, new FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                        ));
                     }
-                    Log.i("AniLove_Fullscreen", "WebView requested Fullscreen!");
+
+                    if (playerWebView != null) playerWebView.setVisibility(View.GONE);
+                    if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
+
+                    isFullscreenMode = true;
+                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    Intent intent = getIntent();
+                    if (intent != null) intent.putExtra("startFullscreen", true);
+                    applyWindowSettings(intent);
+                    Log.i("AniLove_Fullscreen", "WebView custom view added and expanded to Fullscreen Landscape!");
                 }
 
                 @Override
                 public void onHideCustomView() {
                     if (customView == null) return;
-                    if (customViewCallback != null) customViewCallback.onCustomViewHidden();
+
+                    FrameLayout mediaContainer = findViewById(R.id.player_media_container);
+                    if (mediaContainer != null) {
+                        mediaContainer.removeView(customView);
+                    }
+
+                    if (customViewCallback != null) {
+                        try { customViewCallback.onCustomViewHidden(); } catch (Exception ignored) {}
+                    }
                     customView = null;
                     customViewCallback = null;
-                    if (isFullscreenMode) {
-                        toggleFullscreenInPlace();
-                    } else {
-                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+                    if (isWebViewPlayerMode && playerWebView != null) {
+                        playerWebView.setVisibility(View.VISIBLE);
+                    } else if (exoPlayerView != null) {
+                        exoPlayerView.setVisibility(View.VISIBLE);
                     }
-                    Log.i("AniLove_Fullscreen", "WebView exited Fullscreen!");
+
+                    isFullscreenMode = false;
+                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    Intent intent = getIntent();
+                    if (intent != null) intent.putExtra("startFullscreen", false);
+                    applyWindowSettings(intent);
+                    Log.i("AniLove_Fullscreen", "WebView custom view removed, returned to Portrait!");
                 }
 
                 @Override
@@ -3287,6 +3315,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
         setupExoPlayerOnline(url, referer, null);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        boolean isLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        isFullscreenMode = isLandscape;
+        Intent intent = getIntent();
+        if (intent != null) intent.putExtra("startFullscreen", isFullscreenMode);
+        applyWindowSettings(intent);
     }
 
     @Override
