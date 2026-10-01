@@ -1884,6 +1884,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 currentVideoTime = current;
                 videoDuration = duration;
+                isPlaying = !pausedInWeb;
+                if (btnPlayPause != null) {
+                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                }
                 updateNativeSubtitleOverlay(current);
                 checkAutoNextEpisodeTrigger((long)(current * 1000), (long)(duration * 1000));
                 if (opEdSeekBarDrawable != null) {
@@ -2172,16 +2176,38 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void togglePlayPause() {
-        if (exoPlayer != null) {
+        if (isWebViewPlayerMode && playerWebView != null) {
+            String script =
+                "(function() {" +
+                "  function toggle(win) {" +
+                "    try {" +
+                "      var vids = win.document.querySelectorAll('video');" +
+                "      for (var i = 0; i < vids.length; i++) {" +
+                "        if (vids[i].paused) vids[i].play(); else vids[i].pause();" +
+                "      }" +
+                "    } catch(e) {}" +
+                "    for (var k = 0; k < win.frames.length; k++) {" +
+                "      try { toggle(win.frames[k]); } catch(e) {}" +
+                "    }" +
+                "  }" +
+                "  toggle(window);" +
+                "})();";
+            playerWebView.evaluateJavascript(script, null);
+            isPlaying = !isPlaying;
+            if (btnPlayPause != null) {
+                btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+            }
+            if (isPlaying) resetHideTimer(); else stopHideTimer();
+        } else if (exoPlayer != null) {
             if (exoPlayer.isPlaying()) {
                 exoPlayer.pause();
                 isPlaying = false;
-                btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                if (btnPlayPause != null) btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
                 stopHideTimer();
             } else {
                 exoPlayer.play();
                 isPlaying = true;
-                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                if (btnPlayPause != null) btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
                 resetHideTimer();
             }
         }
