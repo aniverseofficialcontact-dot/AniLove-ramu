@@ -382,7 +382,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             // 1. Base track background
             canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
 
-            double effDuration = (videoDuration > 0) ? videoDuration : (seekBar != null && seekBar.getMax() > 0 ? seekBar.getMax() : 0);
+            double effDuration = (videoDuration > 0) ? videoDuration : (seekBar != null && seekBar.getMax() > 0 ? seekBar.getMax() : 1440.0);
             if (effDuration > 0) {
                 // 2. Current progress bar (Drawn BEFORE OP/ED so yellow OP/ED stays on top permanently)
                 float progressRight = (float) ((currentVideoTime / effDuration) * width);

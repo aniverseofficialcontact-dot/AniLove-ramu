@@ -27,8 +27,7 @@ public class NativePlayerPlugin extends Plugin {
         if (currentInstance != null && currentInstance.getActivity() != null) {
             currentInstance.getActivity().runOnUiThread(() -> {
                 try {
-                    // Keep MainActivity strictly in PORTRAIT mode so background Capacitor Web View never rotates sideways
-                    currentInstance.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    currentInstance.getActivity().setRequestedOrientation(orientation);
                 } catch (Exception ignored) {}
             });
         }
