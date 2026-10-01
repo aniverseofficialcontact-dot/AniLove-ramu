@@ -17,6 +17,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+import android.content.pm.ActivityInfo;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -169,11 +170,21 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public static void forcePortraitOrientation() {
+        if (instance != null) {
+            instance.runOnUiThread(() -> {
+                try {
+                    instance.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                } catch (Exception ignored) {}
+            });
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         instance = this;
-        
+        forcePortraitOrientation();
         hideSystemBars();
 
         if (pendingBackToDetails) {

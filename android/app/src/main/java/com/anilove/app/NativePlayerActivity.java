@@ -372,22 +372,23 @@ public class NativePlayerActivity extends AppCompatActivity {
             // 1. Base track background
             canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
 
-            if (videoDuration > 0) {
+            double effDuration = (videoDuration > 0) ? videoDuration : (seekBar != null && seekBar.getMax() > 0 ? seekBar.getMax() : 0);
+            if (effDuration > 0) {
                 // 2. Current progress bar (Drawn BEFORE OP/ED so yellow OP/ED stays on top permanently)
-                float progressRight = (float) ((currentVideoTime / videoDuration) * width);
+                float progressRight = (float) ((currentVideoTime / effDuration) * width);
                 canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
 
                 // 3. Permanent yellow highlight for Intro (OP)
                 if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart) {
-                    float opLeft = (float) ((aniSkipOpStart / videoDuration) * width);
-                    float opRight = (float) ((aniSkipOpEnd / videoDuration) * width);
+                    float opLeft = (float) ((aniSkipOpStart / effDuration) * width);
+                    float opRight = (float) ((aniSkipOpEnd / effDuration) * width);
                     canvas.drawRoundRect(opLeft, top, opRight, bottom, 3f, 3f, opEdPaint);
                 }
 
                 // 4. Permanent yellow highlight for Outro (ED)
                 if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart) {
-                    float edLeft = (float) ((aniSkipEdStart / videoDuration) * width);
-                    float edRight = (float) ((aniSkipEdEnd / videoDuration) * width);
+                    float edLeft = (float) ((aniSkipEdStart / effDuration) * width);
+                    float edRight = (float) ((aniSkipEdEnd / effDuration) * width);
                     canvas.drawRoundRect(edLeft, top, edRight, bottom, 3f, 3f, opEdPaint);
                 }
             }
@@ -2920,6 +2921,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (durationMs > 0 && durationMs != C.TIME_UNSET) {
                 int current = (int) (currentMs / 1000);
                 int duration = (int) (durationMs / 1000);
+                currentVideoTime = current;
+                videoDuration = duration;
+
                 textCurrentTime.setText(formatTime(current));
                 textTotalTime.setText(formatTime(duration));
                 int timeLeft = Math.max(0, duration - current);
@@ -2928,6 +2932,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (!isDragging) {
                     seekBar.setMax(duration);
                     seekBar.setProgress(current);
+                }
+                if (opEdSeekBarDrawable != null) {
+                    opEdSeekBarDrawable.invalidateSelf();
                 }
                 updateNativeSubtitleOverlay(currentMs / 1000.0);
                 checkAutoNextEpisodeTrigger(currentMs, durationMs);
