@@ -175,7 +175,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             "      Element.prototype.webkitRequestFullscreen = function() {};" +
             "      Element.prototype.webkitEnterFullscreen = function() {};" +
             "    } catch(e) {}" +
-            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], .jw-icon-fullscreen, .art-icon-fullscreen, [class*=\"fullscreen\"], [id*=\"fullscreen\"], button[title*=\"Fullscreen\"], .ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
+            "              '.jw-icon-fullscreen, .jw-btn-fullscreen, .art-icon-fullscreen, .art-control-fullscreen, .plyr__controls__item[data-plyr=\"fullscreen\"], ' +" +
+            "              '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, button[data-plyr=\"fullscreen\"], ' +" +
+            "              'button[title*=\"Fullscreen\" i], button[title*=\"Full Screen\" i], button[aria-label*=\"Fullscreen\" i], button[aria-label*=\"Full Screen\" i], ' +" +
+            "              '[data-tooltip*=\"Fullscreen\" i], [data-tooltip*=\"Full Screen\" i], ' +" +
+            "              '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
+            "              '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
             "    var style = document.createElement('style');" +
             "    style.type = 'text/css';" +
             "    style.appendChild(document.createTextNode(css));" +
@@ -190,6 +196,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        win.Element.prototype.webkitRequestFullscreen = function() {};" +
             "        win.Element.prototype.webkitEnterFullscreen = function() {};" +
             "      } catch(e) {}" +
+            "      var fsSelectors = ['.jw-icon-fullscreen', '.jw-btn-fullscreen', '.art-icon-fullscreen', '.art-control-fullscreen', '.plyr__controls__item[data-plyr=\"fullscreen\"]', '.vjs-fullscreen-control', '.dplayer-full-icon', 'button[data-plyr=\"fullscreen\"]', 'button[title*=\"Fullscreen\"]', 'button[title*=\"Full Screen\"]', 'button[aria-label*=\"Fullscreen\"]', 'button[aria-label*=\"Full Screen\"]'];" +
+            "      fsSelectors.forEach(function(sel) {" +
+            "        var els = win.document.querySelectorAll(sel);" +
+            "        els.forEach(function(el) { try { el.remove(); } catch(err){} });" +
+            "      });" +
             "      var v = win.document.querySelector('video');" +
             "      if (v && !v.dataset.aniskipBound) {" +
             "        v.dataset.aniskipBound = 'true';" +
@@ -205,7 +216,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  disableContextMenuAndBindVideo(window);" +
-            "  if (!window.aniskipInterval) { window.aniskipInterval = setInterval(function() { disableContextMenuAndBindVideo(window); }, 800); }" +
+            "  if (!window.aniskipInterval) { window.aniskipInterval = setInterval(function() { disableContextMenuAndBindVideo(window); }, 500); }" +
             "})();";
         webView.evaluateJavascript(script, null);
     }
