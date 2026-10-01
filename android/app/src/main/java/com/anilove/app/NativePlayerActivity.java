@@ -1055,12 +1055,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private String getBestRefererForUrl(String videoUrl, String embedUrl) {
-        if (videoUrl != null) {
-            String vLower = videoUrl.toLowerCase();
-            if (vLower.contains("googleapis.com") || vLower.contains("googleusercontent.com") || vLower.contains("googlevideo.com")) {
-                return ""; // Direct Google CDN bucket URLs fail if 3rd party referer is passed
-            }
-        }
         String primary = (embedUrl != null && !embedUrl.isEmpty()) ? embedUrl : videoUrl;
         if (primary == null || primary.trim().isEmpty()) {
             return "https://google.com/";
@@ -1068,9 +1062,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         try {
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
-            if (host.contains("googleapis.com") || host.contains("googleusercontent.com") || host.contains("googlevideo.com")) {
-                return "";
-            }
             if (host.contains("dramahot")) return "https://dramahot.top/";
             if (host.contains("mikora") || host.contains("nexabloom") || host.contains("silverorbit")) return "https://megaplay.buzz/";
             if (host.contains("vidnest")) return "https://vidnest.fun/";

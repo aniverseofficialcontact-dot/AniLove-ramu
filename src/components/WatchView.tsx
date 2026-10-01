@@ -26,6 +26,7 @@ import {
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
 import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, StreamLanguage } from '../services/streamingProviders';
+import { NativePlayer, launchNativePlayer } from '../services/nativePlayer';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
 import { fetchFranchiseWatchOrder } from '../services/watchOrderService';
