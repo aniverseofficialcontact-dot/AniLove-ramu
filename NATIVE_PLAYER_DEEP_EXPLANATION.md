@@ -168,9 +168,10 @@ To ensure instant episode switches when binge-watching:
   - **Vertical Swipe (Right Half)**: Media volume adjustment.
   - **Long-Press**: Instant 2.0x playback speed boost with floating speed pill indicator; releases back to standard speed upon finger lift.
 - **AniSkip Integration**:
-  - `fetchAniSkipIntervals(idMal, episodeNumber)` fetches Opening (OP) and Ending (ED) timestamps from the AniSkip API.
-  - Renders yellow segment markers directly onto the ExoPlayer seekbar using custom `OpEdSeekBarDrawable`.
-  - Displays "Skip Opening" and "Skip Ending" overlay buttons when playback reaches designated time ranges.
+  - `fetchAniSkipIntervals(idMal, anilistId, episodeNumber)` fetches Opening (OP) and Ending (ED) timestamps from the AniSkip API.
+  - **AniList GraphQL Fallback**: If `idMal` is not provided directly, it queries AniList GraphQL API (`query ($id: Int) { Media (id: $id) { idMal } }`) to resolve `idMal` automatically for all servers and episodes!
+  - Renders vibrant yellow segment markers (`#FFD700`) directly onto the seekbar using custom `OpEdSeekBarDrawable`.
+  - Displays "⏭️ Skip Intro" and "⏭️ Skip Ending" overlay buttons when playback reaches designated OP/ED time ranges.
 - **Picture-in-Picture (PiP)**:
   - Supports Android native PiP mode (`enterPipMode()`).
   - Resets window layout bounds automatically when exiting PiP to prevent layout clipping or top-bar offsets.

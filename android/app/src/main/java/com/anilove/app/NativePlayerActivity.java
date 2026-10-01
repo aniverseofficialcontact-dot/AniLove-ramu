@@ -25,6 +25,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import java.io.ByteArrayInputStream;
+import java.io.OutputStream;
 import android.os.Message;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
@@ -535,6 +536,11 @@ public class NativePlayerActivity extends AppCompatActivity {
         String animeTitle = intent.getStringExtra("animeTitle");
         String rawTitle = intent.getStringExtra("title");
         int epNum = intent.getIntExtra("episodeNumber", 1);
+        int anilistId = intent.getIntExtra("anilistId", 0);
+        int idMal = intent.getIntExtra("idMal", 0);
+        if ((idMal > 0 || anilistId > 0) && epNum > 0) {
+            fetchAniSkipIntervals(idMal, anilistId, epNum);
+        }
         startTime = intent.getIntExtra("startTime", 0);
         subtitleUrl = intent.getStringExtra("subtitleUrl");
         subtitleLang = intent.getStringExtra("subtitleLang");
@@ -748,6 +754,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
+                int curWidth = getPhysicalScreenWidth();
+                int curVideoHeight = (int) (curWidth * 0.5625);
+                params.width = WindowManager.LayoutParams.MATCH_PARENT;
+                params.height = curVideoHeight + finalStatusBarHeight;
+                window.setAttributes(params);
+
                 View videoRoot = findViewById(R.id.video_root_container);
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
@@ -756,7 +768,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (videoRoot != null) {
                     ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                    lp.height = videoHeight + finalStatusBarHeight;
+                    lp.height = curVideoHeight + finalStatusBarHeight;
                     videoRoot.setLayoutParams(lp);
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
@@ -771,6 +783,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                     int padTop = (int) (10 * getResources().getDisplayMetrics().density);
                     topBar.setPadding(topBar.getPaddingLeft(), padTop, topBar.getPaddingRight(), topBar.getPaddingBottom());
                 }
+
+                // Notify Capacitor webview to refresh CSS dimensions
+                try {
+                    if (MainActivity.instance != null && MainActivity.instance.getBridge() != null && MainActivity.instance.getBridge().getWebView() != null) {
+                        MainActivity.instance.getBridge().getWebView().evaluateJavascript("window.dispatchEvent(new Event('resize'));", null);
+                    }
+                } catch (Exception ignored) {}
             });
         }
         
@@ -2962,15 +2981,60 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
-    private void fetchAniSkipIntervals(int idMal, int episodeNumber) {
-        if (idMal <= 0 || episodeNumber <= 0) return;
+    private void fetchAniSkipIntervals(int idMal, int anilistId, int episodeNumber) {
+        if (episodeNumber <= 0) return;
         aniSkipOpStart = -1; aniSkipOpEnd = -1;
         aniSkipEdStart = -1; aniSkipEdEnd = -1;
 
         Executors.newSingleThreadExecutor().execute(() -> {
+            int targetMalId = idMal;
+
+            // If MAL ID is 0 but anilistId > 0, resolve MAL ID from AniList GraphQL API first
+            if (targetMalId <= 0 && anilistId > 0) {
+                try {
+                    URL gqlUrl = new URL("https://graphql.anilist.co");
+                    HttpURLConnection gqlConn = (HttpURLConnection) gqlUrl.openConnection();
+                    gqlConn.setRequestMethod("POST");
+                    gqlConn.setRequestProperty("Content-Type", "application/json");
+                    gqlConn.setConnectTimeout(5000);
+                    gqlConn.setReadTimeout(5000);
+                    gqlConn.setDoOutput(true);
+
+                    JSONObject body = new JSONObject();
+                    body.put("query", "query ($id: Int) { Media (id: $id) { idMal } }");
+                    JSONObject vars = new JSONObject();
+                    vars.put("id", anilistId);
+                    body.put("variables", vars);
+
+                    OutputStream os = gqlConn.getOutputStream();
+                    os.write(body.toString().getBytes("UTF-8"));
+                    os.flush();
+                    os.close();
+
+                    if (gqlConn.getResponseCode() == 200) {
+                        BufferedReader in = new BufferedReader(new InputStreamReader(gqlConn.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) sb.append(line);
+                        in.close();
+
+                        JSONObject jsonRes = new JSONObject(sb.toString());
+                        JSONObject data = jsonRes.optJSONObject("data");
+                        if (data != null) {
+                            JSONObject media = data.optJSONObject("Media");
+                            if (media != null) {
+                                targetMalId = media.optInt("idMal", 0);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (targetMalId <= 0) return;
+
             try {
                 int length = videoDuration > 0 ? (int) videoDuration : 1440;
-                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + idMal + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=" + length;
+                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + targetMalId + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=" + length;
                 URL url = new URL(reqUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -3007,6 +3071,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                                     }
                                 }
                             }
+                            Log.i("AniSkip", "Loaded OP: [" + aniSkipOpStart + "s - " + aniSkipOpEnd + "s] | ED: [" + aniSkipEdStart + "s - " + aniSkipEdEnd + "s]");
+                            runOnUiThread(() -> {
+                                if (opEdSeekBarDrawable != null) opEdSeekBarDrawable.invalidateSelf();
+                            });
                         }
                     }
                 }
@@ -3279,8 +3347,8 @@ public class NativePlayerActivity extends AppCompatActivity {
             capturedServer2BSubtitles.clear();
             fetchUnifiedSubtitlesJava(anilistId, episodeNumber);
         }
-        if (idMal > 0 && episodeNumber > 0) {
-            fetchAniSkipIntervals(idMal, episodeNumber);
+        if ((idMal > 0 || anilistId > 0) && episodeNumber > 0) {
+            fetchAniSkipIntervals(idMal, anilistId, episodeNumber);
         }
 
         String referer = getIntent().getStringExtra("referer");
