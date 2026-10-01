@@ -167,37 +167,23 @@ public class NativePlayerActivity extends AppCompatActivity {
             "  try {" +
             "    window.open = function() { return null; };" +
             "    window.onbeforeunload = null;" +
-            "    var selectors = ['#overlay', '#playback', '.ad-container', '.popunder', '.pop-up', 'iframe[src*=\"ad\"]', 'div[class*=\"ad-\"]', 'div[id*=\"pop\"]', 'a[href*=\"http\"][target=\"_blank\"]'];" +
-            "    selectors.forEach(function(sel) {" +
-            "      var els = document.querySelectorAll(sel);" +
-            "      els.forEach(function(el) { try { el.remove(); } catch(e){} });" +
-            "    });" +
+            "    try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}" +
+            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], .ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+            "    var style = document.createElement('style');" +
+            "    style.type = 'text/css';" +
+            "    style.appendChild(document.createTextNode(css));" +
+            "    (document.head || document.documentElement).appendChild(style);" +
             "  } catch(e) {}" +
-            "  function autoDismissPrompts(win) {" +
+            "  function disableContextMenu(win) {" +
             "    try {" +
-            "      var buttons = win.document.querySelectorAll('button, a, div[role=\"button\"], span');" +
-            "      for (var i = 0; i < buttons.length; i++) {" +
-            "        var text = (buttons[i].textContent || '').trim().toLowerCase();" +
-            "        if (text === 'continue' || text.startsWith('continue (') || text === 'resume' || text.startsWith('resume (')) {" +
-            "          buttons[i].click();" +
-            "        }" +
-            "      }" +
-            "      var divs = win.document.querySelectorAll('div, section, dialog');" +
-            "      for (var j = 0; j < divs.length; j++) {" +
-            "        var html = (divs[j].innerHTML || '').toLowerCase();" +
-            "        if (html.includes('continue watching') || html.includes('do you want to continue') || html.includes('resume watching')) {" +
-            "          var btn = divs[j].querySelector('button, .btn, a');" +
-            "          if (btn) btn.click();" +
-            "          else divs[j].style.display = 'none';" +
-            "        }" +
-            "      }" +
+            "      win.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); return false; }, true);" +
+            "      if (win.jwplayer) { try { win.jwplayer().on('contextmenu', function(e) { e.preventDefault(); }); } catch(err){} }" +
             "    } catch(e) {}" +
             "    for (var k = 0; k < win.frames.length; k++) {" +
-            "      try { autoDismissPrompts(win.frames[k]); } catch(e) {}" +
+            "      try { disableContextMenu(win.frames[k]); } catch(e) {}" +
             "    }" +
             "  }" +
-            "  autoDismissPrompts(window);" +
-            "  if (!window.promptInterval) { window.promptInterval = setInterval(function() { autoDismissPrompts(window); }, 300); }" +
+            "  disableContextMenu(window);" +
             "})();";
         webView.evaluateJavascript(script, null);
     }
@@ -869,6 +855,9 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerWebView = findViewById(R.id.player_webview);
         if (playerWebView != null) {
+            playerWebView.setLongClickable(false);
+            playerWebView.setOnLongClickListener(v -> true);
+
             WebSettings settings = playerWebView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
@@ -879,6 +868,39 @@ public class NativePlayerActivity extends AppCompatActivity {
             settings.setJavaScriptCanOpenWindowsAutomatically(false);
 
             playerWebView.setWebChromeClient(new WebChromeClient() {
+                private View customView;
+                private CustomViewCallback customViewCallback;
+
+                @Override
+                public void onShowCustomView(View view, CustomViewCallback callback) {
+                    if (customView != null) {
+                        callback.onCustomViewHidden();
+                        return;
+                    }
+                    customView = view;
+                    customViewCallback = callback;
+                    if (!isFullscreenMode) {
+                        toggleFullscreenInPlace();
+                    } else {
+                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    }
+                    Log.i("AniLove_Fullscreen", "WebView requested Fullscreen!");
+                }
+
+                @Override
+                public void onHideCustomView() {
+                    if (customView == null) return;
+                    if (customViewCallback != null) customViewCallback.onCustomViewHidden();
+                    customView = null;
+                    customViewCallback = null;
+                    if (isFullscreenMode) {
+                        toggleFullscreenInPlace();
+                    } else {
+                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    }
+                    Log.i("AniLove_Fullscreen", "WebView exited Fullscreen!");
+                }
+
                 @Override
                 public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
                     Log.i("AniLove_AdBlock", "Blocked popup window creation in WebView Player!");
