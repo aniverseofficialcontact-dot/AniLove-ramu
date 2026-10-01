@@ -222,6 +222,21 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        var els = win.document.querySelectorAll(sel);" +
             "        els.forEach(function(el) { try { el.remove(); } catch(err){} });" +
             "      });" +
+            "      try {" +
+            "        var dlEls = win.document.querySelectorAll('a, button, div, span, p, i');" +
+            "        for (var dI = 0; dI < dlEls.length; dI++) {" +
+            "          var dlEl = dlEls[dI];" +
+            "          var txt = (dlEl.textContent || '').trim().toLowerCase();" +
+            "          var href = (dlEl.getAttribute('href') || '').toLowerCase();" +
+            "          var title = (dlEl.getAttribute('title') || '').toLowerCase();" +
+            "          var aria = (dlEl.getAttribute('aria-label') || '').toLowerCase();" +
+            "          var cls = (dlEl.className || '').toString().toLowerCase();" +
+            "          if (txt.includes('download') || href.includes('download') || href.includes('/dl/') ||" +
+            "              title.includes('download') || aria.includes('download') || cls.includes('download') || cls.includes('btn-dl')) {" +
+            "            try { dlEl.remove(); } catch(e) { dlEl.style.display = 'none'; }" +
+            "          }" +
+            "        }" +
+            "      } catch(e) {}" +
             "      var v = win.document.querySelector('video');" +
             "      if (v && !v.dataset.aniskipBound) {" +
             "        v.dataset.aniskipBound = 'true';" +
@@ -984,8 +999,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         String url = request.getUrl().toString().toLowerCase();
                         String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
                         if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
+                            url.contains("download") || url.contains("/dl/") || url.contains("getfile") || url.contains("savefile") ||
                             isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
-                            Log.i("AniLove_AdBlock", "Blocked YouTube / ad navigation in WebView Player: " + url);
+                            Log.i("AniLove_AdBlock", "Blocked YouTube / download / ad navigation in WebView Player: " + url);
                             return true; // Cancel navigation
                         }
                     }
