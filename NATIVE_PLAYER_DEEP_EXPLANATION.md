@@ -82,12 +82,17 @@ Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-bu
 - **ExoPlayer Header Authorization**: Captures the `.m3u8` master playlist and passes `Referer: https://animesalt.me/` and desktop/mobile User-Agent to ExoPlayer's `DefaultHttpDataSource.Factory`.
 - **RAM Optimization**: As soon as the `.m3u8` stream URL is captured, `VideoSniffer.cleanup()` immediately stops, clears (`about:blank`), and destroys (`destroy()`) the background WebView to free mobile RAM!
 
-### 🌐 Dual Player Engine Switch (ExoPlayer ⚡ <-> Embedded Web Player 🌐)
-`NativePlayerActivity.java` now includes a full **Dual Player Engine**:
-1. **Media3 ExoPlayer Mode (Default)**: Hardware-accelerated 1080p native playback with gesture overlays, yellow OP/ED seekbar indicators, volume boost, and native caption customization.
-2. **Embedded Web Player Mode**: Interactive embedded `<WebView>` player (`#player_webview`) loading target embed pages (`abyssplayer.com`, `animesalt.me`, `blakiteapi.xyz`, `vidmoly.biz`, etc.) directly inside an iframe container.
-3. **User Toggle**: Users can toggle between **Media3 ExoPlayer** and **Embedded Web Player** at any time from the Player Settings menu (**"Embedded Web Player Mode"** toggle switch).
-4. **Auto-Fallback**: If ExoPlayer encounters an unrecoverable source / CORS error, `NativePlayerActivity` automatically falls back to Embedded Web Player Mode so the video plays without interruption.
+### 🌐 Dual Player Engine & Top-Bar Switch Button
+`NativePlayerActivity.java` includes a 1-click **Dual Player Engine**:
+1. **Media3 ExoPlayer Mode (Default - `⚡ EXO`)**: Hardware-accelerated 1080p native playback with gesture overlays, yellow OP/ED seekbar indicators, volume boost, and native caption customization.
+2. **Embedded Web Player Mode (`🌐 WEB`)**: Interactive embedded `<WebView>` player (`#player_webview`) loading target embed pages (`abyssplayer.com`, `animesalt.me`, `blakiteapi.xyz`, `vidmoly.biz`, etc.) directly inside an iframe container.
+3. **1-Click Top-Bar Switch Button (`btn_engine_toggle`)**: Added an explicit engine toggle button on the player top bar controls (displaying `⚡ EXO` or `🌐 WEB`). Tapping it instantly switches player engines in 1 click!
+4. **Heavyweight Native Ad-Blocker**: When in Web Player Mode, `NativePlayerActivity` applies strict native ad-blocking:
+   - Blocks popup windows in `WebChromeClient.onCreateWindow()`.
+   - Intercepts and blocks ad network domains (`AD_DOMAINS` blacklist) in `shouldInterceptRequest()`.
+   - Cancels external ad redirects in `shouldOverrideUrlLoading()`.
+   - Injects JavaScript ad eraser (`window.open = function() { return null; }`) in `onPageStarted()` and `onPageFinished()` to remove pop-up triggers and overlay ad banners.
+5. **Auto-Fallback**: If ExoPlayer encounters an unrecoverable source / CORS error, `NativePlayerActivity` automatically falls back to Embedded Web Player Mode so the video plays without interruption.
 
 ### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
 - When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A/B/C`, `Server 3-A (AnimeSalt)`), `handleServerSwitchDirect` is invoked **instantly**, delegating to `launchNativePlayer` and switching the active video stream in Java immediately!

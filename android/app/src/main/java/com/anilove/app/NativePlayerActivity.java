@@ -20,7 +20,12 @@ import android.graphics.PixelFormat;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import java.io.ByteArrayInputStream;
+import android.os.Message;
+import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -151,8 +156,26 @@ public class NativePlayerActivity extends AppCompatActivity {
     
     // Dual Player Engine (ExoPlayer <-> WebView Player)
     private WebView playerWebView;
+    private TextView btnEngineToggle;
     private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
+
+    private void injectAdEraserScript(WebView webView) {
+        if (webView == null) return;
+        String script =
+            "(function() {" +
+            "  try {" +
+            "    window.open = function() { return null; };" +
+            "    window.onbeforeunload = null;" +
+            "    var selectors = ['#overlay', '#playback', '.ad-container', '.popunder', '.pop-up', 'iframe[src*=\"ad\"]', 'div[class*=\"ad-\"]', 'div[id*=\"pop\"]', 'a[href*=\"http\"][target=\"_blank\"]'];" +
+            "    selectors.forEach(function(sel) {" +
+            "      var els = document.querySelectorAll(sel);" +
+            "      els.forEach(function(el) { try { el.remove(); } catch(e){} });" +
+            "    });" +
+            "  } catch(e) {}" +
+            "})();";
+        webView.evaluateJavascript(script, null);
+    }
 
     private boolean isPlaying = true;
     private boolean isControlsVisible = true;
@@ -771,6 +794,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayerView.setVisibility(View.VISIBLE);
         }
 
+        btnEngineToggle = findViewById(R.id.btn_engine_toggle);
+        if (btnEngineToggle != null) {
+            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
+        }
+
         playerWebView = findViewById(R.id.player_webview);
         if (playerWebView != null) {
             WebSettings settings = playerWebView.getSettings();
@@ -779,10 +807,52 @@ public class NativePlayerActivity extends AppCompatActivity {
             settings.setDatabaseEnabled(true);
             settings.setMediaPlaybackRequiresUserGesture(false);
             settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            settings.setSupportMultipleWindows(false);
+            settings.setJavaScriptCanOpenWindowsAutomatically(false);
+
+            playerWebView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                    Log.i("AniLove_AdBlock", "Blocked popup window creation in WebView Player!");
+                    return false;
+                }
+            });
+
             playerWebView.setWebViewClient(new WebViewClient() {
                 @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString();
+                        if (isAdUrl(url)) {
+                            Log.i("AniLove_AdBlock", "Blocked ad request in WebView Player: " + url);
+                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString().toLowerCase();
+                        if (isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
+                            Log.i("AniLove_AdBlock", "Blocked ad navigation in WebView Player: " + url);
+                            return true; // Cancel navigation
+                        }
+                    }
                     return false;
+                }
+
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                    injectAdEraserScript(view);
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    injectAdEraserScript(view);
                 }
             });
         }
@@ -2164,6 +2234,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         isWebViewPlayerMode = useWebView;
         runOnUiThread(() -> {
             View touchWall = findViewById(R.id.touch_wall);
+            if (btnEngineToggle != null) {
+                btnEngineToggle.setText(useWebView ? "🌐 WEB" : "⚡ EXO");
+                btnEngineToggle.setTextColor(useWebView ? Color.parseColor("#34D399") : Color.parseColor("#FFD700"));
+            }
             if (useWebView) {
                 if (exoPlayer != null) {
                     try {
