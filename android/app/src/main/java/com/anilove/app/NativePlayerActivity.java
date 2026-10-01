@@ -972,8 +972,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request != null && request.getUrl() != null) {
                         String url = request.getUrl().toString().toLowerCase();
-                        if (isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
-                            Log.i("AniLove_AdBlock", "Blocked ad navigation in WebView Player: " + url);
+                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
+                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
+                            isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
+                            Log.i("AniLove_AdBlock", "Blocked YouTube / ad navigation in WebView Player: " + url);
                             return true; // Cancel navigation
                         }
                     }
@@ -3321,7 +3323,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".ts") || lower.contains(".m4s")) {
             return false;
         }
-        return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
+        return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("ytimg.com") ||
+               lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
                lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
                lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||
                lower.contains("probationthimbledespite") || lower.contains("alwingulla") || lower.contains("cpmgate") ||
