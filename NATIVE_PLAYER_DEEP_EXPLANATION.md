@@ -89,15 +89,33 @@ Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-bu
 3. **Standalone Floating Engine Button (`btn_engine_toggle`)**:
    - `btn_engine_toggle` is placed as a standalone floating overlay button (`elevation="25dp"`, `translationZ="25dp"`) at the top right of the video frame.
    - Remains **ALWAYS VISIBLE and CLICKABLE** in both ExoPlayer mode (`⚡ EXO`) and Web View mode (`🌐 WEB`), even when player controls auto-hide or when touching the Web View!
-4. **Dual Audio Elimination**:
+4. **✂️ Surgical Control Eraser Engine (Option A Injection Engine)**:
+   - Injects a recursive 250ms CSS and JS DOM eraser into `playerWebView` across all top-level documents and nested child `<iframe>`s.
+   - **Completely hides and erases**:
+     - HTML Fullscreen buttons (`.jw-icon-fullscreen`, `.art-icon-fullscreen`, `.vjs-fullscreen-control`, etc.)
+     - Quality / HD selector menus (`.jw-icon-settings`, `.art-icon-setting`, `.vjs-quality-selector`, etc.)
+     - Subtitle CC & Captions buttons (`.jw-icon-cc`, `.art-icon-subtitle`, `.v-cc`, etc.)
+     - Download buttons / links (`a[href*="download"]`, `.download-btn`, `.btn-download`, etc.)
+     - Picture-in-Picture (`PiP`) buttons (`.v-pip`, `.art-icon-pip`, `.jw-icon-pip`, etc.)
+     - Forward `+10s` / Rewind `-10s` skip icons (`.art-control-jump`, `.blakite-skip`, `[class*="-10"]`, etc.)
+     - Bottom-left Play/Pause and Volume buttons (`.art-control-play`, `.art-control-volume`, etc.)
+     - Internal seekbar tracks and duration displays (`.art-control-progress`, `.art-control-time`, `.jw-text-elapsed`, etc.)
+5. **👆 Web View Gesture Control Engine**:
+   - **Double-Tap Seeking**: Left side double-taps rewind 10s (`◄◄ 10s`), right side double-taps forward 10s (`10s ►►`).
+   - **2.0x Hold Speed Boost**: Long-pressing on Web View sets `video.playbackRate = 2.0` across all frames with `2.0x SPEED ⏩` floating pill.
+   - **Anti-Context-Menu**: Capture-phase event listener blocks JWPlayer / ArtPlayer right-click context menus.
+6. **⚡ Web View Real-Time `timeupdate` Event Binding**:
+   - Binds HTML5 `<video>` `timeupdate` events across all child frames to `@JavascriptInterface` `AndroidBridge.onStateUpdate(c, d, paused)`.
+   - Sends real-time progress to Java with 0ms latency, updating `currentVideoTime`, `videoDuration`, and syncing native controls and AniSkip buttons.
+7. **Dual Audio Elimination**:
    - `VideoSniffer.java` sets `setMediaPlaybackRequiresUserGesture(true)` and injects `injectMuteScript()` on page start/finish to mute all background `<video>` and `<audio>` elements while sniffing.
    - `setupExoPlayerOnlineDirect()` and `switchPlayerEngine()` explicitly invoke `VideoSniffer.cancelActiveSniffers()` before starting playback, guaranteeing zero background audio overlap.
-5. **Heavyweight Native Ad-Blocker**: When in Web Player Mode, `NativePlayerActivity` applies strict native ad-blocking:
+8. **Heavyweight Native Ad-Blocker**: When in Web Player Mode, `NativePlayerActivity` applies strict native ad-blocking:
    - Blocks popup windows in `WebChromeClient.onCreateWindow()`.
    - Intercepts and blocks ad network domains (`AD_DOMAINS` blacklist) in `shouldInterceptRequest()`.
-   - Cancels external ad redirects in `shouldOverrideUrlLoading()`.
+   - Cancels external ad redirects, YouTube redirects, and download redirects in `shouldOverrideUrlLoading()`.
    - Injects JavaScript ad eraser (`window.open = function() { return null; }`) in `onPageStarted()` and `onPageFinished()` to remove pop-up triggers and overlay ad banners.
-6. **Auto-Fallback**: If ExoPlayer encounters an unrecoverable source / CORS error, `NativePlayerActivity` automatically falls back to Embedded Web Player Mode so the video plays without interruption.
+9. **Auto-Fallback**: If ExoPlayer encounters an unrecoverable source / CORS error, `NativePlayerActivity` automatically falls back to Embedded Web Player Mode so the video plays without interruption.
 
 ### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
 - When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A/B/C`, `Server 3-A (AnimeSalt)`), `handleServerSwitchDirect` is invoked **instantly**, delegating to `launchNativePlayer` and switching the active video stream in Java immediately!
