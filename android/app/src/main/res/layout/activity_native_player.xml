@@ -41,6 +41,12 @@
                     app:use_controller="false"
                     android:visibility="visible" />
 
+                <WebView
+                    android:id="@+id/player_webview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
             </FrameLayout>
 
             <View

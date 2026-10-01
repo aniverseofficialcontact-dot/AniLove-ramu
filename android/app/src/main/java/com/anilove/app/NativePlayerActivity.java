@@ -17,6 +17,10 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.PixelFormat;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -145,6 +149,11 @@ public class NativePlayerActivity extends AppCompatActivity {
     // Caption Preview
     private TextView captionPreview;
     
+    // Dual Player Engine (ExoPlayer <-> WebView Player)
+    private WebView playerWebView;
+    private boolean isWebViewPlayerMode = false;
+    private String currentEmbedUrl = null;
+
     private boolean isPlaying = true;
     private boolean isControlsVisible = true;
     private boolean isDragging = false;
@@ -441,6 +450,10 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void updateMetadataFromIntent(Intent intent) {
         if (intent == null) return;
+        String rawUrl = intent.getStringExtra("url");
+        if (rawUrl != null && !rawUrl.trim().isEmpty()) {
+            currentEmbedUrl = rawUrl;
+        }
         String animeTitle = intent.getStringExtra("animeTitle");
         String rawTitle = intent.getStringExtra("title");
         int epNum = intent.getIntExtra("episodeNumber", 1);
@@ -756,6 +769,22 @@ public class NativePlayerActivity extends AppCompatActivity {
         exoPlayerView = findViewById(R.id.player_exoplayer);
         if (exoPlayerView != null) {
             exoPlayerView.setVisibility(View.VISIBLE);
+        }
+
+        playerWebView = findViewById(R.id.player_webview);
+        if (playerWebView != null) {
+            WebSettings settings = playerWebView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+            settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            playerWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    return false;
+                }
+            });
         }
         
         loadingProgress = findViewById(R.id.loading_progress);
@@ -1443,6 +1472,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         if (originalUrl == null) originalUrl = hlsUrl;
                         Log.w("AniLove", "Source/Network error — auto-retrying with VideoSniffer for: " + originalUrl);
                         runSnifferFallback(originalUrl, getBestRefererForUrl(originalUrl, null), headers);
+                    } else if (!isWebViewPlayerMode && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                        Toast.makeText(NativePlayerActivity.this, "Source error: Auto-switching to Embedded Web Player...", Toast.LENGTH_LONG).show();
+                        switchPlayerEngine(true);
                     } else {
                         Toast.makeText(NativePlayerActivity.this, "Playback error: Try selecting Server 2-A or Server 2-B from the menu.", Toast.LENGTH_LONG).show();
                     }
@@ -2115,7 +2147,66 @@ public class NativePlayerActivity extends AppCompatActivity {
             switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
         }
 
+        // 6. Player Engine Switch (ExoPlayer <-> Web Player)
+        SwitchCompat switchEngine = view.findViewById(R.id.switch_player_engine);
+        if (switchEngine != null) {
+            switchEngine.setChecked(isWebViewPlayerMode);
+            switchEngine.setOnCheckedChangeListener((b, checked) -> {
+                dialog.dismiss();
+                switchPlayerEngine(checked);
+            });
+        }
+
         dialog.show();
+    }
+
+    public void switchPlayerEngine(boolean useWebView) {
+        isWebViewPlayerMode = useWebView;
+        runOnUiThread(() -> {
+            View touchWall = findViewById(R.id.touch_wall);
+            if (useWebView) {
+                if (exoPlayer != null) {
+                    try {
+                        exoPlayer.pause();
+                        exoPlayer.setPlayWhenReady(false);
+                    } catch (Exception ignored) {}
+                }
+                if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
+                if (playerWebView != null) {
+                    playerWebView.setVisibility(View.VISIBLE);
+                    String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
+                    if (targetUrl != null && !targetUrl.trim().isEmpty()) {
+                        String iframeHtml = "<!DOCTYPE html>" +
+                                "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                                "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}iframe{width:100%;height:100vh;border:none;}</style>" +
+                                "</head><body>" +
+                                "<iframe src='" + targetUrl.replace("'", "\\'") + "' style='width:100%;height:100vh;border:none;' allow='autoplay; fullscreen; encrypted-media' allowfullscreen></iframe>" +
+                                "</body></html>";
+                        String baseUrl = getBestRefererForUrl(targetUrl, targetUrl);
+                        Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
+                        playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
+                    }
+                }
+                if (touchWall != null) touchWall.setVisibility(View.GONE);
+                if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                Toast.makeText(this, "Switched to Embedded Web Player Mode", Toast.LENGTH_SHORT).show();
+            } else {
+                if (playerWebView != null) {
+                    playerWebView.setVisibility(View.GONE);
+                    playerWebView.loadUrl("about:blank");
+                }
+                if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
+                if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+                if (exoPlayer != null) {
+                    try {
+                        exoPlayer.play();
+                        exoPlayer.setPlayWhenReady(true);
+                    } catch (Exception ignored) {}
+                }
+                Toast.makeText(this, "Switched to Media3 ExoPlayer Mode", Toast.LENGTH_SHORT).show();
+            }
+            updateDiagnosticHud();
+        });
     }
 
     private void showCaptionMenu() {
