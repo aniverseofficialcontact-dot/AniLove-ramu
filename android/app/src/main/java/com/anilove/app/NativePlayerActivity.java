@@ -1407,6 +1407,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     private void setupExoPlayerOnlineDirect(String hlsUrlInput, String referer, Map<String, String> headers) {
         if (hlsUrlInput == null || hlsUrlInput.isEmpty()) return;
+        VideoSniffer.cancelActiveSniffers();
         final String hlsUrl = sanitizeStreamUrl(hlsUrlInput);
         currentLoadedStreamUrl = hlsUrl;
         try {
@@ -2232,6 +2233,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     public void switchPlayerEngine(boolean useWebView) {
         isWebViewPlayerMode = useWebView;
+        VideoSniffer.cancelActiveSniffers();
         runOnUiThread(() -> {
             View touchWall = findViewById(R.id.touch_wall);
             if (btnEngineToggle != null) {

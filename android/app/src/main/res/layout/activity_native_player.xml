@@ -214,6 +214,27 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
+        <!-- Independent Floating Engine Toggle Button (Always visible in both ExoPlayer & Web View modes) -->
+        <TextView
+            android:id="@+id/btn_engine_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/speed_btn_bg"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="⚡ EXO"
+            android:textColor="#FFD700"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="25dp"
+            android:translationZ="25dp"
+            android:visibility="visible" />
+
         <!-- Native Control Overlay -->
         <RelativeLayout
             android:id="@+id/controls_overlay"
@@ -237,7 +258,7 @@
                     android:layout_height="wrap_content"
                     android:layout_alignParentStart="true"
                     android:layout_centerVertical="true"
-                    android:layout_toStartOf="@id/btn_engine_toggle"
+                    android:layout_toStartOf="@id/btn_pip"
                     android:layout_marginEnd="12dp"
                     android:ellipsize="end"
                     android:maxLines="1"
@@ -249,23 +270,6 @@
                     android:shadowDx="1"
                     android:shadowDy="1"
                     android:shadowRadius="3" />
-
-                <TextView
-                    android:id="@+id/btn_engine_toggle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="32dp"
-                    android:layout_toStartOf="@id/btn_pip"
-                    android:layout_centerVertical="true"
-                    android:layout_marginEnd="6dp"
-                    android:background="@drawable/speed_btn_bg"
-                    android:gravity="center"
-                    android:paddingHorizontal="10dp"
-                    android:text="⚡ EXO"
-                    android:textColor="#FFD700"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:clickable="true"
-                    android:focusable="true" />
 
                 <ImageButton
                     android:id="@+id/btn_settings"

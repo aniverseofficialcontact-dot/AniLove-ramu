@@ -60,7 +60,7 @@ public class VideoSniffer {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setMediaPlaybackRequiresUserGesture(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setUseWideViewPort(true);
@@ -127,6 +127,7 @@ public class VideoSniffer {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                injectMuteScript(view);
                 injectAntiRedirectScript(view);
                 injectRequestSniffer(view);
             }
@@ -134,6 +135,7 @@ public class VideoSniffer {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                injectMuteScript(view);
                 injectAntiRedirectScript(view);
                 injectRequestSniffer(view);
             }
@@ -158,6 +160,21 @@ public class VideoSniffer {
                 }
             }
         }, "VideoBridge");
+    }
+
+    private void injectMuteScript(WebView view) {
+        if (view == null) return;
+        String script =
+            "(function() {" +
+            "  try {" +
+            "    var media = document.querySelectorAll('video, audio');" +
+            "    for (var i = 0; i < media.length; i++) {" +
+            "      media[i].muted = true;" +
+            "      media[i].volume = 0;" +
+            "    }" +
+            "  } catch(e) {}" +
+            "})();";
+        view.evaluateJavascript(script, null);
     }
 
     private void injectAntiRedirectScript(WebView view) {
