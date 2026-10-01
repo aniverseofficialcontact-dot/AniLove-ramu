@@ -1,6 +1,7 @@
 package com.anilove.app;
 
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.util.Log;
 
 import androidx.media3.common.util.UnstableApi;
@@ -25,7 +26,10 @@ public class NativePlayerPlugin extends Plugin {
     public static void setScreenOrientation(int orientation) {
         if (currentInstance != null && currentInstance.getActivity() != null) {
             currentInstance.getActivity().runOnUiThread(() -> {
-                currentInstance.getActivity().setRequestedOrientation(orientation);
+                try {
+                    // Keep MainActivity strictly in PORTRAIT mode so background Capacitor Web View never rotates sideways
+                    currentInstance.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                } catch (Exception ignored) {}
             });
         }
     }

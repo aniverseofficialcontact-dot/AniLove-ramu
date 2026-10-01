@@ -1116,10 +1116,34 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (btnSkipIntro != null) {
             btnSkipIntro.setOnClickListener(v -> {
                 Object tag = btnSkipIntro.getTag();
+                int targetSec = 85;
                 if (tag instanceof Double) {
-                    seekVideoToAbsolute(((Double) tag).intValue());
+                    targetSec = ((Double) tag).intValue();
+                } else if (tag instanceof Integer) {
+                    targetSec = (Integer) tag;
+                }
+                if (isWebViewPlayerMode && playerWebView != null) {
+                    final int finalTarget = targetSec;
+                    String seekScript =
+                        "(function() {" +
+                        "  function seekAll(win, target) {" +
+                        "    try {" +
+                        "      var vids = win.document.querySelectorAll('video');" +
+                        "      for (var i = 0; i < vids.length; i++) { vids[i].currentTime = target; }" +
+                        "    } catch(e) {}" +
+                        "    for (var k = 0; k < win.frames.length; k++) {" +
+                        "      try { seekAll(win.frames[k], target); } catch(e) {}" +
+                        "    }" +
+                        "  }" +
+                        "  seekAll(window, " + finalTarget + ");" +
+                        "})();";
+                    playerWebView.evaluateJavascript(seekScript, null);
                 } else {
-                    seekVideo(85);
+                    if (tag instanceof Double || tag instanceof Integer) {
+                        seekVideoToAbsolute(targetSec);
+                    } else {
+                        seekVideo(85);
+                    }
                 }
             });
 
@@ -2864,7 +2888,72 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void startUpdateLoop() { 
         updateHandler.postDelayed(new Runnable() { 
             @Override public void run() { 
-                syncPlayerState(); 
+                if (isWebViewPlayerMode && playerWebView != null) {
+                    String queryScript =
+                        "(function() {" +
+                        "  try {" +
+                        "    function getMedia(win) {" +
+                        "      var v = win.document.querySelector('video');" +
+                        "      if (v && v.duration > 0) return { c: v.currentTime, d: v.duration };" +
+                        "      for (var i = 0; i < win.frames.length; i++) {" +
+                        "        try {" +
+                        "          var fv = win.frames[i].document.querySelector('video');" +
+                        "          if (fv && fv.duration > 0) return { c: fv.currentTime, d: fv.duration };" +
+                        "        } catch(e) {}" +
+                        "      }" +
+                        "      return null;" +
+                        "    }" +
+                        "    return JSON.stringify(getMedia(window) || {});" +
+                        "  } catch(e) { return '{}'; }" +
+                        "})();";
+                    playerWebView.evaluateJavascript(queryScript, value -> {
+                        if (value != null && !value.isEmpty() && !value.equals("null") && !value.equals("\"{}\"")) {
+                            try {
+                                String clean = value;
+                                if (clean.startsWith("\"") && clean.endsWith("\"")) {
+                                    clean = clean.substring(1, clean.length() - 1).replace("\\\"", "\"");
+                                }
+                                JSONObject json = new JSONObject(clean);
+                                double c = json.optDouble("c", 0);
+                                double d = json.optDouble("d", 0);
+                                if (d > 0) {
+                                    currentVideoTime = c;
+                                    videoDuration = d;
+                                    textCurrentTime.setText(formatTime((int) c));
+                                    textTotalTime.setText(formatTime((int) d));
+                                    int timeLeft = Math.max(0, (int) (d - c));
+                                    textTimeLeft.setText("-" + formatTime(timeLeft));
+                                    if (!isDragging) {
+                                        seekBar.setMax((int) d);
+                                        seekBar.setProgress((int) c);
+                                    }
+                                    if (opEdSeekBarDrawable != null) {
+                                        opEdSeekBarDrawable.invalidateSelf();
+                                    }
+                                    updateNativeSubtitleOverlay(c);
+                                    checkAutoNextEpisodeTrigger((long)(c * 1000), (long)(d * 1000));
+
+                                    TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
+                                    if (btnSkipIntro != null) {
+                                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && c >= aniSkipOpStart && c < aniSkipOpEnd) {
+                                            btnSkipIntro.setText("⏭️ Skip Intro");
+                                            btnSkipIntro.setVisibility(View.VISIBLE);
+                                            btnSkipIntro.setTag(aniSkipOpEnd);
+                                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && c >= aniSkipEdStart && c < aniSkipEdEnd) {
+                                            btnSkipIntro.setText("⏭️ Skip Ending");
+                                            btnSkipIntro.setVisibility(View.VISIBLE);
+                                            btnSkipIntro.setTag(aniSkipEdEnd);
+                                        } else {
+                                            btnSkipIntro.setVisibility(View.GONE);
+                                        }
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                } else {
+                    syncPlayerState();
+                }
                 updateHandler.postDelayed(this, 1000); 
             } 
         }, 1000); 
