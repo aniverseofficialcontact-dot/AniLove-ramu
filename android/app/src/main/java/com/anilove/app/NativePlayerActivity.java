@@ -3032,6 +3032,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        VideoSniffer.cancelActiveSniffers();
         if (exoPlayer != null && !isInPictureInPictureMode()) {
             try {
                 exoPlayer.setPlayWhenReady(false);
@@ -3091,6 +3092,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     protected void onDestroy() { 
         if (currentInstance == this) currentInstance = null;
         
+        VideoSniffer.cancelActiveSniffers();
         NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         updateHandler.removeCallbacksAndMessages(null); 
         hideHandler.removeCallbacksAndMessages(null); 
