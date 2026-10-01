@@ -166,50 +166,54 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (webView == null) return;
         String script =
             "(function() {" +
-            "  try {" +
-            "    window.open = function() { return null; };" +
-            "    window.onbeforeunload = null;" +
-            "    try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}" +
+            "  var cssRules = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
+            "                 '.jw-icon-fullscreen, .jw-btn-fullscreen, .art-icon-fullscreen, .art-control-fullscreen, .plyr__controls__item[data-plyr=\"fullscreen\"], ' +" +
+            "                 '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, button[data-plyr=\"fullscreen\"], ' +" +
+            "                 'button[title*=\"Fullscreen\" i], button[title*=\"Full Screen\" i], button[aria-label*=\"Fullscreen\" i], button[aria-label*=\"Full Screen\" i], ' +" +
+            "                 '[data-tooltip*=\"Fullscreen\" i], [data-tooltip*=\"Full Screen\" i], ' +" +
+            "                 '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, .plyr__controls__item[data-plyr=\"settings\"], ' +" +
+            "                 'button[data-plyr=\"settings\"], .vjs-setting-menu-button, .vjs-quality-selector, button[title*=\"Setting\" i], button[title*=\"Quality\" i], ' +" +
+            "                 'button[aria-label*=\"Setting\" i], button[aria-label*=\"Quality\" i], [data-tooltip*=\"Setting\" i], [data-tooltip*=\"Quality\" i], ' +" +
+            "                 '.jw-icon-rewind, .jw-icon-forward, .jw-btn-rewind, .jw-btn-forward, .art-icon-rewind, .art-icon-forward, .art-control-jump, .art-control-rewind, .art-control-forward, .art-icon-jump, button[data-plyr=\"rewind\"], ' +" +
+            "                 'button[data-plyr=\"fast-forward\"], .vjs-seek-button, .vjs-skip-backward-10, .vjs-skip-forward-10, button[title*=\"10\" i], ' +" +
+            "                 'button[title*=\"Rewind\" i], button[title*=\"Forward\" i], button[title*=\"Jump\" i], button[title*=\"Skip\" i], button[aria-label*=\"10\" i], button[aria-label*=\"Rewind\" i], ' +" +
+            "                 'button[aria-label*=\"Forward\" i], button[aria-label*=\"Jump\" i], button[aria-label*=\"Skip\" i], [data-tooltip*=\"10\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [data-tooltip*=\"Jump\" i], [data-tooltip*=\"Skip\" i], [class*=\"seek-10\" i], [class*=\"skip-10\" i], [class*=\"seek\" i], [class*=\"skip\" i], [class*=\"jump\" i], [class*=\"step\" i], [class*=\"backward\" i], [class*=\"-10\" i], [class*=\"+10\" i], .blakite-skip, .blakite-rewind, ' +" +
+            "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], div[class*=\"download\" i], .btn-download, ' +" +
+            "                 'div[class*=\"quality\" i], button[class*=\"quality\" i], [class*=\"hd-\" i], [id*=\"quality\" i], .jw-icon-hd, .jw-settings-content, div[class*=\"hd\" i], .v-quality, ' +" +
+            "                 'div[class*=\"caption\" i], button[class*=\"caption\" i], div[class*=\"subtitle\" i], button[class*=\"subtitle\" i], .jw-icon-cc, .art-icon-subtitle, [class*=\"cc-\" i], [id*=\"cc\" i], [id*=\"subtitle\" i], .v-cc, ' +" +
+            "                 'div[class*=\"pip\" i], button[class*=\"pip\" i], .art-icon-pip, .jw-icon-pip, [aria-label*=\"Picture\" i], [title*=\"Picture\" i], [data-tooltip*=\"Picture\" i], .v-pip, ' +" +
+            "                 '.jw-slider-time, .jw-rail, .jw-progress, .jw-buffer, .jw-knob, .jw-slider-horizontal, .art-control-progress, .art-progress, .plyr__progress, .vjs-progress-control, .vjs-progress-holder, .vjs-play-progress, .vjs-slider, div[class*=\"progress\" i], div[class*=\"seekbar\" i], div[class*=\"seek-bar\" i], input[type=\"range\"], div[class*=\"rail\" i], div[class*=\"timeline\" i], div[class*=\"slider\" i], [id*=\"progress\" i], [id*=\"seekbar\" i], [id*=\"timeline\" i], .v-seekbar, ' +" +
+            "                 '.art-control-play, .art-control-pause, .art-icon-play, .art-icon-pause, .jw-icon-playback, .jw-btn-play, .jw-btn-pause, button[data-plyr=\"play\"], button[data-plyr=\"pause\"], .vjs-play-control, ' +" +
+            "                 '.art-control-volume, .art-icon-volume, .art-volume, .jw-icon-volume, .jw-btn-volume, button[data-plyr=\"mute\"], .plyr__volume, .vjs-volume-panel, .vjs-mute-control, ' +" +
+            "                 '.jw-text-elapsed, .jw-text-duration, .jw-text-countdown, .jw-time-tip, .art-control-time, .art-time, .plyr__time, .plyr__time--current, .plyr__time--duration, .vjs-current-time, .vjs-duration, .vjs-remaining-time, .vjs-time-control, [class*=\"time-display\" i], [class*=\"time_display\" i], [class*=\"time-text\" i], [class*=\"time_text\" i], [class*=\"duration\" i], [class*=\"elapsed\" i], [id*=\"duration\" i], [id*=\"elapsed\" i], span[class*=\"time\" i], div[class*=\"time\" i], ' +" +
+            "                 '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
+            "                 '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
+            "  function applyAdEraserToWindow(win) {" +
             "    try {" +
-            "      Element.prototype.requestFullscreen = function() { return Promise.reject(); };" +
-            "      Element.prototype.webkitRequestFullscreen = function() {};" +
-            "      Element.prototype.webkitEnterFullscreen = function() {};" +
-            "    } catch(e) {}" +
-            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
-            "              '.jw-icon-fullscreen, .jw-btn-fullscreen, .art-icon-fullscreen, .art-control-fullscreen, .plyr__controls__item[data-plyr=\"fullscreen\"], ' +" +
-            "              '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, button[data-plyr=\"fullscreen\"], ' +" +
-            "              'button[title*=\"Fullscreen\" i], button[title*=\"Full Screen\" i], button[aria-label*=\"Fullscreen\" i], button[aria-label*=\"Full Screen\" i], ' +" +
-            "              '[data-tooltip*=\"Fullscreen\" i], [data-tooltip*=\"Full Screen\" i], ' +" +
-            "              '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, .plyr__controls__item[data-plyr=\"settings\"], ' +" +
-            "              'button[data-plyr=\"settings\"], .vjs-setting-menu-button, .vjs-quality-selector, button[title*=\"Setting\" i], button[title*=\"Quality\" i], ' +" +
-            "              'button[aria-label*=\"Setting\" i], button[aria-label*=\"Quality\" i], [data-tooltip*=\"Setting\" i], [data-tooltip*=\"Quality\" i], ' +" +
-            "              '.jw-icon-rewind, .jw-icon-forward, .jw-btn-rewind, .jw-btn-forward, .art-icon-rewind, .art-icon-forward, .art-control-jump, .art-control-rewind, .art-control-forward, .art-icon-jump, button[data-plyr=\"rewind\"], ' +" +
-            "              'button[data-plyr=\"fast-forward\"], .vjs-seek-button, .vjs-skip-backward-10, .vjs-skip-forward-10, button[title*=\"10\" i], ' +" +
-            "              'button[title*=\"Rewind\" i], button[title*=\"Forward\" i], button[title*=\"Jump\" i], button[title*=\"Skip\" i], button[aria-label*=\"10\" i], button[aria-label*=\"Rewind\" i], ' +" +
-            "              'button[aria-label*=\"Forward\" i], button[aria-label*=\"Jump\" i], button[aria-label*=\"Skip\" i], [data-tooltip*=\"10\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [data-tooltip*=\"Jump\" i], [data-tooltip*=\"Skip\" i], [class*=\"seek-10\" i], [class*=\"skip-10\" i], [class*=\"seek\" i], [class*=\"skip\" i], [class*=\"jump\" i], [class*=\"step\" i], ' +" +
-            "              '.art-control-play, .art-control-pause, .art-icon-play, .art-icon-pause, .jw-icon-playback, .jw-btn-play, .jw-btn-pause, button[data-plyr=\"play\"], button[data-plyr=\"pause\"], .vjs-play-control, ' +" +
-            "              '.art-control-volume, .art-icon-volume, .art-volume, .jw-icon-volume, .jw-btn-volume, button[data-plyr=\"mute\"], .plyr__volume, .vjs-volume-panel, .vjs-mute-control, ' +" +
-            "              '.jw-text-elapsed, .jw-text-duration, .jw-text-countdown, .jw-time-tip, .art-control-time, .art-time, .plyr__time, .plyr__time--current, .plyr__time--duration, .vjs-current-time, .vjs-duration, .vjs-remaining-time, .vjs-time-control, [class*=\"time-display\" i], [class*=\"time_display\" i], [class*=\"time-text\" i], [class*=\"time_text\" i], [class*=\"duration\" i], [class*=\"elapsed\" i], [id*=\"duration\" i], [id*=\"elapsed\" i], span[class*=\"time\" i], div[class*=\"time\" i], ' +" +
-            "              '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
-            "              '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
-            "    var style = document.createElement('style');" +
-            "    style.type = 'text/css';" +
-            "    style.appendChild(document.createTextNode(css));" +
-            "    (document.head || document.documentElement).appendChild(style);" +
-            "  } catch(e) {}" +
-            "  function disableContextMenuAndBindVideo(win) {" +
-            "    try {" +
-            "      win.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); return false; }, true);" +
-            "      if (win.jwplayer) { try { win.jwplayer().on('contextmenu', function(e) { e.preventDefault(); }); } catch(err){} }" +
+            "      if (!win.document) return;" +
             "      try {" +
+            "        win.open = function() { return null; };" +
+            "        win.onbeforeunload = null;" +
             "        win.Element.prototype.requestFullscreen = function() { return Promise.reject(); };" +
             "        win.Element.prototype.webkitRequestFullscreen = function() {};" +
             "        win.Element.prototype.webkitEnterFullscreen = function() {};" +
             "      } catch(e) {}" +
+            "      if (!win.document.getElementById('anilove_style')) {" +
+            "        var style = win.document.createElement('style');" +
+            "        style.id = 'anilove_style';" +
+            "        style.type = 'text/css';" +
+            "        style.appendChild(win.document.createTextNode(cssRules));" +
+            "        (win.document.head || win.document.documentElement).appendChild(style);" +
+            "      }" +
             "      var hideSelectors = ['" +
             "        .jw-icon-fullscreen', '.jw-btn-fullscreen', '.art-icon-fullscreen', '.art-control-fullscreen', '.plyr__controls__item[data-plyr=\"fullscreen\"]', '.vjs-fullscreen-control', '.dplayer-full-icon', 'button[data-plyr=\"fullscreen\"]', 'button[title*=\"Fullscreen\"]', 'button[title*=\"Full Screen\"]', 'button[aria-label*=\"Fullscreen\"]', 'button[aria-label*=\"Full Screen\"]', " +
             "        '.jw-icon-settings', '.jw-btn-settings', '.art-icon-setting', '.art-control-setting', '.art-setting', '.plyr__controls__item[data-plyr=\"settings\"]', 'button[data-plyr=\"settings\"]', '.vjs-setting-menu-button', '.vjs-quality-selector', 'button[title*=\"Setting\"]', 'button[title*=\"Quality\"]', 'button[aria-label*=\"Setting\"]', 'button[aria-label*=\"Quality\"]', " +
-            "        '.jw-icon-rewind', '.jw-icon-forward', '.jw-btn-rewind', '.jw-btn-forward', '.art-icon-rewind', '.art-icon-forward', '.art-control-jump', '.art-control-rewind', '.art-control-forward', '.art-icon-jump', 'button[data-plyr=\"rewind\"]', 'button[data-plyr=\"fast-forward\"]', '.vjs-seek-button', '.vjs-skip-backward-10', '.vjs-skip-forward-10', 'button[title*=\"10\"]', 'button[title*=\"Rewind\"]', 'button[title*=\"Forward\"]', 'button[title*=\"Jump\"]', 'button[aria-label*=\"10\"]', 'button[aria-label*=\"Rewind\"]', 'button[aria-label*=\"Forward\"]', 'button[aria-label*=\"Jump\"]', '[class*=\"skip\"]', '[class*=\"rewind\"]', '[class*=\"forward\"]', '[class*=\"seek\"]', '[class*=\"step\"]', " +
+            "        '.jw-icon-rewind', '.jw-icon-forward', '.jw-btn-rewind', '.jw-btn-forward', '.art-icon-rewind', '.art-icon-forward', '.art-control-jump', '.art-control-rewind', '.art-control-forward', '.art-icon-jump', 'button[data-plyr=\"rewind\"]', 'button[data-plyr=\"fast-forward\"]', '.vjs-seek-button', '.vjs-skip-backward-10', '.vjs-skip-forward-10', 'button[title*=\"10\"]', 'button[title*=\"Rewind\"]', 'button[title*=\"Forward\"]', 'button[title*=\"Jump\"]', 'button[aria-label*=\"10\"]', 'button[aria-label*=\"Rewind\"]', 'button[aria-label*=\"Forward\"]', 'button[aria-label*=\"Jump\"]', '[class*=\"skip\"]', '[class*=\"rewind\"]', '[class*=\"forward\"]', '[class*=\"seek\"]', '[class*=\"step\"]', '[class*=\"backward\"]', '.blakite-skip', '.blakite-rewind', " +
+            "        'a[href*=\"download\"]', '.download-btn', '.download-link', 'button[class*=\"download\"]', 'a[class*=\"download\"]', '[id*=\"download\"]', 'div[class*=\"download\"]', '.btn-download', " +
+            "        'div[class*=\"quality\"]', 'button[class*=\"quality\"]', '[id*=\"quality\"]', '.jw-icon-hd', '.jw-settings-content', '.v-quality', " +
+            "        'div[class*=\"caption\"]', 'button[class*=\"caption\"]', 'div[class*=\"subtitle\"]', 'button[class*=\"subtitle\"]', '.jw-icon-cc', '.art-icon-subtitle', '[id*=\"subtitle\"]', '.v-cc', " +
+            "        'div[class*=\"pip\"]', 'button[class*=\"pip\"]', '.art-icon-pip', '.jw-icon-pip', '.v-pip', " +
+            "        '.jw-slider-time', '.jw-rail', '.jw-progress', '.jw-buffer', '.jw-knob', '.jw-slider-horizontal', '.art-control-progress', '.art-progress', '.plyr__progress', '.vjs-progress-control', '.vjs-progress-holder', '.vjs-play-progress', '.vjs-slider', 'div[class*=\"progress\"]', 'div[class*=\"seekbar\"]', 'div[class*=\"seek-bar\"]', 'input[type=\"range\"]', 'div[class*=\"rail\"]', 'div[class*=\"timeline\"]', 'div[class*=\"slider\"]', '[id*=\"progress\"]', '[id*=\"seekbar\"]', '[id*=\"timeline\"]', '.v-seekbar', " +
             "        '.art-control-play', '.art-control-pause', '.art-icon-play', '.art-icon-pause', '.jw-icon-playback', '.jw-btn-play', '.jw-btn-pause', 'button[data-plyr=\"play\"]', 'button[data-plyr=\"pause\"]', '.vjs-play-control', " +
             "        '.art-control-volume', '.art-icon-volume', '.art-volume', '.jw-icon-volume', '.jw-btn-volume', 'button[data-plyr=\"mute\"]', '.plyr__volume', '.vjs-volume-panel', '.vjs-mute-control', " +
             "        '.jw-text-elapsed', '.jw-text-duration', '.jw-text-countdown', '.jw-time-tip', '.art-control-time', '.art-time', '.plyr__time', '.vjs-current-time', '.vjs-duration', '.vjs-remaining-time', '[class*=\"time-display\"]', '[class*=\"time_display\"]', '[class*=\"time-text\"]', '[class*=\"duration\"]', '[class*=\"elapsed\"]'" +
@@ -228,12 +232,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        });" +
             "      }" +
             "    } catch(e) {}" +
-            "    for (var k = 0; k < win.frames.length; k++) {" +
-            "      try { disableContextMenuAndBindVideo(win.frames[k]); } catch(e) {}" +
+            "    for (var i = 0; i < win.frames.length; i++) {" +
+            "      try { applyAdEraserToWindow(win.frames[i]); } catch(e) {}" +
             "    }" +
             "  }" +
-            "  disableContextMenuAndBindVideo(window);" +
-            "  if (!window.aniskipInterval) { window.aniskipInterval = setInterval(function() { disableContextMenuAndBindVideo(window); }, 500); }" +
+            "  applyAdEraserToWindow(window);" +
+            "  if (!window.aniloveInterval) { window.aniloveInterval = setInterval(function() { applyAdEraserToWindow(window); }, 250); }" +
             "})();";
         webView.evaluateJavascript(script, null);
     }
