@@ -1024,6 +1024,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         btnPlayPause = findViewById(R.id.btn_play_pause);
         seekBar = findViewById(R.id.video_seekbar);
+        if (seekBar != null) {
+            seekBar.setProgressTintList(null);
+            seekBar.setProgressBackgroundTintList(null);
+        }
         opEdSeekBarDrawable = new OpEdSeekBarDrawable();
         seekBar.setProgressDrawable(opEdSeekBarDrawable);
         textCurrentTime = findViewById(R.id.text_current_time);
