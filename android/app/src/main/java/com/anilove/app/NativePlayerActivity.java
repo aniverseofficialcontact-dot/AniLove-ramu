@@ -439,6 +439,34 @@ public class NativePlayerActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         overridePendingTransition(0, 0);
         setIntent(intent);
+
+        // 1. Immediately kill any active background sniffing WebViews
+        VideoSniffer.cancelActiveSniffers();
+
+        // 2. Immediately stop & clear Embedded Web View player if active
+        if (playerWebView != null) {
+            try {
+                playerWebView.stopLoading();
+                playerWebView.loadUrl("about:blank");
+                playerWebView.setVisibility(View.GONE);
+            } catch (Exception ignored) {}
+        }
+        isWebViewPlayerMode = false;
+        if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
+        View touchWall = findViewById(R.id.touch_wall);
+        if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+
+        // 3. Immediately stop & release previous ExoPlayer instance to prevent dual audio
+        if (exoPlayer != null) {
+            try {
+                exoPlayer.setPlayWhenReady(false);
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
+                exoPlayer.release();
+            } catch (Exception ignored) {}
+            exoPlayer = null;
+        }
+
         updateMetadataFromIntent(intent);
         applyWindowSettings(intent);
 
@@ -447,11 +475,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (textCurrentTime != null) textCurrentTime.setText("00:00");
         if (textTimeLeft != null) textTimeLeft.setText("-00:00");
         if (seekBar != null) seekBar.setProgress(0);
-        btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-
-        if (exoPlayer != null) {
-            exoPlayer.stop();
-        }
+        if (btnPlayPause != null) btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
 
         isOfflineMode = intent.getBooleanExtra("offlineMode", false);
         if (isOfflineMode) {
