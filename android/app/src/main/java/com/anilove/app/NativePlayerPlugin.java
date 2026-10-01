@@ -27,7 +27,7 @@ public class NativePlayerPlugin extends Plugin {
         if (currentInstance != null && currentInstance.getActivity() != null) {
             currentInstance.getActivity().runOnUiThread(() -> {
                 try {
-                    currentInstance.getActivity().setRequestedOrientation(orientation);
+                    currentInstance.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
                 } catch (Exception ignored) {}
             });
         }

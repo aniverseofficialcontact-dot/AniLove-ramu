@@ -170,7 +170,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             "    window.open = function() { return null; };" +
             "    window.onbeforeunload = null;" +
             "    try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}" +
-            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], .ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+            "    try {" +
+            "      Element.prototype.requestFullscreen = function() { return Promise.reject(); };" +
+            "      Element.prototype.webkitRequestFullscreen = function() {};" +
+            "      Element.prototype.webkitEnterFullscreen = function() {};" +
+            "    } catch(e) {}" +
+            "    var css = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], .jw-icon-fullscreen, .art-icon-fullscreen, [class*=\"fullscreen\"], [id*=\"fullscreen\"], button[title*=\"Fullscreen\"], .ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
             "    var style = document.createElement('style');" +
             "    style.type = 'text/css';" +
             "    style.appendChild(document.createTextNode(css));" +
@@ -180,6 +185,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             "    try {" +
             "      win.addEventListener('contextmenu', function(e) { e.preventDefault(); e.stopPropagation(); return false; }, true);" +
             "      if (win.jwplayer) { try { win.jwplayer().on('contextmenu', function(e) { e.preventDefault(); }); } catch(err){} }" +
+            "      try {" +
+            "        win.Element.prototype.requestFullscreen = function() { return Promise.reject(); };" +
+            "        win.Element.prototype.webkitRequestFullscreen = function() {};" +
+            "        win.Element.prototype.webkitEnterFullscreen = function() {};" +
+            "      } catch(e) {}" +
             "      var v = win.document.querySelector('video');" +
             "      if (v && !v.dataset.aniskipBound) {" +
             "        v.dataset.aniskipBound = 'true';" +
@@ -905,65 +915,16 @@ public class NativePlayerActivity extends AppCompatActivity {
             settings.setJavaScriptCanOpenWindowsAutomatically(false);
 
             playerWebView.setWebChromeClient(new WebChromeClient() {
-                private View customView;
-                private CustomViewCallback customViewCallback;
-
                 @Override
                 public void onShowCustomView(View view, CustomViewCallback callback) {
-                    if (customView != null) {
-                        callback.onCustomViewHidden();
-                        return;
+                    if (callback != null) {
+                        try { callback.onCustomViewHidden(); } catch (Exception ignored) {}
                     }
-                    customView = view;
-                    customViewCallback = callback;
-
-                    FrameLayout mediaContainer = findViewById(R.id.player_media_container);
-                    if (mediaContainer != null && view != null) {
-                        mediaContainer.addView(view, new FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                        ));
-                    }
-
-                    if (playerWebView != null) playerWebView.setVisibility(View.GONE);
-                    if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
-
-                    isFullscreenMode = true;
-                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                    Intent intent = getIntent();
-                    if (intent != null) intent.putExtra("startFullscreen", true);
-                    applyWindowSettings(intent);
-                    Log.i("AniLove_Fullscreen", "WebView custom view added and expanded to Fullscreen Landscape!");
+                    Log.i("AniLove_Fullscreen", "Blocked HTML player custom view fullscreen; native controls button active!");
                 }
 
                 @Override
-                public void onHideCustomView() {
-                    if (customView == null) return;
-
-                    FrameLayout mediaContainer = findViewById(R.id.player_media_container);
-                    if (mediaContainer != null) {
-                        mediaContainer.removeView(customView);
-                    }
-
-                    if (customViewCallback != null) {
-                        try { customViewCallback.onCustomViewHidden(); } catch (Exception ignored) {}
-                    }
-                    customView = null;
-                    customViewCallback = null;
-
-                    if (isWebViewPlayerMode && playerWebView != null) {
-                        playerWebView.setVisibility(View.VISIBLE);
-                    } else if (exoPlayerView != null) {
-                        exoPlayerView.setVisibility(View.VISIBLE);
-                    }
-
-                    isFullscreenMode = false;
-                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-                    Intent intent = getIntent();
-                    if (intent != null) intent.putExtra("startFullscreen", false);
-                    applyWindowSettings(intent);
-                    Log.i("AniLove_Fullscreen", "WebView custom view removed, returned to Portrait!");
-                }
+                public void onHideCustomView() {}
 
                 @Override
                 public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
