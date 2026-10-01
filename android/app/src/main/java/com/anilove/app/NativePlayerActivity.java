@@ -180,6 +180,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             "              '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, button[data-plyr=\"fullscreen\"], ' +" +
             "              'button[title*=\"Fullscreen\" i], button[title*=\"Full Screen\" i], button[aria-label*=\"Fullscreen\" i], button[aria-label*=\"Full Screen\" i], ' +" +
             "              '[data-tooltip*=\"Fullscreen\" i], [data-tooltip*=\"Full Screen\" i], ' +" +
+            "              '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, .plyr__controls__item[data-plyr=\"settings\"], ' +" +
+            "              'button[data-plyr=\"settings\"], .vjs-setting-menu-button, .vjs-quality-selector, button[title*=\"Setting\" i], button[title*=\"Quality\" i], ' +" +
+            "              'button[aria-label*=\"Setting\" i], button[aria-label*=\"Quality\" i], [data-tooltip*=\"Setting\" i], [data-tooltip*=\"Quality\" i], ' +" +
+            "              '.jw-icon-rewind, .jw-icon-forward, .jw-btn-rewind, .jw-btn-forward, .art-icon-rewind, .art-icon-forward, button[data-plyr=\"rewind\"], ' +" +
+            "              'button[data-plyr=\"fast-forward\"], .vjs-seek-button, .vjs-skip-backward-10, .vjs-skip-forward-10, button[title*=\"10\" i], ' +" +
+            "              'button[title*=\"Rewind\" i], button[title*=\"Forward\" i], button[aria-label*=\"10\" i], button[aria-label*=\"Rewind\" i], ' +" +
+            "              'button[aria-label*=\"Forward\" i], [data-tooltip*=\"10s\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [class*=\"seek-10\" i], [class*=\"skip-10\" i], ' +" +
             "              '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
             "              '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
             "    var style = document.createElement('style');" +
@@ -196,8 +203,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        win.Element.prototype.webkitRequestFullscreen = function() {};" +
             "        win.Element.prototype.webkitEnterFullscreen = function() {};" +
             "      } catch(e) {}" +
-            "      var fsSelectors = ['.jw-icon-fullscreen', '.jw-btn-fullscreen', '.art-icon-fullscreen', '.art-control-fullscreen', '.plyr__controls__item[data-plyr=\"fullscreen\"]', '.vjs-fullscreen-control', '.dplayer-full-icon', 'button[data-plyr=\"fullscreen\"]', 'button[title*=\"Fullscreen\"]', 'button[title*=\"Full Screen\"]', 'button[aria-label*=\"Fullscreen\"]', 'button[aria-label*=\"Full Screen\"]'];" +
-            "      fsSelectors.forEach(function(sel) {" +
+            "      var hideSelectors = ['" +
+            "        .jw-icon-fullscreen', '.jw-btn-fullscreen', '.art-icon-fullscreen', '.art-control-fullscreen', '.plyr__controls__item[data-plyr=\"fullscreen\"]', '.vjs-fullscreen-control', '.dplayer-full-icon', 'button[data-plyr=\"fullscreen\"]', 'button[title*=\"Fullscreen\"]', 'button[title*=\"Full Screen\"]', 'button[aria-label*=\"Fullscreen\"]', 'button[aria-label*=\"Full Screen\"]', " +
+            "        '.jw-icon-settings', '.jw-btn-settings', '.art-icon-setting', '.art-control-setting', '.art-setting', '.plyr__controls__item[data-plyr=\"settings\"]', 'button[data-plyr=\"settings\"]', '.vjs-setting-menu-button', '.vjs-quality-selector', 'button[title*=\"Setting\"]', 'button[title*=\"Quality\"]', 'button[aria-label*=\"Setting\"]', 'button[aria-label*=\"Quality\"]', " +
+            "        '.jw-icon-rewind', '.jw-icon-forward', '.jw-btn-rewind', '.jw-btn-forward', '.art-icon-rewind', '.art-icon-forward', 'button[data-plyr=\"rewind\"]', 'button[data-plyr=\"fast-forward\"]', '.vjs-seek-button', '.vjs-skip-backward-10', '.vjs-skip-forward-10', 'button[title*=\"10\"]', 'button[title*=\"Rewind\"]', 'button[title*=\"Forward\"]', 'button[aria-label*=\"10\"]', 'button[aria-label*=\"Rewind\"]', 'button[aria-label*=\"Forward\"]'" +
+            "      ];" +
+            "      hideSelectors.forEach(function(sel) {" +
             "        var els = win.document.querySelectorAll(sel);" +
             "        els.forEach(function(el) { try { el.remove(); } catch(err){} });" +
             "      });" +
