@@ -46,6 +46,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -181,6 +182,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String currentActiveEmbedUrl = null;
     private String currentActiveServerName = "";
     private String currentActiveSourceName = "";
+    private final Map<String, Map<String, String>> activeLanguageQualityMap = new HashMap<>();
 
     private void injectAdEraserScript(WebView webView) {
         if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
@@ -627,6 +629,28 @@ public class NativePlayerActivity extends AppCompatActivity {
                     detectedQualities = list;
                 }
             } catch (Exception ignored) {}
+        }
+
+        String langQualMapJson = intent.getStringExtra("languageQualityMap");
+        if (langQualMapJson != null && !langQualMapJson.isEmpty()) {
+            try {
+                JSONObject obj = new JSONObject(langQualMapJson);
+                activeLanguageQualityMap.clear();
+                Iterator<String> keys = obj.keys();
+                while (keys.hasNext()) {
+                    String langKey = keys.next();
+                    JSONObject qObj = obj.getJSONObject(langKey);
+                    Map<String, String> qMap = new HashMap<>();
+                    Iterator<String> qKeys = qObj.keys();
+                    while (qKeys.hasNext()) {
+                        String qKey = qKeys.next();
+                        qMap.put(qKey, qObj.getString(qKey));
+                    }
+                    activeLanguageQualityMap.put(langKey, qMap);
+                }
+            } catch (Exception e) {
+                Log.w("AniLove", "Error parsing languageQualityMap: " + e.getMessage());
+            }
         }
         String animeTitle = intent.getStringExtra("animeTitle");
         String rawTitle = intent.getStringExtra("title");
@@ -2152,10 +2176,33 @@ public class NativePlayerActivity extends AppCompatActivity {
         currentSelectedQuality = quality;
         NativePlayerPlugin.notifyQualityChange(quality);
 
-        String sName = (currentActiveSourceName != null ? currentActiveSourceName : "") + " " + (currentActiveServerName != null ? currentActiveServerName : "");
-        if (sName.toLowerCase().contains("moviebox")) {
-            Toast.makeText(this, "Quality: " + quality, Toast.LENGTH_SHORT).show();
-            return;
+        if (!activeLanguageQualityMap.isEmpty()) {
+            Map<String, String> qualitiesForLang = activeLanguageQualityMap.get(currentSelectedAudio);
+            if (qualitiesForLang == null) {
+                for (String k : activeLanguageQualityMap.keySet()) {
+                    if (isAudioLanguageMatch(k, currentSelectedAudio)) {
+                        qualitiesForLang = activeLanguageQualityMap.get(k);
+                        break;
+                    }
+                }
+            }
+
+            if (qualitiesForLang != null) {
+                String newUrl = qualitiesForLang.get(quality);
+                if (newUrl != null && !newUrl.isEmpty() && !newUrl.equalsIgnoreCase(currentLoadedStreamUrl)) {
+                    long currentPosMs = (exoPlayer != null) ? exoPlayer.getCurrentPosition() : 0;
+                    Toast.makeText(this, "Quality: " + quality, Toast.LENGTH_SHORT).show();
+
+                    currentEmbedUrl = newUrl;
+                    currentActiveEmbedUrl = newUrl;
+
+                    setupExoPlayerOnlineDirect(newUrl, "https://netfilm.world/", null);
+                    if (exoPlayer != null && currentPosMs > 0) {
+                        exoPlayer.seekTo(currentPosMs);
+                    }
+                    return;
+                }
+            }
         }
 
         if (exoPlayer == null) return;
@@ -2190,7 +2237,53 @@ public class NativePlayerActivity extends AppCompatActivity {
         String embedLower = embedUrl.toLowerCase();
         String combined = srvLower + " " + embedLower;
 
-        // 1. HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
+        // 1. Multi-Lang (MovieBox) direct URL quality/language map switching
+        if (!activeLanguageQualityMap.isEmpty()) {
+            Map<String, String> qualitiesForLang = activeLanguageQualityMap.get(audioLang);
+            if (qualitiesForLang == null) {
+                for (String k : activeLanguageQualityMap.keySet()) {
+                    if (isAudioLanguageMatch(k, audioLang)) {
+                        qualitiesForLang = activeLanguageQualityMap.get(k);
+                        break;
+                    }
+                }
+            }
+
+            if (qualitiesForLang != null && !qualitiesForLang.isEmpty()) {
+                detectedQualities = new ArrayList<>(qualitiesForLang.keySet());
+
+                String newUrl = qualitiesForLang.get(currentSelectedQuality);
+                if (newUrl == null || newUrl.isEmpty()) {
+                    String[] order = {"1080p", "720p", "480p", "360p"};
+                    for (String r : order) {
+                        if (qualitiesForLang.containsKey(r)) {
+                            newUrl = qualitiesForLang.get(r);
+                            currentSelectedQuality = r;
+                            break;
+                        }
+                    }
+                    if (newUrl == null) {
+                        newUrl = qualitiesForLang.values().iterator().next();
+                    }
+                }
+
+                if (newUrl != null && !newUrl.isEmpty()) {
+                    long currentPosMs = (exoPlayer != null) ? exoPlayer.getCurrentPosition() : 0;
+                    Toast.makeText(this, "Switching audio to " + audioLang + "...", Toast.LENGTH_SHORT).show();
+
+                    currentEmbedUrl = newUrl;
+                    currentActiveEmbedUrl = newUrl;
+
+                    setupExoPlayerOnlineDirect(newUrl, "https://netfilm.world/", null);
+                    if (exoPlayer != null && currentPosMs > 0) {
+                        exoPlayer.seekTo(currentPosMs);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // 2. HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
         if (combined.contains("hianime") || combined.contains("vidnest") || combined.contains("tryembed")) {
             String lower = audioLang.toLowerCase();
             boolean wantsSub = lower.contains("jap") || lower.contains("sub") || lower.contains("japanese");
@@ -2219,7 +2312,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        // 2. PirateXPlay Multi-Audio Proxy switching
+        // 3. PirateXPlay Multi-Audio Proxy switching
         if (combined.contains("multi.php?data=") || combined.contains("piratexplay")) {
             if (embedUrl.contains("data=")) {
                 try {
@@ -2256,7 +2349,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         }
 
-        // 3. Standard ExoPlayer Track Selection
+        // 4. Standard ExoPlayer Track Selection
         if (exoPlayer == null) return;
         try {
             String targetLangCode = "en";

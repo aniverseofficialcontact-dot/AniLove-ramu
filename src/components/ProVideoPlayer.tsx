@@ -682,6 +682,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           sourceName: selectedSource || 'Multi-Lang',
           availableLanguages: JSON.stringify(streamSource.availableLanguages || []),
           availableResolutions: JSON.stringify(streamSource.availableResolutions || []),
+          languageQualityMap: JSON.stringify(streamSource.languageQualityMap || {}),
           targetUrl: streamSource.url,
           subtitleUrl: activeSubUrl,
           subtitleLang: activeSubLang,

@@ -110,6 +110,7 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("targetUrl", call.getString("targetUrl"));
             intent.putExtra("availableLanguages", call.getString("availableLanguages"));
             intent.putExtra("availableResolutions", call.getString("availableResolutions"));
+            intent.putExtra("languageQualityMap", call.getString("languageQualityMap"));
             intent.putExtra("title", call.getString("title", "Now Playing"));
             
             Boolean hasNext = call.getBoolean("hasNext");
