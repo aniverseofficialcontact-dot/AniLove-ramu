@@ -102,7 +102,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [activeServer, setActiveServer] = useState<StreamServerId>(currentServer || DEFAULT_STREAM_PROVIDER_ID);
   const [selectedSubServerName, setSelectedSubServerName] = useState<string | undefined>(selectedSubServer || 'Server 1');
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
-  const [quality] = useState<StreamResolution>('1080p');
+  const [quality, setQuality] = useState<StreamResolution>('1080p');
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
   // Stream connection state
@@ -630,12 +630,27 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
       (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
       (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
+      (NativePlayer as any).removeAllListeners?.('onQualityChange');
+      (NativePlayer as any).removeAllListeners?.('onLanguageChange');
+
       NativePlayer.addListener('onEpisodeNavigation', (data) => {
         if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
         else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
       });
       NativePlayer.addListener('onBackButtonPressed', () => {
         if (onClosePlayer) onClosePlayer();
+      });
+      NativePlayer.addListener('onQualityChange', (data: any) => {
+        if (data && data.quality) {
+          setQuality(data.quality as StreamResolution);
+        }
+      });
+      NativePlayer.addListener('onLanguageChange', (data: any) => {
+        if (data && data.language) {
+          const l = String(data.language).toLowerCase();
+          if (l.includes('jap') || l.includes('sub')) setAudioMode('SUB');
+          else if (l.includes('eng') || l.includes('dub')) setAudioMode('DUB');
+        }
       });
 
       let activeSubUrl = streamSource.subtitleUrl;

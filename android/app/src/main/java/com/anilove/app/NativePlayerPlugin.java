@@ -41,6 +41,14 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
+    public static void notifyQualityChange(String quality) {
+        if (currentInstance != null) {
+            JSObject ret = new JSObject();
+            ret.put("quality", quality);
+            currentInstance.notifyListeners("onQualityChange", ret);
+        }
+    }
+
     private static String lastPlayUrl = null;
     private static long lastPlayTime = 0;
 

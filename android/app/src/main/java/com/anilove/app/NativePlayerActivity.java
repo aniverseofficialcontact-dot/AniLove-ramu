@@ -29,6 +29,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -2102,9 +2103,32 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
+    private boolean isAudioLanguageMatch(String lang, String target) {
+        if (lang == null || target == null) return false;
+        String l = lang.toLowerCase();
+        String t = target.toLowerCase();
+        if (t.contains("hin") && l.contains("hin")) return true;
+        if (t.contains("tam") && l.contains("tam")) return true;
+        if (t.contains("tel") && l.contains("tel")) return true;
+        if (t.contains("mal") && l.contains("mal")) return true;
+        if (t.contains("kan") && l.contains("kan")) return true;
+        if (t.contains("ben") && l.contains("ben")) return true;
+        if ((t.contains("eng") || t.contains("dub")) && (l.contains("eng") || l.contains("dub") || l.contains("english"))) return true;
+        if ((t.contains("jap") || t.contains("sub")) && (l.contains("jap") || l.contains("sub") || l.contains("japanese"))) return true;
+        return false;
+    }
+
     @UnstableApi
     private void changeVideoQuality(String quality) {
         currentSelectedQuality = quality;
+        NativePlayerPlugin.notifyQualityChange(quality);
+
+        String sName = (currentActiveSourceName != null ? currentActiveSourceName : "") + " " + (currentActiveServerName != null ? currentActiveServerName : "");
+        if (sName.toLowerCase().contains("moviebox")) {
+            Toast.makeText(this, "Quality: " + quality, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         if (exoPlayer == null) return;
         try {
             int targetHeight = -1;
@@ -2129,19 +2153,20 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void changeAudioLanguage(String audioLang) {
         currentSelectedAudio = audioLang;
         updateAudioBadge(audioLang);
-        
-        // HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
+        NativePlayerPlugin.notifyLanguageChange(audioLang);
+
         String embedUrl = (currentActiveEmbedUrl != null && !currentActiveEmbedUrl.isEmpty()) ? currentActiveEmbedUrl : (currentEmbedUrl != null ? currentEmbedUrl : "");
         String srv = (currentActiveServerName != null ? currentActiveServerName : "") + " " + (currentActiveSourceName != null ? currentActiveSourceName : "");
         String srvLower = srv.toLowerCase();
         String embedLower = embedUrl.toLowerCase();
         String combined = srvLower + " " + embedLower;
 
+        // 1. HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
         if (combined.contains("hianime") || combined.contains("vidnest") || combined.contains("tryembed")) {
             String lower = audioLang.toLowerCase();
             boolean wantsSub = lower.contains("jap") || lower.contains("sub") || lower.contains("japanese");
             boolean wantsDub = lower.contains("eng") || lower.contains("dub") || lower.contains("english");
-            
+
             if (!embedUrl.isEmpty()) {
                 String newEmbedUrl = embedUrl;
                 if (wantsSub && newEmbedUrl.contains("/dub")) {
@@ -2153,13 +2178,56 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (!newEmbedUrl.equalsIgnoreCase(embedUrl)) {
                     currentEmbedUrl = newEmbedUrl;
                     currentActiveEmbedUrl = newEmbedUrl;
-                    Toast.makeText(this, "Switching stream to " + (wantsSub ? "Japanese Sub" : "English Dub") + "...", Toast.LENGTH_SHORT).show();
-                    setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
+                    Toast.makeText(this, "Switching audio to " + (wantsSub ? "Japanese Sub" : "English Dub") + "...", Toast.LENGTH_SHORT).show();
+
+                    if (isWebViewPlayerMode && playerWebView != null) {
+                        playerWebView.loadUrl(newEmbedUrl);
+                    } else {
+                        setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
+                    }
                     return;
                 }
             }
         }
 
+        // 2. PirateXPlay Multi-Audio Proxy switching
+        if (combined.contains("multi.php?data=") || combined.contains("piratexplay")) {
+            if (embedUrl.contains("data=")) {
+                try {
+                    int dataIdx = embedUrl.indexOf("data=");
+                    String encoded = embedUrl.substring(dataIdx + 5);
+                    int amp = encoded.indexOf('&');
+                    if (amp != -1) encoded = encoded.substring(0, amp);
+                    String jsonStr = new String(Base64.decode(encoded, Base64.DEFAULT), "UTF-8");
+                    JSONArray arr = new JSONArray(jsonStr);
+
+                    String targetLangReq = audioLang.toLowerCase();
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject item = arr.getJSONObject(i);
+                        String lang = item.optString("language", "").toLowerCase();
+                        if (isAudioLanguageMatch(lang, targetLangReq)) {
+                            String targetLink = item.optString("link", "");
+                            if (targetLink.contains("short.icu/")) {
+                                targetLink = targetLink.replace("short.icu/", "abyssplayer.com/");
+                            }
+                            if (!targetLink.isEmpty()) {
+                                Toast.makeText(this, "Switching audio stream to " + audioLang + "...", Toast.LENGTH_SHORT).show();
+                                if (isWebViewPlayerMode && playerWebView != null) {
+                                    playerWebView.loadUrl(targetLink);
+                                } else {
+                                    setupExoPlayerOnline(targetLink, getBestRefererForUrl(targetLink, null), null);
+                                }
+                                return;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w("AniLove", "Error unpacking multi-audio link: " + e.getMessage());
+                }
+            }
+        }
+
+        // 3. Standard ExoPlayer Track Selection
         if (exoPlayer == null) return;
         try {
             String targetLangCode = "en";
