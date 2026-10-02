@@ -136,14 +136,20 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
 
 | Active Source | Display Name in SERVERS Dropdown | Internal Server Code | Description / Backend Endpoint |
 | :--- | :--- | :--- | :--- |
-| **`AnimeDekho`** | **`Server 1`** | `Server 1-C` | Multi-audio proxy (`piratexplay.cc`) providing Hindi, Tamil, Telugu, English & Japanese audio links unpacked into `abyssplayer.com`. |
-| **`AnimeDekho`** | **`Server 2`** | `Server 1-P` | Direct API embed stream server (`blakiteapi.xyz`). |
-| **`AnimeDekho`** | **`Server 3`** | `Server 1-Q` | High-performance Abyss Player server (`abyssplayer.com`). |
-| **`AnimeDekho`** | **`Server 4`** | `Server 1-R` | Ultra-reliable HLS video stream server (`vidmoly.biz`). |
-| **`HiAnime`** | **`Server 1`** | `Server 2-A-DUB` / `SUB` | HiAnime Server 2-A direct stream (`vidnest.fun`). |
-| **`HiAnime`** | **`Server 2`** | `Server 2-B-DUB` / `SUB` | HiAnime Server 2-B direct stream (`tryembed.us.cc`). |
-| **`HiAnime`** | **`Server 3`** | `Server 2-C-DUB` / `SUB` | HiAnime Server 2-C credit stream (`vidnest.fun/animepahe`). |
-| **`AnimeSalt`** | **`Server 1`** | `Server 3-A` | AnimeSalt API stream (`animesalt-api-omega.vercel.app`). |
+| **`AnimeDekho`** | **`Server 1`** | `AnimeDekho-Server-1` | Multi-audio proxy (`piratexplay.cc`) providing Hindi, Tamil, Telugu, English & Japanese audio links unpacked into `abyssplayer.com`. |
+| **`AnimeDekho`** | **`Server 2`** | `AnimeDekho-Server-2` | Direct API embed stream server (`blakiteapi.xyz`). |
+| **`AnimeDekho`** | **`Server 3`** | `AnimeDekho-Server-3` | High-performance Abyss Player server (`abyssplayer.com`). |
+| **`AnimeDekho`** | **`Server 4`** | `AnimeDekho-Server-4` | Ultra-reliable HLS video stream server (`vidmoly.biz`). |
+| **`HiAnime`** | **`Server 1`** | `HiAnime-Server-1` | HiAnime VidNest stream (`vidnest.fun/anime/{id}/{ep}/sub` or `/dub` based on audio language). |
+| **`HiAnime`** | **`Server 2`** | `HiAnime-Server-2` | HiAnime TryEmbed stream (`tryembed.us.cc/embed/anime/{id}/{ep}/sub` or `/dub` based on audio language). |
+| **`HiAnime`** | **`Server 3`** | `HiAnime-Server-3` | HiAnime AnimePahe stream (`vidnest.fun/animepahe/{id}/{ep}/sub` or `/dub` based on audio language). |
+| **`AnimeSalt`** | **`Server 1`** | `AnimeSalt-Server-1` | AnimeSalt API stream (`animesalt-api-omega.vercel.app`). |
+
+#### 🗣️ Dynamic HiAnime SUB / DUB Link Triggering:
+Instead of cluttering the UI with 6 separate SUB/DUB links, HiAnime displays **3 clean servers** (`Server 1`, `Server 2`, `Server 3`). Each server dynamically generates and triggers its `/sub` or `/dub` URL endpoint based on the selected Audio Language:
+- When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
+- When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
+- Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
 
 ### 🛡️ WebView Ad-Blocker & Sniffer Filter Optimization Engine
 To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS exceptions while keeping ads, popups, and fullscreens hidden:

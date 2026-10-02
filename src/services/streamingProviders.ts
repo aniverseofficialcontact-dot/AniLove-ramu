@@ -309,41 +309,29 @@ const HIANIME_EPISODE_CACHE = new Map<string, AvailableServerOption[]>();
 
 export function generateTier1HiAnimeServers(
   anilistId: number | string | undefined,
-  episodeNumber: number
+  episodeNumber: number,
+  language: StreamLanguage = 'DUB'
 ): AvailableServerOption[] {
   const id = anilistId || 1;
   const ep = episodeNumber || 1;
+  const isDub = language === 'DUB' || language === 'ENG' || language === 'HIN';
+  const subOrDub = isDub ? 'dub' : 'sub';
 
   return [
     {
-      name: 'Server 2-A-SUB',
-      type: 'SUB',
-      linkId: `https://vidnest.fun/anime/${id}/${ep}/sub`,
+      name: 'HiAnime-Server-1',
+      type: isDub ? 'DUB' : 'SUB',
+      linkId: `https://vidnest.fun/anime/${id}/${ep}/${subOrDub}`,
     },
     {
-      name: 'Server 2-B-SUB',
-      type: 'SUB',
-      linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/sub`,
+      name: 'HiAnime-Server-2',
+      type: isDub ? 'DUB' : 'SUB',
+      linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/${subOrDub}`,
     },
     {
-      name: 'Server 2-C-SUB',
-      type: 'SUB',
-      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/sub`,
-    },
-    {
-      name: 'Server 2-A-DUB',
-      type: 'DUB',
-      linkId: `https://vidnest.fun/anime/${id}/${ep}/dub`,
-    },
-    {
-      name: 'Server 2-B-DUB',
-      type: 'DUB',
-      linkId: `https://tryembed.us.cc/embed/anime/${id}/${ep}/dub`,
-    },
-    {
-      name: 'Server 2-C-DUB',
-      type: 'DUB',
-      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/dub`,
+      name: 'HiAnime-Server-3',
+      type: isDub ? 'DUB' : 'SUB',
+      linkId: `https://vidnest.fun/animepahe/${id}/${ep}/${subOrDub}`,
     },
   ];
 }
@@ -630,8 +618,8 @@ export async function resolveEpisodeSource({
       linkId: srv.url,
     }));
 
-    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all Server 2 options)
-    const tier1Servers = generateTier1HiAnimeServers(anilistId, episodeNumber);
+    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all HiAnime options)
+    const tier1Servers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
 
     // Tier 2: Check if remote API cache or fresh remote fetch overrides Tier 1
     let hiAnimeServers = tier1Servers;
@@ -655,7 +643,14 @@ export async function resolveEpisodeSource({
     }
 
     const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-    const animeSaltServers = await fetchAnimeSaltStream(englishTitle, episodeNumber);
+    const saltRaw = await fetchAnimeSaltStream(englishTitle, episodeNumber);
+    const animeSaltServers: AvailableServerOption[] = [
+      {
+        name: 'AnimeSalt-Server-1',
+        type: 'SUB',
+        linkId: saltRaw[0]?.linkId || `https://animesalt-api-omega.vercel.app/api/stream?id=${cleanSlug}-season-1&ep=ep-${episodeNumber}`,
+      },
+    ];
 
     const combinedAvailableServers: AvailableServerOption[] = [
       ...availableServers,
@@ -663,9 +658,8 @@ export async function resolveEpisodeSource({
       ...animeSaltServers,
     ];
 
-    // Universal Background Multi-Language Subtitle Track (Powered by Server 2-B Sub: tryembed.us.cc)
-    const backgroundSubSource = hiAnimeServers.find(s => s.name === 'Server 2-B-SUB');
-    const universalSubtitleUrl = backgroundSubSource?.linkId || `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`;
+    // Universal Background Multi-Language Subtitle Track (Powered by TryEmbed)
+    const universalSubtitleUrl = `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`;
 
     // Select requested server URL strictly
     let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
