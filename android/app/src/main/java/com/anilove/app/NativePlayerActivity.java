@@ -1412,17 +1412,34 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private String getBestRefererForUrl(String videoUrl, String embedUrl) {
+        String sName = (currentActiveSourceName != null ? currentActiveSourceName : "") + " " + (currentActiveServerName != null ? currentActiveServerName : "");
+        if (sName.toLowerCase().contains("moviebox")) {
+            return "https://netfilm.world/";
+        }
+
         String primary = (embedUrl != null && !embedUrl.isEmpty()) ? embedUrl : videoUrl;
         if (primary == null || primary.trim().isEmpty()) {
             return "https://google.com/";
         }
-        try {
-            if (primary.contains("moviebox") || primary.contains("netfilm") || (videoUrl != null && (videoUrl.contains("netfilm") || videoUrl.contains("moviebox")))) {
+
+        String pLower = primary.toLowerCase();
+        if (pLower.contains("moviebox") || pLower.contains("netfilm") || pLower.contains("hakunaymatata") || pLower.contains("bcdnxw")) {
+            return "https://netfilm.world/";
+        }
+
+        if (videoUrl != null) {
+            String vLower = videoUrl.toLowerCase();
+            if (vLower.contains("moviebox") || vLower.contains("netfilm") || vLower.contains("hakunaymatata") || vLower.contains("bcdnxw")) {
                 return "https://netfilm.world/";
             }
+        }
+
+        try {
             if (videoUrl != null) {
                 String vHost = new URL(videoUrl).getHost().toLowerCase();
-                if (vHost.contains("netfilm") || vHost.contains("moviebox")) return "https://netfilm.world/";
+                if (vHost.contains("netfilm") || vHost.contains("moviebox") || vHost.contains("hakunaymatata") || vHost.contains("bcdnxw")) {
+                    return "https://netfilm.world/";
+                }
                 if (vHost.contains("rumble.cloud") || vHost.contains("rumble")) return "https://blakiteapi.xyz/";
                 if (vHost.contains("googleapis.com") || vHost.contains("googleusercontent.com")) {
                     if (primary.contains("animesalt")) return "https://animesalt.me/";
@@ -1431,7 +1448,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
-            if (host.contains("moviebox") || host.contains("netfilm")) return "https://netfilm.world/";
+            if (host.contains("moviebox") || host.contains("netfilm") || host.contains("hakunaymatata") || host.contains("bcdnxw")) return "https://netfilm.world/";
             if (host.contains("animesalt")) return "https://animesalt.me/";
             if (host.contains("abyssplayer") || host.contains("abyss") || host.contains("short.icu")) return "https://abyssplayer.com/";
             if (host.contains("vidmoly")) return "https://vidmoly.biz/";
