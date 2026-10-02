@@ -336,102 +336,6 @@ export function generateTier1HiAnimeServers(
   ];
 }
 
-export async function fetchHiAnimeApiServers(
-  anilistId: number | string | undefined,
-  animeTitle: string,
-  episodeNumber: number,
-  isOngoing?: boolean,
-  refresh?: boolean
-): Promise<AvailableServerOption[]> {
-  const cacheKey = `${anilistId || animeTitle}_ep${episodeNumber}`;
-
-  if (!refresh && HIANIME_EPISODE_CACHE.has(cacheKey)) {
-    return HIANIME_EPISODE_CACHE.get(cacheKey) || [];
-  }
-
-  const queryParams = new URLSearchParams();
-  if (anilistId) {
-    queryParams.set('anilistId', String(anilistId));
-    queryParams.set('ep', String(episodeNumber));
-  } else {
-    const cleanSlug = animeTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    queryParams.set('animeId', cleanSlug);
-    queryParams.set('ep', String(episodeNumber));
-  }
-
-  if (isOngoing) queryParams.set('ongoing', 'true');
-  if (refresh) queryParams.set('refresh', 'true');
-
-  const reqUrl = `https://hianime-api-qqp7.onrender.com/stream.php?${queryParams.toString()}`;
-  let data: any = null;
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const httpRes = await CapacitorHttp.get({
-          url: reqUrl,
-          headers: { Accept: 'application/json' },
-        });
-        clearTimeout(timeoutId);
-        if (httpRes.status === 200 && httpRes.data) {
-          data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
-        }
-      } catch {
-        // fallback
-      }
-    }
-
-    if (!data) {
-      const res = await fetch(reqUrl, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        data = await res.json();
-      }
-    }
-  } catch {
-    // Non-blocking timeout or fetch error
-  }
-
-  const serverOptions: AvailableServerOption[] = [];
-
-  if (data && data.success && data.stream && Array.isArray(data.stream.servers)) {
-    const subServers = data.stream.servers.filter((s: any) => s.type === 'sub');
-    const dubServers = data.stream.servers.filter((s: any) => s.type === 'dub');
-
-    const letters = ['A', 'B', 'C', 'D', 'E'];
-
-    subServers.forEach((s: any, idx: number) => {
-      const code = `Server 2-${letters[idx] || (idx + 1)}-SUB`;
-      serverOptions.push({
-        name: code,
-        type: 'SUB',
-        linkId: unpackServerUrl(s.url, 'SUB'),
-      });
-    });
-
-    dubServers.forEach((s: any, idx: number) => {
-      const code = `Server 2-${letters[idx] || (idx + 1)}-DUB`;
-      serverOptions.push({
-        name: code,
-        type: 'DUB',
-        linkId: unpackServerUrl(s.url, 'DUB'),
-      });
-    });
-
-    if (serverOptions.length > 0) {
-      HIANIME_EPISODE_CACHE.set(cacheKey, serverOptions);
-    }
-  }
-
-  return serverOptions;
-}
-
 /**
  * Fetch Server 3 stream embed from AnimeSalt API
  */
@@ -484,7 +388,10 @@ export async function fetchAnimeSaltStream(
 }
 
 /**
- * Stream resolver using AnimeWorld India v1 PHP API & HiAnime API with numeric anilistId + ep parameter.
+ * Stream resolver routing explicitly by source:
+ * - HiAnime: vidnest.fun, tryembed.us.cc, vidnest.fun/animepahe
+ * - AnimeSalt: animesalt API
+ * - AnimeDekho: AnimeWorld India v1 API
  */
 export async function resolveEpisodeSource({
   anime,
@@ -501,34 +408,19 @@ export async function resolveEpisodeSource({
   const isDub = language === 'DUB' || language === 'ENG' || language === 'HIN';
   const subOrDub = isDub ? 'dub' : 'sub';
 
-  const requestedServer = (serverName || '').toLowerCase().trim();
+  const requestedServer = (serverName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
 
   // ==========================================
-  // ROUTE 1: HiAnime Source
+  // ROUTE 1: HiAnime Source (Direct Deterministic Pattern)
   // ==========================================
-  if (requestedServer.startsWith('hianime') || requestedServer.includes('server2')) {
-    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-    let fetchedServers = await fetchHiAnimeApiServers(
-      anilistId,
-      englishTitle,
-      episodeNumber,
-      isOngoing,
-      refresh
-    );
+  if (requestedServer.includes('hianime') || requestedServer.includes('server2')) {
+    const hiAnimeServers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
 
-    let activePool = fetchedServers && fetchedServers.length > 0
-      ? fetchedServers.filter(s => s.type === (isDub ? 'DUB' : 'SUB'))
-      : [];
-
-    if (activePool.length === 0) {
-      activePool = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
-    }
-
-    let selectedItem = activePool[0];
-    if (requestedServer.includes('2') || requestedServer.includes('server-2')) {
-      selectedItem = activePool[1] || activePool[0];
-    } else if (requestedServer.includes('3') || requestedServer.includes('server-3')) {
-      selectedItem = activePool[2] || activePool[0];
+    let selectedItem = hiAnimeServers[0];
+    if (requestedServer.includes('server2') || requestedServer.includes('server2b') || requestedServer.endsWith('2')) {
+      selectedItem = hiAnimeServers[1] || hiAnimeServers[0];
+    } else if (requestedServer.includes('server3') || requestedServer.includes('server2c') || requestedServer.endsWith('3')) {
+      selectedItem = hiAnimeServers[2] || hiAnimeServers[0];
     }
 
     return {
@@ -543,7 +435,7 @@ export async function resolveEpisodeSource({
         isEmbeddable: true,
         external: false,
         skipData: { intro: [0, 0], outro: [0, 0] },
-        availableServers: activePool,
+        availableServers: hiAnimeServers,
         availableLanguages: ['SUB', 'DUB'],
         availableResolutions: ['1080p', '720p', '480p'],
         selectedServerName: selectedItem.name,
