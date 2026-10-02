@@ -732,16 +732,27 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
         ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
-          <iframe
-            key={`${streamSource.url}-${refreshKey}`}
-            ref={iframeRef}
-            src={streamSource.url}
-            title={`${displayTitle} - Episode ${episodeNumber}`}
-            className="w-full h-full border-0 pointer-events-auto block"
-            allowFullScreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            onLoad={() => setStreamStatus('ready')}
-          />
+          streamSource.url.includes('.mp4') ? (
+            <video
+              key={`${streamSource.url}-${refreshKey}`}
+              src={streamSource.url}
+              controls
+              autoPlay
+              className="w-full h-full object-contain pointer-events-auto block"
+              onLoadedData={() => setStreamStatus('ready')}
+            />
+          ) : (
+            <iframe
+              key={`${streamSource.url}-${refreshKey}`}
+              ref={iframeRef}
+              src={streamSource.url}
+              title={`${displayTitle} - Episode ${episodeNumber}`}
+              className="w-full h-full border-0 pointer-events-auto block"
+              allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              onLoad={() => setStreamStatus('ready')}
+            />
+          )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-black/90 p-4 text-center">
             {streamStatus === 'loading' ? (

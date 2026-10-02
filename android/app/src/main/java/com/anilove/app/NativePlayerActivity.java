@@ -1692,16 +1692,20 @@ public class NativePlayerActivity extends AppCompatActivity {
             Map<String, String> requestHeaders = new HashMap<>();
             if (!effectiveReferer.trim().isEmpty()) {
                 requestHeaders.put("Referer", effectiveReferer);
-                try {
-                    URL refUrl = new URL(effectiveReferer);
-                    requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
-                } catch (Exception ignored) {}
+                if (!hlsUrl.contains(".mp4") && !hlsUrl.contains("hakunaymatata.com") && !hlsUrl.contains("moviebox")) {
+                    try {
+                        URL refUrl = new URL(effectiveReferer);
+                        requestHeaders.put("Origin", refUrl.getProtocol() + "://" + refUrl.getHost());
+                    } catch (Exception ignored) {}
+                }
             }
 
-            requestHeaders.put("Accept", "*/*");
-            requestHeaders.put("Sec-Fetch-Dest", "empty");
-            requestHeaders.put("Sec-Fetch-Mode", "cors");
-            requestHeaders.put("Sec-Fetch-Site", "cross-site");
+            if (!hlsUrl.contains(".mp4") && !hlsUrl.contains("hakunaymatata.com") && !hlsUrl.contains("moviebox")) {
+                requestHeaders.put("Accept", "*/*");
+                requestHeaders.put("Sec-Fetch-Dest", "empty");
+                requestHeaders.put("Sec-Fetch-Mode", "cors");
+                requestHeaders.put("Sec-Fetch-Site", "cross-site");
+            }
 
             try {
                 String cookieStr = CookieManager.getInstance().getCookie(hlsUrl);
@@ -1791,13 +1795,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                                                      (error.getCause() instanceof UnrecognizedInputFormatException) ||
                                                      (error.errorCode >= 2000 && error.errorCode <= 2008);
 
+                    boolean isDirect = isDirectMediaStream(currentLoadedStreamUrl) || isDirectMediaStream(currentEmbedUrl) || (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains(".mp4"));
+
                     if (isSourceOrNetworkError && !hasRetriedSniffer) {
                         hasRetriedSniffer = true;
 
-                        String unwrapped = getUnwrappedProxyUrl(hlsUrl);
-                        if (unwrapped != null && !Objects.equals(unwrapped, hlsUrl)) {
-                            Log.w("AniLove", "Proxy 400 error — retrying with unwrapped target stream: " + unwrapped);
-                            setupExoPlayerOnlineDirect(unwrapped, getBestRefererForUrl(unwrapped, null), headers);
+                        if (isDirect) {
+                            Log.w("AniLove", "Direct media stream error — auto-retrying ExoPlayer directly: " + currentLoadedStreamUrl);
+                            setupExoPlayerOnlineDirect(currentLoadedStreamUrl, getBestRefererForUrl(currentLoadedStreamUrl, null), headers);
                             return;
                         }
 
@@ -1806,11 +1811,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                         if (originalUrl == null) originalUrl = hlsUrl;
                         Log.w("AniLove", "Source/Network error — auto-retrying with VideoSniffer for: " + originalUrl);
                         runSnifferFallback(originalUrl, getBestRefererForUrl(originalUrl, null), headers);
-                    } else if (!isWebViewPlayerMode && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                    } else if (!isWebViewPlayerMode && !isDirect && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
                         Toast.makeText(NativePlayerActivity.this, "Source error: Auto-switching to Embedded Web Player...", Toast.LENGTH_LONG).show();
                         switchPlayerEngine(true);
                     } else {
-                        Toast.makeText(NativePlayerActivity.this, "Playback error: Try selecting Server 2-A or Server 2-B from the menu.", Toast.LENGTH_LONG).show();
+                        Toast.makeText(NativePlayerActivity.this, "Playback issue: Please try refreshing or switching server.", Toast.LENGTH_LONG).show();
                     }
                 }
             });
