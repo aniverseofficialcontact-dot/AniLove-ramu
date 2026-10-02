@@ -150,10 +150,8 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
    - When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
    - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
    - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
-3. **Source-Prefixed Cache Keys & Stale Intent Reset**:
-   - Updated `ProVideoPlayer.tsx`, `streamingProviders.ts`, and `StreamCache.java` to key all in-memory stream caches strictly by `Source + AnimeId + Episode + Server + Audio` (`AnimeDekho_...`, `HiAnime_...`, `MovieBox_...`).
-   - Clears `serverUrlCache.current` instantly whenever `selectedSource` or `selectedSubServer` changes in `WatchView.tsx`, preventing `ProVideoPlayer` from taking the fast-path and reusing old cached AnimeDekho URLs for HiAnime or MovieBox.
-   - Updated `onNewIntent()` in `NativePlayerActivity.java` to invoke `setIntent(intent)` immediately, ensuring the Diagnostic HUD reads fresh intent extras for source name, server name, and target URL rather than stale initial intent data.
+3. **Single Unified Native Stream Pipeline**: Consolidated server switching in `WatchView.tsx` and `ProVideoPlayer.tsx` into a single, non-overlapping stream resolution pipeline. This completely eliminates duplicate parallel `NativePlayer.play()` calls and intent overwrites when toggling sources or servers.
+4. **Clean Title Sanitization for MovieBox API**: `fetchMovieBoxStream()` strips season subtitles and parenthetical notes (`cleanTitleForMovieBox`) to ensure high match accuracy on `https://moviebox-api-mklm.onrender.com`. If MovieBox stream data is unavailable for a specific title/episode, it returns a clean error status rather than passing a JSON string to ExoPlayer.
 4. **Enhanced Diagnostic HUD**: Diagnostic overlay displays **`TARGET`** (requested embed/api URL) alongside **`PLAYING`** (resolved media URL) and `REFERER` headers for full real-time stream transparency.
 4. **Native Route Extractor & Engine Toggle Unblock**:
    - Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` with regex pattern `(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)` to match both numeric IDs and alphanumeric slugs, enabling instant direct extraction for HiAnime/TryEmbed streams.

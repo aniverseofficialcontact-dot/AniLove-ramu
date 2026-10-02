@@ -388,9 +388,93 @@ export async function fetchAnimeSaltStream(
 }
 
 /**
+  * Clean anime title for MovieBox search query (e.g. "Jujutsu Kaisen: Season 2" -> "Jujutsu Kaisen")
+  */
+function cleanTitleForMovieBox(title: string): string {
+  if (!title) return 'Anime';
+  return title
+    .replace(/\s*\(.*?\)/g, '')
+    .replace(/\s*\[.*?\]/g, '')
+    .replace(/:\s*Season\s*\d+.*/i, '')
+    .replace(/\s+Season\s*\d+.*/i, '')
+    .replace(/:\s*Part\s*\d+.*/i, '')
+    .replace(/:\s*2nd\s*Season.*/i, '')
+    .replace(/:\s*3rd\s*Season.*/i, '')
+    .trim();
+}
+
+/**
+ * Fetch MovieBox stream from Render API endpoint
+ */
+export async function fetchMovieBoxStream(
+  animeTitle: string,
+  seasonNumber: number = 1,
+  episodeNumber: number = 1
+): Promise<{ url: string; subtitleUrl?: string; qualityMap?: Record<string, string> } | null> {
+  const cleanTitle = cleanTitleForMovieBox(animeTitle);
+  const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-by-name?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}&include_captions=true`;
+
+  try {
+    let data: any = null;
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const httpRes = await CapacitorHttp.get({
+          url: reqUrl,
+          headers: { Accept: 'application/json' },
+        });
+        if (httpRes.status === 200 && httpRes.data) {
+          data = typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!data) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const res = await fetch(reqUrl, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        data = await res.json();
+      }
+    }
+
+    if (data && data.has_resource && data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+      const qualityMap: Record<string, string> = {};
+      data.sources.forEach((src: any) => {
+        if (src.url) {
+          const resKey = src.resolution || '1080p';
+          qualityMap[resKey] = src.url;
+        }
+      });
+
+      const primaryUrl = data.sources[0].url;
+      let subtitleUrl: string | undefined = undefined;
+      if (data.captions && Array.isArray(data.captions) && data.captions.length > 0) {
+        subtitleUrl = data.captions[0].url;
+      }
+
+      return {
+        url: primaryUrl,
+        subtitleUrl,
+        qualityMap,
+      };
+    }
+  } catch (e) {
+    console.warn('MovieBox stream fetch exception:', e);
+  }
+  return null;
+}
+
+/**
  * Stream resolver routing explicitly by source:
  * - HiAnime: vidnest.fun, tryembed.us.cc, vidnest.fun/animepahe
  * - AnimeSalt: animesalt API
+ * - MovieBox: MovieBox Render API
  * - AnimeDekho: AnimeWorld India v1 API
  */
 export async function resolveEpisodeSource({
@@ -411,7 +495,45 @@ export async function resolveEpisodeSource({
   const requestedServer = (serverName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
 
   // ==========================================
-  // ROUTE 1: HiAnime Source (Direct Deterministic Pattern)
+  // ROUTE 1: MovieBox Source
+  // ==========================================
+  if (requestedServer.includes('moviebox')) {
+    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    const mbData = await fetchMovieBoxStream(englishTitle, 1, episodeNumber);
+
+    if (mbData && mbData.url) {
+      return {
+        status: 'available',
+        source: {
+          provider,
+          url: mbData.url,
+          subtitleUrl: mbData.subtitleUrl,
+          subtitleLang: 'English',
+          language,
+          resolution,
+          isEmbeddable: true,
+          external: false,
+          skipData: { intro: [0, 0], outro: [0, 0] },
+          availableServers: [{ name: 'MovieBox-Server-1', type: 'DUB', linkId: mbData.url }],
+          availableLanguages: ['SUB', 'DUB'],
+          availableResolutions: ['1080p', '720p', '480p'],
+          selectedServerName: 'MovieBox-Server-1',
+          isDubAvailable: true,
+          isFallback: false,
+          requestedLanguage: language,
+          actualLanguage: language,
+        },
+      };
+    } else {
+      return {
+        status: 'error',
+        message: 'MovieBox stream not available for this title/episode. Please switch to HiAnime or AnimeDekho.',
+      };
+    }
+  }
+
+  // ==========================================
+  // ROUTE 2: HiAnime Source (Direct Deterministic Pattern)
   // ==========================================
   if (requestedServer.includes('hianime') || requestedServer.includes('server2')) {
     const hiAnimeServers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
