@@ -6,6 +6,8 @@ import { getStoredSettings } from './storage';
 export interface NativePlayerPlugin {
   play(options: {
     url: string;
+    serverName?: string;
+    targetUrl?: string;
     title: string;
     hasNext?: boolean;
     hasPrev?: boolean;
@@ -74,7 +76,7 @@ export async function launchNativePlayer({
   const epNum = Number(episodeNumber) || 1;
   const maxEp = totalEpisodes || anime.episodes || 9999;
 
-  // Resolve stream source from AnimeWorld India v1 API
+  // Resolve stream source
   const res = await resolveEpisodeSource({
     anime,
     episodeNumber: epNum,
@@ -83,10 +85,13 @@ export async function launchNativePlayer({
   });
 
   const streamUrl = res.source?.url || `https://vidlink.pro/anime/${anime.id}/${epNum}?dub=${audio === 'DUB' ? 'true' : 'false'}`;
+  const activeServerName = res.source?.selectedServerName || serverName || 'AnimeDekho-Server-1';
 
   // Launch NativePlayerActivity directly
   await NativePlayer.play({
     url: streamUrl,
+    serverName: activeServerName,
+    targetUrl: res.source?.url || streamUrl,
     subtitleUrl: res.source?.subtitleUrl,
     subtitleLang: res.source?.subtitleLang || 'English',
     title: `${dTitle} - Ep ${epNum}`,

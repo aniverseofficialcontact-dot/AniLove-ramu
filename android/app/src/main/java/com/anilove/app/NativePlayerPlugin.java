@@ -97,6 +97,8 @@ public class NativePlayerPlugin extends Plugin {
 
             Intent intent = new Intent(getActivity(), NativePlayerActivity.class);
             intent.putExtra("url", url);
+            intent.putExtra("serverName", call.getString("serverName"));
+            intent.putExtra("targetUrl", call.getString("targetUrl"));
             intent.putExtra("title", call.getString("title", "Now Playing"));
             
             Boolean hasNext = call.getBoolean("hasNext");
