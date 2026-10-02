@@ -58,6 +58,7 @@ export interface StreamSource {
   availableLanguages?: StreamLanguage[];
   availableResolutions?: StreamResolution[];
   qualityMap?: Record<string, string>;
+  languageQualityMap?: Record<string, Record<string, string>>;
   selectedServerName?: string;
   isDubAvailable?: boolean;
   isFallback?: boolean;
@@ -132,7 +133,7 @@ export const isStreamProviderId = (providerId: string): providerId is StreamServ
 /**
  * Universal Fetch Helper supporting CapacitorHttp (Native Android) and standard fetch (Web)
  */
-async function fetchWithTimeout(url: string, headers: Record<string, string> = {}, timeoutMs: number = 9000): Promise<any> {
+async function fetchWithTimeout(url: string, headers: Record<string, string> = {}, timeoutMs: number = 15000): Promise<any> {
   if (Capacitor.isNativePlatform()) {
     try {
       const httpRes = await CapacitorHttp.get({
@@ -166,7 +167,7 @@ async function fetchWithTimeout(url: string, headers: Record<string, string> = {
 }
 
 /**
- * Clean Title Sanitization for MovieBox & AnimeSalt Search Queries
+ * Clean Title Sanitization for Multi-Lang & AnimeSalt Search Queries
  */
 function cleanTitleForQuery(title: string): string {
   if (!title) return 'Anime';
@@ -183,15 +184,160 @@ function cleanTitleForQuery(title: string): string {
 
 /**
  * ─────────────────────────────────────────────────────────────
- * SOURCE 1: AnimeDekho Engine
+ * SOURCE 1: Multi-Lang (MovieBox) Engine
  * ─────────────────────────────────────────────────────────────
- * Priority Target Order:
- * 1. rubystm
- * 2. piratexplay
- * 3. blakiteapi
- * 4. vidmoly
- * 5. abyssplayer
- * Dynamic Decrement: Only available targets are collected, sequentially named Server 1, Server 2...
+ * API: https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title={title}&se=1&ep={ep}
+ * Caches all audio tracks & resolutions per episode in 20-minute local cache.
+ */
+async function resolveMultiLangSource(
+  title: string,
+  seasonNumber: number = 1,
+  episodeNumber: number = 1,
+  requestedLanguage: StreamLanguage = 'DUB',
+  requestedResolution: StreamResolution = '1080p',
+  refresh: boolean = false
+): Promise<{
+  availableServers: AvailableServerOption[];
+  selectedUrl: string;
+  selectedServerName: string;
+  availableLanguages: StreamLanguage[];
+  availableResolutions: StreamResolution[];
+  qualityMap: Record<string, string>;
+  languageQualityMap: Record<string, Record<string, string>>;
+  subtitleUrl?: string;
+}> {
+  const cleanTitle = cleanTitleForQuery(title);
+  const cacheKey = `MultiLang_${cleanTitle}_s${seasonNumber}_ep${episodeNumber}`;
+
+  let cachedData = null;
+  if (!refresh) {
+    cachedData = getFromCache(cacheKey);
+  }
+
+  if (!cachedData) {
+    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}`;
+    const res = await fetchWithTimeout(reqUrl, {}, 15000);
+
+    if (res && Array.isArray(res.audio_tracks) && res.audio_tracks.length > 0) {
+      const languageQualityMap: Record<string, Record<string, string>> = {};
+      const langResolutionsMap: Record<string, StreamResolution[]> = {};
+      const langList: string[] = [];
+
+      res.audio_tracks.forEach((track: any) => {
+        if (track.has_resource && Array.isArray(track.sources) && track.sources.length > 0) {
+          const rawLang = (track.language || '').toLowerCase().trim();
+          let normLang = 'ENG (Dub)';
+          if (rawLang.includes('original') || track.language_code === 'ja') {
+            normLang = 'JAP (Sub)';
+          } else if (rawLang.includes('english') || track.language_code === 'en') {
+            normLang = 'ENG (Dub)';
+          } else if (rawLang.includes('hindi') || track.language_code === 'hi') {
+            normLang = 'Hindi';
+          } else if (rawLang.includes('tamil') || track.language_code === 'ta') {
+            normLang = 'Tamil';
+          } else if (rawLang.includes('telugu') || track.language_code === 'te') {
+            normLang = 'Telugu';
+          } else if (rawLang.includes('french') || track.language_code === 'fr') {
+            normLang = 'French';
+          } else if (rawLang.includes('spanish') || track.language_code === 'es') {
+            normLang = 'Spanish';
+          } else if (rawLang.includes('russian') || track.language_code === 'ru') {
+            normLang = 'Russian';
+          } else {
+            normLang = track.language.replace(/ dub$/i, '').trim();
+          }
+
+          if (!languageQualityMap[normLang]) {
+            languageQualityMap[normLang] = {};
+            langResolutionsMap[normLang] = [];
+            langList.push(normLang);
+          }
+
+          track.sources.forEach((src: any) => {
+            if (src.url) {
+              const resKey: StreamResolution = (src.resolution || '1080p') as StreamResolution;
+              languageQualityMap[normLang][resKey] = src.url;
+              if (!langResolutionsMap[normLang].includes(resKey)) {
+                langResolutionsMap[normLang].push(resKey);
+              }
+            }
+          });
+        }
+      });
+
+      cachedData = {
+        languageQualityMap,
+        langResolutionsMap,
+        langList,
+      };
+      setToCache(cacheKey, cachedData);
+    }
+  }
+
+  if (!cachedData || !cachedData.langList || cachedData.langList.length === 0) {
+    return {
+      availableServers: [{ name: 'Server 1', type: 'DUB', linkId: '' }],
+      selectedUrl: '',
+      selectedServerName: 'Server 1',
+      availableLanguages: ['DUB', 'SUB'],
+      availableResolutions: ['1080p'],
+      qualityMap: {},
+      languageQualityMap: {},
+    };
+  }
+
+  const { languageQualityMap, langResolutionsMap, langList } = cachedData;
+
+  // Determine active language matching requested
+  let activeLang = langList[0];
+  const reqLower = (requestedLanguage || '').toLowerCase();
+
+  const matchedLang = langList.find(l => {
+    const lLower = l.toLowerCase();
+    if (reqLower === 'dub' || reqLower.includes('eng')) return lLower.includes('eng') || lLower.includes('dub');
+    if (reqLower === 'sub' || reqLower.includes('jap')) return lLower.includes('jap') || lLower.includes('sub') || lLower.includes('original');
+    if (reqLower.includes('hin')) return lLower.includes('hin');
+    if (reqLower.includes('tam')) return lLower.includes('tam');
+    if (reqLower.includes('tel')) return lLower.includes('tel');
+    return false;
+  });
+
+  if (matchedLang) {
+    activeLang = matchedLang;
+  }
+
+  const activeQualitiesMap = languageQualityMap[activeLang] || {};
+  const activeResolutions = langResolutionsMap[activeLang] || ['1080p'];
+
+  let selectedUrl = activeQualitiesMap[requestedResolution];
+  if (!selectedUrl) {
+    const order: StreamResolution[] = ['1080p', '720p', '480p', '360p'];
+    for (const r of order) {
+      if (activeQualitiesMap[r]) {
+        selectedUrl = activeQualitiesMap[r];
+        break;
+      }
+    }
+    if (!selectedUrl) {
+      selectedUrl = Object.values(activeQualitiesMap)[0] || '';
+    }
+  }
+
+  return {
+    availableServers: [{ name: 'Server 1', type: activeLang, linkId: selectedUrl }],
+    selectedUrl,
+    selectedServerName: 'Server 1',
+    availableLanguages: langList as any,
+    availableResolutions: activeResolutions,
+    qualityMap: activeQualitiesMap,
+    languageQualityMap,
+  };
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────
+ * SOURCE 2: AnimeDekho Engine
+ * ─────────────────────────────────────────────────────────────
  */
 async function resolveAnimeDekhoSource(
   anilistId: number | undefined,
@@ -251,7 +397,6 @@ async function resolveAnimeDekhoSource(
   }));
 
   if (availableServers.length === 0) {
-    // Fallback if no specific match
     availableServers.push({
       name: 'Server 1',
       type: 'SUB/DUB',
@@ -281,11 +426,8 @@ async function resolveAnimeDekhoSource(
 
 /**
  * ─────────────────────────────────────────────────────────────
- * SOURCE 2: HiAnime Engine
+ * SOURCE 3: HiAnime Engine
  * ─────────────────────────────────────────────────────────────
- * Server 1 (Vidnest): https://vidnest.fun/anime/{id}/{ep}/{sub/dub}
- * Server 2 (Tryembed): https://tryembed.us.cc/embed/anime/{id}/{ep}/{sub/dub}
- * Server 3 (Animepahe): https://vidnest.fun/animepahe/{id}/{ep}/{sub/dub}
  */
 function resolveHiAnimeSource(
   anilistId: number | undefined,
@@ -335,9 +477,8 @@ function resolveHiAnimeSource(
 
 /**
  * ─────────────────────────────────────────────────────────────
- * SOURCE 3: AnimeSalt Engine
+ * SOURCE 4: AnimeSalt Engine
  * ─────────────────────────────────────────────────────────────
- * API: https://animesalt-api-omega.vercel.app/api/stream?id=$animeSlug&ep=ep-$episodeNumber
  */
 async function resolveAnimeSaltSource(
   title: string,
@@ -383,92 +524,6 @@ async function resolveAnimeSaltSource(
 
 /**
  * ─────────────────────────────────────────────────────────────
- * SOURCE 4: MovieBox Engine
- * ─────────────────────────────────────────────────────────────
- * API: https://moviebox-api-mklm.onrender.com/api/stream-by-name?title={title}&se=1&ep={ep}
- */
-async function resolveMovieBoxSource(
-  title: string,
-  seasonNumber: number = 1,
-  episodeNumber: number = 1,
-  requestedResolution: StreamResolution = '1080p',
-  refresh: boolean = false
-): Promise<{
-  availableServers: AvailableServerOption[];
-  selectedUrl: string;
-  selectedServerName: string;
-  availableResolutions: StreamResolution[];
-  qualityMap: Record<string, string>;
-  subtitleUrl?: string;
-}> {
-  const cleanTitle = cleanTitleForQuery(title);
-  const cacheKey = `MovieBox_${cleanTitle}_s${seasonNumber}_ep${episodeNumber}`;
-
-  let cachedData = null;
-  if (!refresh) {
-    cachedData = getFromCache(cacheKey);
-  }
-
-  if (!cachedData) {
-    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-by-name?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}&include_captions=true`;
-    const res = await fetchWithTimeout(reqUrl);
-
-    if (res && res.has_resource && Array.isArray(res.sources) && res.sources.length > 0) {
-      const qualityMap: Record<string, string> = {};
-      const resList: StreamResolution[] = [];
-
-      res.sources.forEach((src: any) => {
-        if (src.url) {
-          const resKey: StreamResolution = (src.resolution || '1080p') as StreamResolution;
-          qualityMap[resKey] = src.url;
-          if (!resList.includes(resKey)) {
-            resList.push(resKey);
-          }
-        }
-      });
-
-      let subtitleUrl: string | undefined = undefined;
-      if (res.captions && Array.isArray(res.captions) && res.captions.length > 0) {
-        subtitleUrl = res.captions[0].url;
-      }
-
-      cachedData = {
-        qualityMap,
-        availableResolutions: resList,
-        primaryUrl: res.sources[0].url,
-        subtitleUrl,
-      };
-      setToCache(cacheKey, cachedData);
-    }
-  }
-
-  if (!cachedData || !cachedData.qualityMap) {
-    return {
-      availableServers: [{ name: 'Server 1', type: 'DUB', linkId: '' }],
-      selectedUrl: '',
-      selectedServerName: 'Server 1',
-      availableResolutions: ['1080p'],
-      qualityMap: {},
-    };
-  }
-
-  const { qualityMap, availableResolutions, primaryUrl, subtitleUrl } = cachedData;
-
-  // Pick requested resolution or best available
-  let selectedUrl = qualityMap[requestedResolution] || primaryUrl;
-
-  return {
-    availableServers: [{ name: 'Server 1', type: 'DUB', linkId: selectedUrl }],
-    selectedUrl,
-    selectedServerName: 'Server 1',
-    availableResolutions,
-    qualityMap,
-    subtitleUrl,
-  };
-}
-
-/**
- * ─────────────────────────────────────────────────────────────
  * MAIN RESOLVE EPISODE SOURCE RESOLVER
  * ─────────────────────────────────────────────────────────────
  */
@@ -489,32 +544,33 @@ export async function resolveEpisodeSource({
   const reqServer = (serverName || '').toLowerCase().trim();
   const combined = `${reqSrc} ${reqServer}`;
 
-  // ROUTE 1: MovieBox Source
-  if (combined.includes('moviebox')) {
-    const mb = await resolveMovieBoxSource(englishTitle, 1, episodeNumber, resolution, refresh);
-    if (!mb.selectedUrl) {
+  // ROUTE 1: Multi-Lang (MovieBox) Source
+  if (combined.includes('multi-lang') || combined.includes('multilang') || combined.includes('moviebox')) {
+    const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);
+    if (!ml.selectedUrl) {
       return {
         status: 'error',
-        message: `MovieBox stream is not available for Episode ${episodeNumber}. Please switch to AnimeDekho or HiAnime.`,
+        message: `Multi-Lang stream is not available for Episode ${episodeNumber}. Please switch to AnimeDekho or HiAnime.`,
       };
     }
     return {
       status: 'available',
       source: {
         provider: DEFAULT_PROVIDER,
-        url: mb.selectedUrl,
-        subtitleUrl: mb.subtitleUrl,
+        url: ml.selectedUrl,
+        subtitleUrl: undefined,
         subtitleLang: 'English',
         language,
         resolution,
         isEmbeddable: true,
         external: false,
         skipData: { intro: [0, 0], outro: [0, 0] },
-        availableServers: mb.availableServers,
-        availableLanguages: ['SUB', 'DUB'],
-        availableResolutions: mb.availableResolutions,
-        qualityMap: mb.qualityMap,
-        selectedServerName: mb.selectedServerName,
+        availableServers: ml.availableServers,
+        availableLanguages: ml.availableLanguages as any,
+        availableResolutions: ml.availableResolutions,
+        qualityMap: ml.qualityMap,
+        languageQualityMap: ml.languageQualityMap,
+        selectedServerName: ml.selectedServerName,
         isDubAvailable: true,
       },
     };

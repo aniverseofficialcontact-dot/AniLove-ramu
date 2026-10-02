@@ -600,6 +600,34 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (srcName != null && !srcName.isEmpty()) {
             currentActiveSourceName = srcName;
         }
+
+        String availableLangsJson = intent.getStringExtra("availableLanguages");
+        if (availableLangsJson != null && !availableLangsJson.isEmpty()) {
+            try {
+                JSONArray arr = new JSONArray(availableLangsJson);
+                List<String> list = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.getString(i));
+                }
+                if (!list.isEmpty()) {
+                    detectedAudios = list;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        String availableResJson = intent.getStringExtra("availableResolutions");
+        if (availableResJson != null && !availableResJson.isEmpty()) {
+            try {
+                JSONArray arr = new JSONArray(availableResJson);
+                List<String> list = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.getString(i));
+                }
+                if (!list.isEmpty()) {
+                    detectedQualities = list;
+                }
+            } catch (Exception ignored) {}
+        }
         String animeTitle = intent.getStringExtra("animeTitle");
         String rawTitle = intent.getStringExtra("title");
         int epNum = intent.getIntExtra("episodeNumber", 1);
@@ -1414,7 +1442,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private String getBestRefererForUrl(String videoUrl, String embedUrl) {
         String sName = (currentActiveSourceName != null ? currentActiveSourceName : "") + " " + (currentActiveServerName != null ? currentActiveServerName : "");
-        if (sName.toLowerCase().contains("moviebox")) {
+        String sLower = sName.toLowerCase();
+        if (sLower.contains("moviebox") || sLower.contains("multi-lang") || sLower.contains("multilang")) {
             return "https://netfilm.world/";
         }
 
@@ -2508,7 +2537,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         boolean isHiAnime = combinedCheck.contains("hianime") || combinedCheck.contains("vidnest") || combinedCheck.contains("tryembed");
         boolean isAnimeSalt = combinedCheck.contains("animesalt");
-        boolean isMovieBox = combinedCheck.contains("moviebox") || combinedCheck.contains("hakunaymatata") || combinedCheck.contains("netfilm");
+        boolean isMultiLang = combinedCheck.contains("multi-lang") || combinedCheck.contains("multilang") || combinedCheck.contains("moviebox") || combinedCheck.contains("hakunaymatata") || combinedCheck.contains("netfilm");
 
         // 1. Dynamic Video Quality Buttons
         LinearLayout qualityContainer = view.findViewById(R.id.quality_container);
@@ -2517,7 +2546,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             List<String> qList = new ArrayList<>();
             if (isHiAnime || isAnimeSalt) {
                 qList.add("1080p");
-            } else if (isMovieBox) {
+            } else if (isMultiLang) {
                 if (!detectedQualities.isEmpty()) {
                     qList.addAll(detectedQualities);
                 } else {
@@ -2572,9 +2601,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                 aList.add("ENG (Dub)");
             } else if (isAnimeSalt) {
                 aList.add("JAP (Sub)");
-            } else if (isMovieBox) {
-                aList.add("ENG (Dub)");
-                aList.add("JAP (Sub)");
+            } else if (isMultiLang) {
+                if (!detectedAudios.isEmpty()) {
+                    aList.addAll(detectedAudios);
+                } else {
+                    aList.add("JAP (Sub)");
+                    aList.add("ENG (Dub)");
+                }
             } else {
                 if (!detectedAudios.isEmpty()) {
                     aList.addAll(detectedAudios);

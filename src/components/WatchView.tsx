@@ -119,6 +119,12 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
   // Dual Dropdown Sources & Servers Configuration
   const SOURCE_CONFIG = useMemo(() => ({
+    'Multi-Lang': {
+      label: 'Multi-Lang',
+      servers: [
+        { displayName: 'Server 1', internalCode: 'Multi-Lang-Server-1' },
+      ],
+    },
     AnimeDekho: {
       label: 'AnimeDekho',
       servers: [
@@ -143,17 +149,11 @@ export const WatchView: React.FC<WatchViewProps> = ({
         { displayName: 'Server 1', internalCode: 'AnimeSalt-Server-1' },
       ],
     },
-    MovieBox: {
-      label: 'MovieBox',
-      servers: [
-        { displayName: 'Server 1', internalCode: 'MovieBox-Server-1' },
-      ],
-    },
   }), []);
 
-  type StreamSourceId = 'AnimeDekho' | 'HiAnime' | 'AnimeSalt' | 'MovieBox';
+  type StreamSourceId = 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt';
 
-  const [selectedSource, setSelectedSource] = useState<StreamSourceId>('AnimeDekho');
+  const [selectedSource, setSelectedSource] = useState<StreamSourceId>('Multi-Lang');
   const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState<boolean>(false);
   const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);

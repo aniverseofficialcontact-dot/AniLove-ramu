@@ -678,7 +678,10 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
         NativePlayer.play({
           url: streamSource.url,
-          serverName: streamSource.selectedServerName || selectedSubServerName || 'AnimeDekho-Server-1',
+          serverName: streamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
+          sourceName: selectedSource || 'Multi-Lang',
+          availableLanguages: JSON.stringify(streamSource.availableLanguages || []),
+          availableResolutions: JSON.stringify(streamSource.availableResolutions || []),
           targetUrl: streamSource.url,
           subtitleUrl: activeSubUrl,
           subtitleLang: activeSubLang,

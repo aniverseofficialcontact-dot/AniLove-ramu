@@ -10,14 +10,28 @@ AniLove supports **4 distinct streaming sources**, each with its own specialized
 
 | Source Name | Frontend Label | Servers Available | Primary Protocol / Endpoint |
 | :--- | :--- | :--- | :--- |
-| **`AnimeDekho`** | **AnimeDekho** | `Server 1` – `Server 5` (Dynamic) | Custom `stream.php` API with dynamic priority target extraction (`rubystm`, `piratexplay`, `blakiteapi`, `vidmoly`, `abyssplayer`). |
-| **`HiAnime`** | **HiAnime** | `Server 1` – `Server 3` | Deterministic URL patterns (`vidnest.fun`, `tryembed.us.cc`, `vidnest.fun/animepahe`) supporting dynamic `/sub` (Japanese) & `/dub` (English) language switching. |
-| **`AnimeSalt`** | **AnimeSalt** | `Server 1` | AnimeSalt Vercel API returning `data.embedUrl` with `Referer: https://animesalt.me/`. |
-| **`MovieBox`** | **MovieBox** | `Server 1` | MovieBox Render API returning multi-quality MP4 sources (`1080p`, `720p`, `480p`, `360p`) with `Referer: https://netfilm.world/`. |
+| **`Multi-Lang`** | **Multi-Lang** (Source 1) | `Server 1` | `stream-all-languages` API returning multi-audio tracks (`Original Audio / JAP`, `English`, `Hindi`, `Tamil`, `Telugu`, `French`, `Spanish`, `Russian`...) with multi-quality MP4 links (`1080p`, `720p`, `480p`, `360p`). |
+| **`AnimeDekho`** | **AnimeDekho** (Source 2) | `Server 1` – `Server 5` (Dynamic) | Custom `stream.php` API with dynamic priority target extraction (`rubystm`, `piratexplay`, `blakiteapi`, `vidmoly`, `abyssplayer`). |
+| **`HiAnime`** | **HiAnime** (Source 3) | `Server 1` – `Server 3` | Deterministic URL patterns (`vidnest.fun`, `tryembed.us.cc`, `vidnest.fun/animepahe`) supporting dynamic `/sub` (Japanese) & `/dub` (English) language switching. |
+| **`AnimeSalt`** | **AnimeSalt** (Source 4) | `Server 1` | AnimeSalt Vercel API returning `data.embedUrl` with `Referer: https://animesalt.me/`. |
 
 ---
 
-## ⚡ 1. Source 1: AnimeDekho (`AnimeDekho`)
+## 🎬 1. Source 1: Multi-Lang (`Multi-Lang` / MovieBox Engine)
+
+### 📌 API Endpoint
+`https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title={cleanTitle}&se=1&ep={episodeNumber}`
+
+### 🗣️ Multi-Audio & Video Quality Integration Rules
+- **Shifted to 1st Source Position**: `Multi-Lang` is the default 1st source in the frontend dropdown.
+- **Dynamic Audio Language Menu**: Displays **ONLY** the audio languages returned by the API for that specific episode (e.g. `JAP (Sub)`, `ENG (Dub)`, `Hindi`, `French`, `Spanish`, `Tamil`, `Telugu`...). No default hardcoded languages!
+- **Language-Dependent Video Quality Menu**: Video quality options (`1080p`, `720p`, `480p`, `360p`) dynamically update based on the selected audio language to match what is available for that track.
+- **Header Authorization**: Requires `Referer: https://netfilm.world/`.
+- **20-Minute Local Cache**: `MultiLang_${cleanTitle}_s1_ep${episodeNumber}` caches all audio tracks and quality maps so toggling languages or resolutions occurs with **0ms latency** without repeated network calls.
+
+---
+
+## ⚡ 2. Source 2: AnimeDekho (`AnimeDekho`)
 
 ### 📌 API Endpoint
 `https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?anilistId={anilistId}&ep={episodeNumber}`
@@ -35,77 +49,43 @@ The API response returns an array of raw server links (`stream.servers`). The en
 If an anime episode lacks one or more server targets (e.g. `blakiteapi` is not provided by the API for that episode):
 - Missing server targets are omitted completely.
 - Remaining available targets shift up sequentially into `Server 1`, `Server 2`, `Server 3`...
-- *Example*: If `blakiteapi` is absent:
-  - `Server 1` = `rubystm`
-  - `Server 2` = `piratexplay`
-  - `Server 3` = `vidmoly`
-  - `Server 4` = `abyssplayer`
-  - *(No `Server 5` will be displayed in frontend)*.
 
 ### 💾 20-Minute Local Cache
 - **Cache Key**: `AnimeDekho_${anilistId}_ep${episodeNumber}`
 - **TTL**: 20 minutes (`20 * 60 * 1000` ms).
-- **Benefit**: Once an episode API call completes, switching between Server 1, Server 2, Server 3... occurs with **0ms latency** without redundant HTTP requests.
 
 ---
 
-## 🌸 2. Source 2: HiAnime (`HiAnime`)
+## 🌸 3. Source 3: HiAnime (`HiAnime`)
 
 ### 📌 Deterministic URL Pattern
-HiAnime operates without API latency by using direct deterministic embed patterns:
-
 - **Server 1 (Vidnest)**: `https://vidnest.fun/anime/{anilistId}/{episodeNumber}/{sub|dub}`
 - **Server 2 (Tryembed)**: `https://tryembed.us.cc/embed/anime/{anilistId}/{episodeNumber}/{sub|dub}`
 - **Server 3 (Animepahe)**: `https://vidnest.fun/animepahe/{anilistId}/{episodeNumber}/{sub|dub}`
 
 ### 🗣️ Sub / Dub Language & Quality Options
-- **Filtered Settings Modal**: Player settings displays **ONLY** `JAP (Sub)` and `ENG (Dub)` for HiAnime under Audio Language (no Hindi, Tamil, Telugu, etc.).
-- **Video Quality**: Set to `1080p` (no non-existent resolution clutter).
+- **Filtered Settings Modal**: Player settings displays **ONLY** `JAP (Sub)` and `ENG (Dub)` for HiAnime under Audio Language.
+- **Video Quality**: Set to `1080p`.
 - **Japanese (Sub)**: Replaces `/dub` with `/sub` in URL.
 - **English (Dub)**: Replaces `/sub` with `/dub` in URL.
-- Toggling the language option in player settings updates the endpoint instantly between Japanese (`/sub`) and English (`/dub`) and reloads ExoPlayer seamlessly.
 
 ---
 
-## 🧂 3. Source 3: AnimeSalt (`AnimeSalt`)
+## 🧂 4. Source 4: AnimeSalt (`AnimeSalt`)
 
 ### 📌 API Endpoint
 `https://animesalt-api-omega.vercel.app/api/stream?id={animeSlug}&ep=ep-{episodeNumber}`
-
-### 🛠️ Execution & Referer
-- Queries `data.embedUrl` from the AnimeSalt API.
-- Serves as **Server 1** under AnimeSalt.
-- **Header Authorization**: Standardized with `Referer: https://animesalt.me/`.
+- **Header Authorization**: `Referer: https://animesalt.me/`.
 - **Filtered Settings Modal**: Audio Language = `JAP (Sub)`, Video Quality = `1080p`.
 - **20-Minute Local Cache**: `AnimeSalt_${anilistId}_ep${episodeNumber}`.
 
 ---
 
-## 🎬 4. Source 4: MovieBox (`MovieBox`)
-
-### 📌 API Endpoint
-`https://moviebox-api-mklm.onrender.com/api/stream-by-name?title={cleanTitle}&se=1&ep={episodeNumber}&include_captions=true`
-
-### 🎞️ Multi-Quality Resolution Integration
-- Displayed as **Server 1** in the main server selector.
-- The API returns an array of direct MP4 stream URLs across multiple video resolutions (`1080p`, `720p`, `480p`, `360p`).
-- **Quality Selector in Settings**: Player settings dynamically lists **only** the video resolutions returned by MovieBox for that specific episode.
-- **Header Authorization**: Requires `Referer: https://netfilm.world/`.
-- **20-Minute Local Cache**: `MovieBox_${cleanTitle}_s1_ep${episodeNumber}` caches all resolution URLs for instant quality toggling.
-
----
-
-## 🚀 5. Unified Non-Overlapping Launch Pipeline
-- Eliminated duplicate parallel stream launches between `WatchView.tsx` and `ProVideoPlayer.tsx`.
-- All stream resolves and native player launches are managed in a single, non-overlapping pipeline inside `ProVideoPlayer.tsx`, preventing CPU thrashing and duplicate network calls in logcat.
-
----
-
-## 🛡️ 6. Domain-Specific Referer Headers Reference
+## 🛡️ 5. Domain-Specific Referer Headers Reference
 
 | Stream Domain | Required Referer Header |
 | :--- | :--- |
-| `hakunaymatata.com` / `netfilm.world` (MovieBox) | `Referer: https://netfilm.world/` |
+| `hakunaymatata.com` / `netfilm.world` (Multi-Lang / MovieBox) | `Referer: https://netfilm.world/` |
 | `abyssplayer.com` / `short.icu` | `Referer: https://abyssplayer.com/` |
 | `piratexplay.cc` | `Referer: https://piratexplay.cc/` |
 | `animesalt-api` / `animesalt.me` | `Referer: https://animesalt.me/` |
@@ -115,7 +95,7 @@ HiAnime operates without API latency by using direct deterministic embed pattern
 
 ---
 
-## 🧪 7. Testing & Build Protocol
+## 🧪 6. Testing & Build Protocol
 
 Whenever modifying server APIs or resolver logic:
 1. Re-build frontend web assets and sync Capacitor:
