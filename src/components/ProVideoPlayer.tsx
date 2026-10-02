@@ -61,6 +61,7 @@ interface ProVideoPlayerProps {
   initialTime?: number;
   currentServer?: StreamServerId;
   selectedSubServer?: string;
+  selectedSource?: string;
   onServerChange?: (server: StreamServerId) => void;
   onSubServerChange?: (server: string) => void;
   currentAudioLanguage?: StreamLanguage;
@@ -82,6 +83,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   initialTime = 0,
   currentServer,
   selectedSubServer,
+  selectedSource,
   onServerChange,
   onSubServerChange,
   currentAudioLanguage,
@@ -136,12 +138,12 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     }
   }, [currentAudioLanguage]);
 
-  // Clear server URL cache when episode or anime changes (new episode = new API call needed)
+  // Clear server URL cache when source, server, episode, or anime changes
   useEffect(() => {
     serverUrlCache.current = {};
     episodeCacheKey.current = '';
     baseSourceRef.current = null;
-  }, [episodeNumber, anime.id]);
+  }, [selectedSource, selectedSubServer, episodeNumber, anime.id]);
 
   // Synchronize preferences on mount
   useEffect(() => {
@@ -426,14 +428,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     let cancelled = false;
 
-    // Cache key identifies a unique episode (ignoring server, since all servers come in one API call)
-    const cacheKey = `${anime.id}_${episodeNumber}_${activeServer}_${audioMode}`;
+    const activeSrcName = selectedSource || 'AnimeDekho';
     const requestedServer = selectedSubServerName || 'Server 1';
+    const cacheKey = `${activeSrcName}_${anime.id}_${episodeNumber}_${activeServer}_${audioMode}_${requestedServer}`;
 
-    // ── FAST PATH: URL already cached for this episode ──────────────────────
+    // ── FAST PATH: URL already cached for this exact source + episode + server ─────
     if (episodeCacheKey.current === cacheKey && serverUrlCache.current[requestedServer] && baseSourceRef.current) {
       const cachedUrl = serverUrlCache.current[requestedServer];
-      // Build a StreamSource from the cache without any API call
       const cachedSource: StreamSource = {
         ...baseSourceRef.current,
         url: cachedUrl,
@@ -445,10 +446,10 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       return;
     }
 
-    // ── SLOW PATH: First load or episode changed — call API ──────────────────
+    // ── SLOW PATH: First load or source/server/episode changed — call API ───────────
     setStreamSource(null);
     setStreamStatus('loading');
-    setStreamMessage(`Connecting to ${activeServer}...`);
+    setStreamMessage(`Connecting to ${activeSrcName} (${requestedServer})...`);
 
     resolveEpisodeSource({
       anime,
@@ -462,7 +463,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         if (cancelled) return;
 
         if (result.status === 'available' && result.source) {
-          // Populate cache with ALL server URLs returned by the API
           if (result.source.availableServers?.length) {
             episodeCacheKey.current = cacheKey;
             serverUrlCache.current = {};
@@ -493,7 +493,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName]);
+  }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName, selectedSource]);
 
   // Inline UI Eraser (Destroys old web buttons inside the box)
   useEffect(() => {

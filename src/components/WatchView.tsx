@@ -482,6 +482,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
             episodesList={episodeList}
             initialTime={initialTime}
             currentServer={selectedServer}
+            selectedSource={selectedSource}
             selectedSubServer={selectedSubServer}
             onServerChange={setSelectedServer}
             onSubServerChange={setSelectedSubServer}

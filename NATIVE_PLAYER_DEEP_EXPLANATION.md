@@ -151,7 +151,8 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
    - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
    - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
 3. **Source-Prefixed Cache Keys & Stale Intent Reset**:
-   - Updated `EPISODE_STREAM_CACHE` in `streamingProviders.ts` and `StreamCache.java` to key entries strictly by `Source + Server + AnilistId + Episode + Audio` (`AnimeDekho_...`, `HiAnime_...`, `MovieBox_...`), preventing cross-source cache collisions.
+   - Updated `ProVideoPlayer.tsx`, `streamingProviders.ts`, and `StreamCache.java` to key all in-memory stream caches strictly by `Source + AnimeId + Episode + Server + Audio` (`AnimeDekho_...`, `HiAnime_...`, `MovieBox_...`).
+   - Clears `serverUrlCache.current` instantly whenever `selectedSource` or `selectedSubServer` changes in `WatchView.tsx`, preventing `ProVideoPlayer` from taking the fast-path and reusing old cached AnimeDekho URLs for HiAnime or MovieBox.
    - Updated `onNewIntent()` in `NativePlayerActivity.java` to invoke `setIntent(intent)` immediately, ensuring the Diagnostic HUD reads fresh intent extras for source name, server name, and target URL rather than stale initial intent data.
 4. **Enhanced Diagnostic HUD**: Diagnostic overlay displays **`TARGET`** (requested embed/api URL) alongside **`PLAYING`** (resolved media URL) and `REFERER` headers for full real-time stream transparency.
 4. **Native Route Extractor & Engine Toggle Unblock**:
