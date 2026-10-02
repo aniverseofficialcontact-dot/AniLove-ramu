@@ -178,13 +178,12 @@ public class VideoSniffer {
     }
 
     private void injectAntiRedirectScript(WebView view) {
+        if (view == null) return;
         String script =
             "(function() {" +
             "  try {" +
-            "    Object.defineProperty(window, 'top', {" +
-            "      get: function() { return { location: { href: 'https://abyss.to/embedded_player' } }; }," +
-            "      configurable: true" +
-            "    });" +
+            "    window.open = function() { return null; };" +
+            "    window.onbeforeunload = null;" +
             "  } catch(e) {}" +
             "})();";
         view.evaluateJavascript(script, null);
@@ -253,6 +252,10 @@ public class VideoSniffer {
         if (url == null || url.trim().isEmpty()) return false;
         String lowerUrl = url.toLowerCase().trim();
 
+        boolean hasDirectMediaExt = lowerUrl.contains(".m3u8") || lowerUrl.contains(".mp4") ||
+                                    lowerUrl.contains(".mpd") || lowerUrl.contains("manifest.m3u8") ||
+                                    lowerUrl.contains("master.m3u8") || lowerUrl.contains("index.m3u8");
+
         // Block dummy wrapper token URLs on tryembed and vidnest that return HTTP 400 to non-browser requests
         if (lowerUrl.contains("tryembed.us.cc/s/") || lowerUrl.contains("vidnest.fun/s/")) {
             return false;
@@ -265,31 +268,27 @@ public class VideoSniffer {
             return false;
         }
 
-        // 1. Block analytics, telemetry, and tracking domains / paths
-        if (lowerUrl.contains("jwpltx.com") || lowerUrl.contains("ping.gif") ||
-            lowerUrl.contains("google-analytics") || lowerUrl.contains("googletagmanager") ||
-            lowerUrl.contains("doubleclick") || lowerUrl.contains("analytics") ||
-            lowerUrl.contains("/ads/") || lowerUrl.contains("adservice") ||
-            lowerUrl.contains("/beacon") || lowerUrl.contains("/events") ||
-            lowerUrl.contains("/ping") || lowerUrl.contains("/track") ||
-            lowerUrl.contains("/telemetry") || lowerUrl.contains("/log") ||
-            lowerUrl.contains("/stats") || lowerUrl.contains("socket.io") ||
+        // 1. Block analytics, telemetry, and tracking domains
+        if (lowerUrl.contains("jwpltx.com") || lowerUrl.contains("google-analytics") ||
+            lowerUrl.contains("googletagmanager") || lowerUrl.contains("doubleclick") ||
             lowerUrl.contains("clarity.ms") || lowerUrl.contains("hotjar") ||
-            lowerUrl.contains("mixpanel") || lowerUrl.contains("sentry")) {
+            lowerUrl.contains("mixpanel") || lowerUrl.contains("sentry") ||
+            lowerUrl.contains("/ads/") || lowerUrl.contains("adservice")) {
             return false;
         }
 
-        // 2. Block static web resources
-        if (lowerUrl.contains(".js") || lowerUrl.contains(".css") ||
-            lowerUrl.contains(".png") || lowerUrl.contains(".jpg") ||
-            lowerUrl.contains(".jpeg") || lowerUrl.contains(".webp") ||
-            lowerUrl.contains(".svg") || lowerUrl.contains(".gif") ||
-            lowerUrl.contains(".ico") || lowerUrl.contains(".woff") ||
-            lowerUrl.contains(".woff2") || lowerUrl.contains(".ttf") ||
-            lowerUrl.contains(".html") || lowerUrl.contains(".htm") ||
-            lowerUrl.contains(".vtt") || lowerUrl.contains(".srt") ||
-            lowerUrl.contains(".php") || lowerUrl.contains(".json")) {
-            return false;
+        // 2. Block static web resources (unless it explicitly contains a direct media manifest/file)
+        if (!hasDirectMediaExt) {
+            if (lowerUrl.contains(".js") || lowerUrl.contains(".css") ||
+                lowerUrl.contains(".png") || lowerUrl.contains(".jpg") ||
+                lowerUrl.contains(".jpeg") || lowerUrl.contains(".webp") ||
+                lowerUrl.contains(".svg") || lowerUrl.contains(".gif") ||
+                lowerUrl.contains(".ico") || lowerUrl.contains(".woff") ||
+                lowerUrl.contains(".woff2") || lowerUrl.contains(".ttf") ||
+                lowerUrl.contains(".html") || lowerUrl.contains(".htm") ||
+                lowerUrl.contains(".vtt") || lowerUrl.contains(".srt")) {
+                return false;
+            }
         }
 
         // 3. Must not be an isolated 2-second .ts or .m4s segment chunk
@@ -298,13 +297,15 @@ public class VideoSniffer {
         }
 
         // 4. Must contain a valid video or playlist extension anywhere in path OR query params!
+        if (hasDirectMediaExt) return true;
+
         for (String ext : VIDEO_EXTENSIONS) {
             if (lowerUrl.contains(ext)) {
                 return true;
             }
         }
 
-        return lowerUrl.contains(".m3u8") || lowerUrl.contains(".mp4") || lowerUrl.contains(".mpd");
+        return false;
     }
 
     public void sniff(String pageUrl, OnVideoFoundListener listener) {

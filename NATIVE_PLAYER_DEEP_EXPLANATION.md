@@ -120,6 +120,21 @@ Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-bu
 ### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
 - When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A/B/C`, `Server 3-A (AnimeSalt)`), `handleServerSwitchDirect` is invoked **instantly**, delegating to `launchNativePlayer` and switching the active video stream in Java immediately!
 
+### 🛡️ WebView Ad-Blocker & Sniffer Filter Optimization Engine
+To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS exceptions while keeping ads, popups, and fullscreens hidden:
+1. **Non-Destructive CSS Ad Eraser (`NativePlayerActivity.java`)**:
+   - Replaced destructive JavaScript DOM node removal (`el.remove()`) with pure CSS rules (`display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;`) injected into `<style id="anilove_style">`.
+   - **Why**: Removing DOM nodes destroyed internal state objects in web player frameworks (JWPlayer, ArtPlayer, Video.js), throwing unhandled JS `TypeError`s that caused infinite buffering or player crashes. CSS hiding keeps nodes intact so player scripts run smoothly while remaining completely hidden and non-interactive.
+   - **Interval Optimization**: Optimized the injection loop from 250ms to 1000ms, drastically reducing CPU thrashing in WebView.
+2. **Cloudflare Turnstile & Challenge Protection Exemption**:
+   - Removed `turnstile` and `challenge-platform` from the ad blacklist in `isAdUrl()`.
+   - Allows Cloudflare Turnstile human verification and security challenges to pass cleanly on embed domains (`abyssplayer`, `vidnest`, `tryembed`, `blakiteapi`, `vidmoly`, `piratexplay`, `rubystm`), preventing HTTP 403 / 503 errors and infinite loading.
+3. **Smart Stream Path Exemption (`VideoSniffer.java`)**:
+   - Prioritizes direct media URLs (`.m3u8`, `.mp4`, `.mpd`, `manifest.m3u8`, `master.m3u8`) over generic resource rules.
+   - Removed false-positive blacklists (`/track`, `/events`, `/log`, `/stats`, `.php`, `.json`) that previously caused VideoSniffer to ignore valid HLS playlist URLs containing track identifiers or dynamic PHP/JSON endpoints.
+4. **Safe Frame Anti-Redirect**:
+   - Disables `window.open` popups and navigation unload prompts in `injectAntiRedirectScript()` without replacing `window.top` with a broken object, preventing `TypeError` when player scripts access `window.top.document`.
+
 ---
 
 ## 🕵️ 4. Headless VideoSniffer Engine (`VideoSniffer.java`)

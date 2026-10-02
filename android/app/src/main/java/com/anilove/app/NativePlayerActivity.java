@@ -177,15 +177,15 @@ public class NativePlayerActivity extends AppCompatActivity {
             "                 '.jw-icon-rewind, .jw-icon-forward, .jw-btn-rewind, .jw-btn-forward, .art-icon-rewind, .art-icon-forward, .art-control-jump, .art-control-rewind, .art-control-forward, .art-icon-jump, button[data-plyr=\"rewind\"], ' +" +
             "                 'button[data-plyr=\"fast-forward\"], .vjs-seek-button, .vjs-skip-backward-10, .vjs-skip-forward-10, button[title*=\"10\" i], ' +" +
             "                 'button[title*=\"Rewind\" i], button[title*=\"Forward\" i], button[title*=\"Jump\" i], button[title*=\"Skip\" i], button[aria-label*=\"10\" i], button[aria-label*=\"Rewind\" i], ' +" +
-            "                 'button[aria-label*=\"Forward\" i], button[aria-label*=\"Jump\" i], button[aria-label*=\"Skip\" i], [data-tooltip*=\"10\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [data-tooltip*=\"Jump\" i], [data-tooltip*=\"Skip\" i], [class*=\"seek-10\" i], [class*=\"skip-10\" i], [class*=\"seek\" i], [class*=\"skip\" i], [class*=\"jump\" i], [class*=\"step\" i], [class*=\"backward\" i], [class*=\"-10\" i], [class*=\"+10\" i], .blakite-skip, .blakite-rewind, ' +" +
-            "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], div[class*=\"download\" i], .btn-download, ' +" +
-            "                 'div[class*=\"quality\" i], button[class*=\"quality\" i], [class*=\"hd-\" i], [id*=\"quality\" i], .jw-icon-hd, .jw-settings-content, div[class*=\"hd\" i], .v-quality, ' +" +
-            "                 'div[class*=\"caption\" i], button[class*=\"caption\" i], div[class*=\"subtitle\" i], button[class*=\"subtitle\" i], .jw-icon-cc, .art-icon-subtitle, [class*=\"cc-\" i], [id*=\"cc\" i], [id*=\"subtitle\" i], .v-cc, ' +" +
-            "                 'div[class*=\"pip\" i], button[class*=\"pip\" i], .art-icon-pip, .jw-icon-pip, [aria-label*=\"Picture\" i], [title*=\"Picture\" i], [data-tooltip*=\"Picture\" i], .v-pip, ' +" +
-            "                 '.jw-slider-time, .jw-rail, .jw-progress, .jw-buffer, .jw-knob, .jw-slider-horizontal, .art-control-progress, .art-progress, .plyr__progress, .vjs-progress-control, .vjs-progress-holder, .vjs-play-progress, .vjs-slider, div[class*=\"progress\" i], div[class*=\"seekbar\" i], div[class*=\"seek-bar\" i], input[type=\"range\"], div[class*=\"rail\" i], div[class*=\"timeline\" i], div[class*=\"slider\" i], [id*=\"progress\" i], [id*=\"seekbar\" i], [id*=\"timeline\" i], .v-seekbar, ' +" +
+            "                 'button[aria-label*=\"Forward\" i], button[aria-label*=\"Jump\" i], button[aria-label*=\"Skip\" i], [data-tooltip*=\"10\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [data-tooltip*=\"Jump\" i], [data-tooltip*=\"Skip\" i], .blakite-skip, .blakite-rewind, ' +" +
+            "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], .btn-download, ' +" +
+            "                 '.jw-icon-hd, .jw-settings-content, .v-quality, ' +" +
+            "                 '.jw-icon-cc, .art-icon-subtitle, .v-cc, ' +" +
+            "                 '.art-icon-pip, .jw-icon-pip, .v-pip, ' +" +
+            "                 '.jw-slider-time, .jw-rail, .jw-progress, .jw-buffer, .jw-knob, .jw-slider-horizontal, .art-control-progress, .art-progress, .plyr__progress, .vjs-progress-control, .vjs-progress-holder, .vjs-play-progress, .vjs-slider, div[class*=\"seekbar\" i], div[class*=\"seek-bar\" i], input[type=\"range\"], .v-seekbar, ' +" +
             "                 '.art-control-play, .art-control-pause, .art-icon-play, .art-icon-pause, .jw-icon-playback, .jw-btn-play, .jw-btn-pause, button[data-plyr=\"play\"], button[data-plyr=\"pause\"], .vjs-play-control, ' +" +
             "                 '.art-control-volume, .art-icon-volume, .art-volume, .jw-icon-volume, .jw-btn-volume, button[data-plyr=\"mute\"], .plyr__volume, .vjs-volume-panel, .vjs-mute-control, ' +" +
-            "                 '.jw-text-elapsed, .jw-text-duration, .jw-text-countdown, .jw-time-tip, .art-control-time, .art-time, .plyr__time, .plyr__time--current, .plyr__time--duration, .vjs-current-time, .vjs-duration, .vjs-remaining-time, .vjs-time-control, [class*=\"time-display\" i], [class*=\"time_display\" i], [class*=\"time-text\" i], [class*=\"time_text\" i], [class*=\"duration\" i], [class*=\"elapsed\" i], [id*=\"duration\" i], [id*=\"elapsed\" i], span[class*=\"time\" i], div[class*=\"time\" i], ' +" +
+            "                 '.jw-text-elapsed, .jw-text-duration, .jw-text-countdown, .jw-time-tip, .art-control-time, .art-time, .plyr__time, .vjs-current-time, .vjs-duration, .vjs-remaining-time, ' +" +
             "                 '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
             "                 '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
             "  function applyAdEraserToWindow(win) {" +
@@ -205,38 +205,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        style.appendChild(win.document.createTextNode(cssRules));" +
             "        (win.document.head || win.document.documentElement).appendChild(style);" +
             "      }" +
-            "      var hideSelectors = ['" +
-            "        .jw-icon-fullscreen', '.jw-btn-fullscreen', '.art-icon-fullscreen', '.art-control-fullscreen', '.plyr__controls__item[data-plyr=\"fullscreen\"]', '.vjs-fullscreen-control', '.dplayer-full-icon', 'button[data-plyr=\"fullscreen\"]', 'button[title*=\"Fullscreen\"]', 'button[title*=\"Full Screen\"]', 'button[aria-label*=\"Fullscreen\"]', 'button[aria-label*=\"Full Screen\"]', " +
-            "        '.jw-icon-settings', '.jw-btn-settings', '.art-icon-setting', '.art-control-setting', '.art-setting', '.plyr__controls__item[data-plyr=\"settings\"]', 'button[data-plyr=\"settings\"]', '.vjs-setting-menu-button', '.vjs-quality-selector', 'button[title*=\"Setting\"]', 'button[title*=\"Quality\"]', 'button[aria-label*=\"Setting\"]', 'button[aria-label*=\"Quality\"]', " +
-            "        '.jw-icon-rewind', '.jw-icon-forward', '.jw-btn-rewind', '.jw-btn-forward', '.art-icon-rewind', '.art-icon-forward', '.art-control-jump', '.art-control-rewind', '.art-control-forward', '.art-icon-jump', 'button[data-plyr=\"rewind\"]', 'button[data-plyr=\"fast-forward\"]', '.vjs-seek-button', '.vjs-skip-backward-10', '.vjs-skip-forward-10', 'button[title*=\"10\"]', 'button[title*=\"Rewind\"]', 'button[title*=\"Forward\"]', 'button[title*=\"Jump\"]', 'button[aria-label*=\"10\"]', 'button[aria-label*=\"Rewind\"]', 'button[aria-label*=\"Forward\"]', 'button[aria-label*=\"Jump\"]', '[class*=\"skip\"]', '[class*=\"rewind\"]', '[class*=\"forward\"]', '[class*=\"seek\"]', '[class*=\"step\"]', '[class*=\"backward\"]', '.blakite-skip', '.blakite-rewind', " +
-            "        'a[href*=\"download\"]', '.download-btn', '.download-link', 'button[class*=\"download\"]', 'a[class*=\"download\"]', '[id*=\"download\"]', 'div[class*=\"download\"]', '.btn-download', " +
-            "        'div[class*=\"quality\"]', 'button[class*=\"quality\"]', '[id*=\"quality\"]', '.jw-icon-hd', '.jw-settings-content', '.v-quality', " +
-            "        'div[class*=\"caption\"]', 'button[class*=\"caption\"]', 'div[class*=\"subtitle\"]', 'button[class*=\"subtitle\"]', '.jw-icon-cc', '.art-icon-subtitle', '[id*=\"subtitle\"]', '.v-cc', " +
-            "        'div[class*=\"pip\"]', 'button[class*=\"pip\"]', '.art-icon-pip', '.jw-icon-pip', '.v-pip', " +
-            "        '.jw-slider-time', '.jw-rail', '.jw-progress', '.jw-buffer', '.jw-knob', '.jw-slider-horizontal', '.art-control-progress', '.art-progress', '.plyr__progress', '.vjs-progress-control', '.vjs-progress-holder', '.vjs-play-progress', '.vjs-slider', 'div[class*=\"progress\"]', 'div[class*=\"seekbar\"]', 'div[class*=\"seek-bar\"]', 'input[type=\"range\"]', 'div[class*=\"rail\"]', 'div[class*=\"timeline\"]', 'div[class*=\"slider\"]', '[id*=\"progress\"]', '[id*=\"seekbar\"]', '[id*=\"timeline\"]', '.v-seekbar', " +
-            "        '.art-control-play', '.art-control-pause', '.art-icon-play', '.art-icon-pause', '.jw-icon-playback', '.jw-btn-play', '.jw-btn-pause', 'button[data-plyr=\"play\"]', 'button[data-plyr=\"pause\"]', '.vjs-play-control', " +
-            "        '.art-control-volume', '.art-icon-volume', '.art-volume', '.jw-icon-volume', '.jw-btn-volume', 'button[data-plyr=\"mute\"]', '.plyr__volume', '.vjs-volume-panel', '.vjs-mute-control', " +
-            "        '.jw-text-elapsed', '.jw-text-duration', '.jw-text-countdown', '.jw-time-tip', '.art-control-time', '.art-time', '.plyr__time', '.vjs-current-time', '.vjs-duration', '.vjs-remaining-time', '[class*=\"time-display\"]', '[class*=\"time_display\"]', '[class*=\"time-text\"]', '[class*=\"duration\"]', '[class*=\"elapsed\"]'" +
-            "      ];" +
-            "      hideSelectors.forEach(function(sel) {" +
-            "        var els = win.document.querySelectorAll(sel);" +
-            "        els.forEach(function(el) { try { el.remove(); } catch(err){} });" +
-            "      });" +
-            "      try {" +
-            "        var dlEls = win.document.querySelectorAll('a, button, div, span, p, i');" +
-            "        for (var dI = 0; dI < dlEls.length; dI++) {" +
-            "          var dlEl = dlEls[dI];" +
-            "          var txt = (dlEl.textContent || '').trim().toLowerCase();" +
-            "          var href = (dlEl.getAttribute('href') || '').toLowerCase();" +
-            "          var title = (dlEl.getAttribute('title') || '').toLowerCase();" +
-            "          var aria = (dlEl.getAttribute('aria-label') || '').toLowerCase();" +
-            "          var cls = (dlEl.className || '').toString().toLowerCase();" +
-            "          if (txt.includes('download') || href.includes('download') || href.includes('/dl/') ||" +
-            "              title.includes('download') || aria.includes('download') || cls.includes('download') || cls.includes('btn-dl')) {" +
-            "            try { dlEl.remove(); } catch(e) { dlEl.style.display = 'none'; }" +
-            "          }" +
-            "        }" +
-            "      } catch(e) {}" +
             "      var v = win.document.querySelector('video');" +
             "      if (v && !v.dataset.aniskipBound) {" +
             "        v.dataset.aniskipBound = 'true';" +
@@ -252,7 +220,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  applyAdEraserToWindow(window);" +
-            "  if (!window.aniloveInterval) { window.aniloveInterval = setInterval(function() { applyAdEraserToWindow(window); }, 250); }" +
+            "  if (!window.aniloveInterval) { window.aniloveInterval = setInterval(function() { applyAdEraserToWindow(window); }, 1000); }" +
             "})();";
         webView.evaluateJavascript(script, null);
     }
@@ -997,12 +965,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request != null && request.getUrl() != null) {
                         String url = request.getUrl().toString().toLowerCase();
-                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
-                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
-                            url.contains("download") || url.contains("/dl/") || url.contains("getfile") || url.contains("savefile") ||
-                            isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
-                            Log.i("AniLove_AdBlock", "Blocked YouTube / download / ad navigation in WebView Player: " + url);
-                            return true; // Cancel navigation
+                        boolean isMainFrame = request.isForMainFrame();
+
+                        if (!isMainFrame) {
+                            if (isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
+                                Log.i("AniLove_AdBlock", "Blocked popup / ad navigation in WebView Player: " + url);
+                                return true; // Cancel popup / ad navigation
+                            }
+                        } else {
+                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
+                                return true;
+                            }
                         }
                     }
                     return false;
@@ -3474,21 +3447,26 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private boolean isAdUrl(String lower) {
         if (lower == null) return false;
-        if (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".ts") || lower.contains(".m4s")) {
+        // Explicit exemption for media manifests, segments, and stream keys
+        if (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".ts") ||
+            lower.contains(".m4s") || lower.contains(".mpd") || lower.contains(".key") ||
+            lower.contains("/hls/") || lower.contains("master") || lower.contains("index")) {
             return false;
         }
-        return lower.contains("youtube.com") || lower.contains("youtu.be") || lower.contains("ytimg.com") ||
-               lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
+        // Allow Cloudflare challenge & Turnstile verification
+        if (lower.contains("turnstile") || lower.contains("challenge-platform") || lower.contains("cloudflare")) {
+            return false;
+        }
+        // Specific ad networks and popunder domains ONLY
+        return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
                lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
                lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||
                lower.contains("probationthimbledespite") || lower.contains("alwingulla") || lower.contains("cpmgate") ||
                lower.contains("trafficjunky") || lower.contains("exoclick") || lower.contains("juicyads") ||
                lower.contains("propellerads") || lower.contains("bet365") || lower.contains("1xbet") ||
                lower.contains("stake") || lower.contains("doubleclick") || lower.contains("googlesyndication") ||
-               lower.contains("google-analytics") || lower.contains("adservice") || lower.contains("turnstile") ||
-               lower.contains("challenge-platform") || lower.contains("popunder") || lower.contains("redirect") ||
-               lower.contains("syndication") || lower.contains("onclick") || lower.contains("outbrain") ||
-               lower.contains("taboola");
+               lower.contains("adservice") || lower.contains("popunder") || lower.contains("onclick") ||
+               lower.contains("outbrain") || lower.contains("taboola");
     }
 
     @UnstableApi
