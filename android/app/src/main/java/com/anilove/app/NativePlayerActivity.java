@@ -2582,7 +2582,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 showControlsExplicitly();
                 Toast.makeText(this, "Switched to Media3 ExoPlayer Mode", Toast.LENGTH_SHORT).show();
             }
-            updateDiagnosticHud();
         });
     }
 
@@ -3053,62 +3052,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private String currentActiveServerName = "Server 1";
 
-    private void updateDiagnosticHud() {
-        TextView hudServer = findViewById(R.id.hud_server_name);
-        TextView hudTarget = findViewById(R.id.hud_target_url);
-        TextView hudUrl = findViewById(R.id.hud_stream_url);
-        TextView hudRef = findViewById(R.id.hud_referer);
-        TextView hudStatus = findViewById(R.id.hud_playback_status);
-        TextView hudBuffer = findViewById(R.id.hud_buffer_info);
-
-        if (hudServer == null) return;
-
-        String serverName = getIntent().getStringExtra("serverName");
-        if (serverName == null || serverName.isEmpty()) serverName = currentActiveServerName;
-
-        String sourcePrefix = "AnimeDekho";
-        String sLower = serverName.toLowerCase();
-        if (sLower.contains("hianime")) sourcePrefix = "HiAnime";
-        else if (sLower.contains("animesalt")) sourcePrefix = "AnimeSalt";
-        else if (sLower.contains("moviebox")) sourcePrefix = "MovieBox";
-
-        hudServer.setText("SRC: " + sourcePrefix + " | SRV: " + serverName);
-
-        if (hudTarget != null) {
-            String rawTarget = getIntent().getStringExtra("url");
-            if (rawTarget == null || rawTarget.isEmpty()) rawTarget = currentEmbedUrl;
-            hudTarget.setText("TARGET: " + (rawTarget != null ? rawTarget : "N/A"));
-        }
-
-        String urlText = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : "Loading...";
-        hudUrl.setText("PLAYING: " + urlText);
-
-        String refText = getBestRefererForUrl(currentLoadedStreamUrl, currentEmbedUrl);
-        hudRef.setText("REFERER: " + refText);
-
-        if (exoPlayer != null) {
-            int state = exoPlayer.getPlaybackState();
-            String stateStr = "UNKNOWN";
-            if (state == Player.STATE_BUFFERING) stateStr = "BUFFERING ⏳";
-            else if (state == Player.STATE_READY) stateStr = "READY ▶️";
-            else if (state == Player.STATE_ENDED) stateStr = "ENDED 🏁";
-            else if (state == Player.STATE_IDLE) stateStr = "IDLE ⏸️";
-
-            String q = (currentSelectedQuality != null) ? currentSelectedQuality : "1080p";
-            hudStatus.setText("STATE: " + stateStr + " | " + q + " | " + currentSelectedAudio);
-
-            long posMs = exoPlayer.getCurrentPosition();
-            long durMs = exoPlayer.getDuration();
-            long bufMs = exoPlayer.getBufferedPosition();
-            long bufferedSec = Math.max(0, (bufMs - posMs) / 1000L);
-            int bufPercent = (durMs > 0) ? (int) ((bufMs * 100) / durMs) : 0;
-
-            hudBuffer.setText("BUFFER: " + bufferedSec + "s (" + bufPercent + "%) | " + formatTime((int) (posMs / 1000)) + " / " + formatTime((int) (durMs / 1000)));
-        }
-    }
-
     private void syncPlayerState() {
-        updateDiagnosticHud();
         if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
