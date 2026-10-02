@@ -1,25 +1,31 @@
 import { Anime } from '../types';
+import { getAnimeReleaseStatus } from './releaseHelper';
 
 /**
- * Accurately calculate total episodes for any anime, resolving AniList ongoing anime,
- * franchise sequels, and long-running series like One Piece, Conan, Naruto, Bleach, etc.
+ * Accurately calculate total released episodes for any anime, resolving AniList ongoing anime,
+ * unreleased anime, and long-running series.
  */
 export function computeTotalEpisodes(anime?: Anime | null, details?: any): number {
   if (!anime && !details) return 24;
+
+  const relStatus = getAnimeReleaseStatus(anime, details);
+  if (!relStatus.isReleased) {
+    return 0; // Unreleased anime has 0 available episodes!
+  }
+
+  const target = details || anime;
+  const status = (target?.status || '').toUpperCase();
+
+  // If ongoing RELEASING anime, strictly cap at released count
+  if (status === 'RELEASING') {
+    return relStatus.releasedEpisodeCount;
+  }
 
   // 1. Direct positive episodes from anime or details
   if (anime?.episodes && anime.episodes > 0) return anime.episodes;
   if (details?.episodes && details.episodes > 0) return details.episodes;
 
-  // 2. Ongoing airing anime from nextAiringEpisode
-  if (details?.nextAiringEpisode?.episode) {
-    return Math.max(1, details.nextAiringEpisode.episode - 1);
-  }
-  if ((anime as any)?.nextAiringEpisode?.episode) {
-    return Math.max(1, (anime as any).nextAiringEpisode.episode - 1);
-  }
-
-  // 3. Title analysis for major long-running franchises when AniList returns null/incomplete counts
+  // 2. Title analysis for major long-running franchises when AniList returns null/incomplete counts
   const title = (
     `${anime?.title?.english || ''} ${anime?.title?.romaji || ''} ${anime?.title?.userPreferred || ''} ${details?.title?.english || ''}`
   ).toLowerCase();
@@ -48,7 +54,7 @@ export function computeTotalEpisodes(anime?: Anime | null, details?: any): numbe
   if (title.includes('shin-chan') || title.includes('shinchan') || title.includes('crayon shin')) return 1100;
   if (title.includes('my hero academia') || title.includes('boku no hero academia')) return 159;
 
-  // 4. Check raw streaming episodes from AniList
+  // 3. Check raw streaming episodes from AniList
   const rawStreaming = details?.streamingEpisodes || (anime as any)?.streamingEpisodes || [];
   if (rawStreaming.length > 0) {
     return Math.max(rawStreaming.length, 24);

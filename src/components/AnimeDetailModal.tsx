@@ -15,6 +15,7 @@ import { API_BASE, apiFetch, apiUrl } from '../services/api';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { AnimeWatchOrderTab } from './AnimeWatchOrderTab';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
+import { getAnimeReleaseStatus } from '../services/releaseHelper';
 import {
   checkIsFillerEpisode,
   getArcOrFormattedTitle,
@@ -442,9 +443,11 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     };
   }, [currentAnime?.id, currentAnime?.idMal, playingEpisode, selectedEpisodeRange]);
 
+  const relStatus = useMemo(() => getAnimeReleaseStatus(currentAnime, details), [currentAnime, details]);
+
   // Generate complete episodes catalog synchronized with AniList (with franchise sequel offset detection)
   const episodeList = useMemo(() => {
-    if (!currentAnime) return [];
+    if (!currentAnime || !relStatus.isReleased) return [];
 
     const rawStreaming = details?.streamingEpisodes || (currentAnime as any).streamingEpisodes || [];
     const total = computeTotalEpisodes(currentAnime, details);
@@ -767,23 +770,34 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           <div className="mt-8 p-4 sm:p-6 rounded-2xl bg-[#111424] border border-slate-800/90 shadow-xl flex flex-col lg:flex-row items-center justify-between gap-5">
             {/* Left Action Buttons */}
             <div className="flex items-center gap-3 flex-wrap w-full lg:w-auto justify-center md:justify-start">
-              <button
-                id="detail-watch-stream-btn"
-                onClick={() => {
-                  setActiveTab('episodes');
-                  setPlayingEpisode(null);
-                  setTimeout(() => {
-                    const episodesTarget = document.getElementById('modal-episodes-section-title') || document.getElementById('modal-tab-nav');
-                    if (episodesTarget) {
-                      episodesTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }, 80);
-                }}
-                className="flowable-watch-btn flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition active:scale-95 cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                <span>Watch Episodes</span>
-              </button>
+              {!relStatus.isReleased ? (
+                <button
+                  id="detail-unreleased-status-btn"
+                  disabled
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-800/90 text-amber-300 font-bold text-sm border border-amber-500/30 cursor-not-allowed opacity-90 shadow-md"
+                >
+                  <Calendar className="w-4 h-4 text-amber-400" />
+                  <span>{relStatus.buttonLabel}</span>
+                </button>
+              ) : (
+                <button
+                  id="detail-watch-stream-btn"
+                  onClick={() => {
+                    setActiveTab('episodes');
+                    setPlayingEpisode(null);
+                    setTimeout(() => {
+                      const episodesTarget = document.getElementById('modal-episodes-section-title') || document.getElementById('modal-tab-nav');
+                      if (episodesTarget) {
+                        episodesTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    }, 80);
+                  }}
+                  className="flowable-watch-btn flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition active:scale-95 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>Watch Episodes</span>
+                </button>
+              )}
 
               {currentAnime.trailer && currentAnime.trailer.id && (
                 <button
@@ -1289,7 +1303,24 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             {/* TAB 2: EPISODES & STREAMING */}
             {activeTab === 'episodes' && (
               <div className="space-y-6 text-left">
-                {/* State 1: Active Episode Video Player (Pro Video Player) */}
+                {!relStatus.isReleased ? (
+                  <div className="p-8 sm:p-12 rounded-3xl bg-slate-900/90 border border-slate-800 text-center space-y-4 max-w-lg mx-auto my-6 shadow-2xl">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-lg">
+                      <Calendar className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Not Released Yet</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {relStatus.releaseDateText
+                        ? `This anime is officially scheduled for release on ${relStatus.releaseDateText}. Episodes will become available as they air.`
+                        : 'This title has not been officially released yet. Episodes will become available once broadcasts begin.'}
+                    </p>
+                    <div className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/40">
+                      <span>{relStatus.buttonLabel}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* State 1: Active Episode Video Player (Pro Video Player) */}
                 {playingEpisode !== null ? (
                   <div ref={playerRef} className="space-y-6">
                     {/* Feature-Packed Crunchyroll-Inspired Video Player */}
@@ -1745,6 +1776,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       </div>
                     )}
                   </div>
+                )}
+                  </>
                 )}
               </div>
             )}

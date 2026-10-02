@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Info, ChevronLeft, ChevronRight, Rotate3d, Music } from 'lucide-react';
+import { Play, Info, ChevronLeft, ChevronRight, Rotate3d, Music, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime, UserMediaListItem } from '../types';
 import { sanitizeDescription } from '../services/anilist';
+import { getAnimeReleaseStatus } from '../services/releaseHelper';
 
 interface HeroSpotlightProps {
   animeList?: Anime[];
@@ -81,6 +82,7 @@ export const HeroSpotlight: React.FC<HeroSpotlightProps> = ({
   };
 
   const currentAnime = list[currentIndex] || list[0];
+  const relStatus = getAnimeReleaseStatus(currentAnime);
   const title = currentAnime.title?.english || currentAnime.title?.romaji || currentAnime.title?.userPreferred || 'Featured Anime';
   const banner = currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || currentAnime.coverImage?.large;
   const desc = sanitizeDescription(currentAnime.description);
@@ -185,15 +187,26 @@ export const HeroSpotlight: React.FC<HeroSpotlightProps> = ({
                 className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-4 pt-1"
                 onClick={e => e.stopPropagation()}
               >
-                {/* Watch Now (Crisp White Button) */}
-                <button
-                  id="spotlight-watch-btn"
-                  onClick={() => onPlayStream(currentAnime)}
-                  className="flex items-center gap-2 px-5 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm shadow-xl shadow-black/40 transition transform hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-slate-900 text-slate-900" />
-                  <span>Watch Now</span>
-                </button>
+                {/* Watch Now (Crisp White Button) or Unreleased Button */}
+                {!relStatus.isReleased ? (
+                  <button
+                    id="spotlight-unreleased-btn"
+                    disabled
+                    className="flex items-center gap-2 px-5 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-slate-800/90 text-amber-300 font-extrabold text-xs sm:text-sm border border-amber-500/30 opacity-90 cursor-not-allowed shadow-xl shadow-black/40"
+                  >
+                    <Calendar className="w-4 h-4 text-amber-400" />
+                    <span>{relStatus.buttonLabel}</span>
+                  </button>
+                ) : (
+                  <button
+                    id="spotlight-watch-btn"
+                    onClick={() => onPlayStream(currentAnime)}
+                    className="flex items-center gap-2 px-5 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm shadow-xl shadow-black/40 transition transform hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-slate-900 text-slate-900" />
+                    <span>Watch Now</span>
+                  </button>
+                )}
 
                 {/* Theme Song Audio Preview */}
                 {onPlayThemeSong && (

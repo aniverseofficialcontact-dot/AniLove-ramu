@@ -30,6 +30,7 @@ import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, Stre
 import { NativePlayer, launchNativePlayer } from '../services/nativePlayer';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
+import { getAnimeReleaseStatus } from '../services/releaseHelper';
 import { fetchFranchiseWatchOrder } from '../services/watchOrderService';
 import {
   fetchExtendedEpisodesFromJikanOrKitsu,
@@ -226,6 +227,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const title = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const coverUrl = anime.coverImage?.extraLarge || anime.coverImage?.large || anime.coverImage?.medium;
   const currentProgress = userItem?.progress || 0;
+  const relStatus = useMemo(() => getAnimeReleaseStatus(anime, details), [anime, details]);
   const episodesTotal = computeTotalEpisodes(anime, details);
   const score = details?.averageScore || anime.averageScore || details?.meanScore || anime.meanScore;
 
@@ -472,32 +474,49 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
       {/* Main Watch Page Container - Positioned at very top */}
       <main className="w-full max-w-[1920px] mx-auto px-0 pt-0 space-y-5 sm:space-y-6">
-        {/* Theatrical Video Player Component - Fixed at Top */}
-        <div className="w-full rounded-none overflow-hidden bg-black aspect-video">
-          <ProVideoPlayer
-            anime={anime}
-            episodeNumber={episodeNumber}
-            episodeTitle={currentEpisodeData.title}
-            episodesList={episodeList}
-            initialTime={initialTime}
-            currentServer={selectedServer}
-            selectedSource={selectedSource}
-            selectedSubServer={selectedSubServer}
-            onServerChange={setSelectedServer}
-            onSubServerChange={setSelectedSubServer}
-            currentAudioLanguage={selectedAudio}
-            onAudioLanguageChange={setSelectedAudio}
-            onEpisodeChange={ep => {
-              onEpisodeChange(ep);
-              onUpdateProgress(anime, Math.max(currentProgress, ep - 1));
-            }}
-            onClosePlayer={onBack}
-            onThumbnailStyleChange={style => setThumbnailStyle(style)}
-            onProgressUpdate={onUpdateProgress}
-            initialThumbnailStyle={thumbnailStyle}
-            settings={settings}
-          />
-        </div>
+        {!relStatus.isReleased ? (
+          <div className="p-8 sm:p-12 rounded-3xl bg-slate-900/90 border border-slate-800 text-center space-y-4 max-w-lg mx-auto my-12 shadow-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-lg">
+              <Calendar className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-white">Not Released Yet</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              {relStatus.releaseDateText
+                ? `This anime is officially scheduled for release on ${relStatus.releaseDateText}. Episodes will become available as they air.`
+                : 'This title has not been officially uploaded or released yet. Episodes will become available once broadcasts begin.'}
+            </p>
+            <div className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/40">
+              <span>{relStatus.buttonLabel}</span>
+            </div>
+          </div>
+        ) : (
+          /* Theatrical Video Player Component - Fixed at Top */
+          <div className="w-full rounded-none overflow-hidden bg-black aspect-video">
+            <ProVideoPlayer
+              anime={anime}
+              episodeNumber={episodeNumber}
+              episodeTitle={currentEpisodeData.title}
+              episodesList={episodeList}
+              initialTime={initialTime}
+              currentServer={selectedServer}
+              selectedSource={selectedSource}
+              selectedSubServer={selectedSubServer}
+              onServerChange={setSelectedServer}
+              onSubServerChange={setSelectedSubServer}
+              currentAudioLanguage={selectedAudio}
+              onAudioLanguageChange={setSelectedAudio}
+              onEpisodeChange={ep => {
+                onEpisodeChange(ep);
+                onUpdateProgress(anime, Math.max(currentProgress, ep - 1));
+              }}
+              onClosePlayer={onBack}
+              onThumbnailStyleChange={style => setThumbnailStyle(style)}
+              onProgressUpdate={onUpdateProgress}
+              initialThumbnailStyle={thumbnailStyle}
+              settings={settings}
+            />
+          </div>
+        )}
 
         {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: SOURCES & SERVERS */}
         <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
