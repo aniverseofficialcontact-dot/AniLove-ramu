@@ -140,6 +140,8 @@ public class NativePlayerPlugin extends Plugin {
 
     @PluginMethod
     public void close(PluginCall call) {
+        lastPlayUrl = null;
+        lastPlayTime = 0;
         if (NativePlayerActivity.currentInstance != null) {
             NativePlayerActivity.currentInstance.runOnUiThread(() -> {
                 try {
@@ -148,11 +150,6 @@ public class NativePlayerPlugin extends Plugin {
                 } catch (Exception ignored) {}
             });
         }
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void togglePlayerEngine(PluginCall call) {
         call.resolve();
     }
 }

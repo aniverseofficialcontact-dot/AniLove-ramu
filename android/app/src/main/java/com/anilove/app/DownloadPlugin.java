@@ -18,6 +18,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.channels.FileChannel;
 import java.util.List;
 
 @CapacitorPlugin(name = "DownloadPlugin")
@@ -225,16 +226,12 @@ public class DownloadPlugin extends Plugin {
             String fileName = safeTitle + "_EP" + episodeNumber + ".mp4";
             File destFile = new File(publicDir, fileName);
 
-            FileInputStream in = new FileInputStream(srcFile);
-            FileOutputStream out = new FileOutputStream(destFile);
-            byte[] buf = new byte[65536];
-            int len;
-            while ((len = in.read(buf)) > 0) {
-                out.write(buf, 0, len);
+            try (FileInputStream in = new FileInputStream(srcFile);
+                 FileOutputStream out = new FileOutputStream(destFile);
+                 FileChannel inChannel = in.getChannel();
+                 FileChannel outChannel = out.getChannel()) {
+                inChannel.transferTo(0, inChannel.size(), outChannel);
             }
-            in.close();
-            out.flush();
-            out.close();
 
             try {
                 MediaScannerConnection.scanFile(

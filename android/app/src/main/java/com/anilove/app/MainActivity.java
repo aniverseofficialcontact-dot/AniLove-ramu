@@ -1,8 +1,8 @@
 package com.anilove.app;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -12,57 +12,64 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
-import android.view.inputmethod.InputMethodManager;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
-import android.content.pm.ActivityInfo;
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
+import org.json.JSONObject;
+
 public class MainActivity extends BridgeActivity {
+    private static final String TAG = "MainActivity";
+    private static final int NOTIFICATION_PERMISSION_REQ_CODE = 101;
+
     public static MainActivity instance;
     public static boolean pendingBackToDetails = false;
     public static boolean isWebReady = false;
+
+    private String pendingDeepLinkToken = null;
     private final Handler splashHandler = new Handler(Looper.getMainLooper());
+    private Runnable pollTask;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         instance = this;
-        
-        // Keep the native splash screen visible until the web code signals it's ready
+
+        // Keep native splash screen visible until web code signals it's ready
         splashScreen.setKeepOnScreenCondition(() -> !isWebReady);
-        
+
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(DownloadPlugin.class);
-        
+
         super.onCreate(savedInstanceState);
 
         // Request notification permission for background downloads on Android 13+ (API 33+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQ_CODE);
             }
         }
 
-        // UI tweaks after activity is created
+        // Configure UI & WebSettings
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         hideSystemBars();
+        configureWebViewSettings();
 
         // AndroidX OnBackPressedDispatcher for predictive back gestures and 3-button navigation back
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (getBridge() != null && getBridge().getWebView() != null) {
-                    getBridge().getWebView().evaluateJavascript(
+                WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+                if (webView != null) {
+                    webView.evaluateJavascript(
                         "(function() { return typeof window.handleHardwareBackPress === 'function' ? Boolean(window.handleHardwareBackPress()) : false; })()",
                         value -> {
                             boolean handled = "true".equals(value);
@@ -77,40 +84,67 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // High-frequency polling to dismiss native logo the moment the homepage is actually loaded in background
         startWebReadyPolling();
     }
 
+    private void configureWebViewSettings() {
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+            if (webView != null) {
+                WebSettings settings = webView.getSettings();
+                settings.setSupportMultipleWindows(false);
+                settings.setJavaScriptCanOpenWindowsAutomatically(false);
+                settings.setDomStorageEnabled(true);
+                // Allow autoplaying videos without user gesture
+                settings.setMediaPlaybackRequiresUserGesture(false);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "WebSettings adjustment error: " + e.getMessage());
+        }
+    }
+
     private void startWebReadyPolling() {
-        // Safety Timeout: Force dismiss after 500 milliseconds to ensure instant feel
+        // Safety Timeout: Force dismiss after 2500ms if web fails to signal ready
         splashHandler.postDelayed(() -> {
             if (!isWebReady) {
-                Log.w("MainActivity", "WebReady timeout. Transitioning to home screen.");
-                isWebReady = true;
+                Log.w(TAG, "WebReady safety timeout reached. Revealing web view.");
+                setWebReady(true);
             }
-        }, 500);
+        }, 2500);
 
-        // Polling loop: Check WebView every 100ms for the ready flag from React
-        Runnable pollTask = new Runnable() {
+        // Polling loop: Check WebView for ready flag from React
+        pollTask = new Runnable() {
             @Override
             public void run() {
                 if (isWebReady) return;
 
-                if (getBridge() != null && getBridge().getWebView() != null) {
-                    getBridge().getWebView().evaluateJavascript("window.isWebReady", value -> {
+                WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+                if (webView != null) {
+                    webView.evaluateJavascript("window.isWebReady", value -> {
                         if ("true".equals(value)) {
-                            Log.i("MainActivity", "Web signaled READY. Revealing homepage.");
-                            isWebReady = true;
-                        } else {
-                            splashHandler.postDelayed(this, 50);
+                            Log.i(TAG, "Web signaled READY. Revealing homepage.");
+                            setWebReady(true);
+                        } else if (!isWebReady) {
+                            splashHandler.postDelayed(pollTask, 100);
                         }
                     });
-                } else {
-                    splashHandler.postDelayed(this, 50);
+                } else if (!isWebReady) {
+                    splashHandler.postDelayed(pollTask, 100);
                 }
             }
         };
         splashHandler.post(pollTask);
+    }
+
+    private void setWebReady(boolean ready) {
+        isWebReady = ready;
+        if (ready) {
+            splashHandler.removeCallbacksAndMessages(null);
+            if (pendingDeepLinkToken != null) {
+                injectAniListToken(pendingDeepLinkToken);
+                pendingDeepLinkToken = null;
+            }
+        }
     }
 
     private void hideSystemBars() {
@@ -153,21 +187,7 @@ public class MainActivity extends BridgeActivity {
     public void onStart() {
         super.onStart();
         instance = this;
-        
-        try {
-            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-            if (webView != null) {
-                WebSettings settings = webView.getSettings();
-                settings.setSupportMultipleWindows(false);
-                settings.setJavaScriptCanOpenWindowsAutomatically(false);
-                settings.setDomStorageEnabled(true);
-                settings.setDatabaseEnabled(true);
-                // Allow autoplaying videos without user interaction
-                settings.setMediaPlaybackRequiresUserGesture(false);
-            }
-        } catch (Exception e) {
-            Log.w("MainActivity", "WebSettings adjustment error: " + e.getMessage());
-        }
+        configureWebViewSettings();
     }
 
     public static void forcePortraitOrientation() {
@@ -192,10 +212,10 @@ public class MainActivity extends BridgeActivity {
             dispatchBackToDetails();
         }
 
-        // Process any deep link token on activity resume (handles cold boots)
+        // Process any deep link intent on activity resume
         if (getIntent() != null && getIntent().getData() != null) {
             handleDeepLinkIntent(getIntent());
-            getIntent().setData(null); // Clear to ensure it only processes once
+            getIntent().setData(null); // Clear data so it is only processed once
         }
     }
 
@@ -203,50 +223,86 @@ public class MainActivity extends BridgeActivity {
     public void onNewIntent(Intent intent) {
         setIntent(intent);
         super.onNewIntent(intent);
-        // Process deep link token on new intent (handles background resumes)
-        handleDeepLinkIntent(intent);
+        // onResume() is called immediately following onNewIntent() by the Android framework.
+        // It will handle processing the intent data centrally to prevent double-execution.
     }
 
     private void handleDeepLinkIntent(Intent intent) {
         if (intent == null || intent.getData() == null) return;
         Uri data = intent.getData();
-        String url = data.toString();
+        String token = parseAccessToken(data);
+
+        if (token != null && !token.isEmpty()) {
+            if (isWebReady) {
+                injectAniListToken(token);
+            } else {
+                // Queue token to inject once React is ready
+                pendingDeepLinkToken = token;
+            }
+        }
+    }
+
+    private String parseAccessToken(Uri data) {
+        if (data == null) return null;
+
+        // 1. Standard Uri query parameter
+        String token = data.getQueryParameter("access_token");
+        if (token != null && !token.isEmpty()) return token;
+
+        // 2. URI fragment hash (#access_token=...)
         String fragment = data.getFragment();
-        
-        String tokenPayload = null;
-        if (url != null && url.contains("access_token=")) {
-            tokenPayload = url;
-        } else if (fragment != null && fragment.contains("access_token=")) {
-            tokenPayload = fragment;
+        if (fragment != null && fragment.contains("access_token=")) {
+            String[] parts = fragment.split("access_token=");
+            if (parts.length > 1) {
+                return parts[1].split("&")[0];
+            }
         }
 
-        if (tokenPayload != null) {
+        // 3. Raw URL string parsing fallback
+        String url = data.toString();
+        if (url.contains("access_token=")) {
+            String[] parts = url.split("access_token=");
+            if (parts.length > 1) {
+                return parts[1].split("&")[0];
+            }
+        }
+
+        return null;
+    }
+
+    private void injectAniListToken(String token) {
+        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+        if (webView != null) {
             try {
-                String[] parts = tokenPayload.split("access_token=");
-                if (parts.length > 1) {
-                    final String token = parts[1].split("&")[0];
-                    if (token != null && !token.isEmpty()) {
-                        if (getBridge() != null && getBridge().getWebView() != null) {
-                            String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: '" + token + "' }));";
-                            getBridge().getWebView().evaluateJavascript(js, null);
-                            Log.i("MainActivity", "Injected AniList token into web context successfully!");
-                        }
-                    }
-                }
+                // Secure JSON serialization prevents JavaScript Injection vulnerabilities
+                String safeTokenJson = JSONObject.quote(token);
+                String js = "window.dispatchEvent(new CustomEvent('nativeAniListToken', { detail: " + safeTokenJson + " }));";
+                webView.evaluateJavascript(js, null);
+                Log.i(TAG, "Injected AniList token into web context securely.");
             } catch (Exception e) {
-                Log.e("MainActivity", "Error splitting token from intent URL", e);
+                Log.e(TAG, "Failed to inject AniList token", e);
             }
         }
     }
 
     public void dispatchBackToDetails() {
-        if (getBridge() != null && getBridge().getWebView() != null) {
+        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+        if (webView != null) {
             String js = "if (window.closeNativePlayerAndOpenDetails) { " +
                         "  window.closeNativePlayerAndOpenDetails(); " +
                         "} else { " +
                         "  window.dispatchEvent(new CustomEvent('nativePlayerBackButtonPressed')); " +
                         "}";
-            getBridge().getWebView().evaluateJavascript(js, null);
+            webView.evaluateJavascript(js, null);
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        splashHandler.removeCallbacksAndMessages(null);
+        if (instance == this) {
+            instance = null;
+        }
+        super.onDestroy();
     }
 }

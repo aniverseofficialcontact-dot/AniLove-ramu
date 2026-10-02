@@ -36,7 +36,6 @@ public class VideoSniffer {
     private WebView webView;
     private OnVideoFoundListener listener;
     private boolean found = false;
-    private String capturedSubtitleUrl = "";
     private Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private Runnable timeoutRunnable;
 
@@ -85,12 +84,6 @@ public class VideoSniffer {
                 String url = request.getUrl().toString();
                 Log.d(TAG, "Intercepted request: " + url);
 
-                String lower = url.toLowerCase();
-                if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                    capturedSubtitleUrl = url;
-                    Log.i(TAG, "Found Subtitle URL: " + url);
-                }
-
                 if (isVideoUrl(url)) {
                     if (!found) {
                         found = true;
@@ -98,7 +91,7 @@ public class VideoSniffer {
                         Log.i(TAG, "SUCCESS! Caught Video URL: " + cleanUrl);
                         cleanup();
                         new Handler(Looper.getMainLooper()).post(() -> {
-                            if (listener != null) listener.onVideoFound(cleanUrl, capturedSubtitleUrl);
+                            if (listener != null) listener.onVideoFound(cleanUrl);
                         });
                     }
                 }
@@ -149,17 +142,13 @@ public class VideoSniffer {
             @JavascriptInterface
             public void onUrlFound(String url) {
                 if (url == null) return;
-                String lower = url.toLowerCase();
-                if ((lower.contains(".vtt") || lower.contains(".srt")) && !lower.contains("thumb")) {
-                    capturedSubtitleUrl = url;
-                }
                 if (isVideoUrl(url) && !found) {
                     found = true;
                     final String cleanUrl = NativePlayerActivity.sanitizeStreamUrl(url);
                     Log.i(TAG, "Script found Video URL: " + cleanUrl);
                     cleanup();
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        if (listener != null) listener.onVideoFound(cleanUrl, capturedSubtitleUrl);
+                        if (listener != null) listener.onVideoFound(cleanUrl);
                     });
                 }
             }

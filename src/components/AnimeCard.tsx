@@ -12,7 +12,6 @@ interface AnimeCardProps {
   onUpdateStatus: (anime: Anime, status: MediaListStatus) => void;
   onUpdateProgress: (anime: Anime, newProgress: number) => void;
   onSelectGenre?: (genre: string) => void;
-  onSelectStudio?: (studio: string) => void;
   onInspect3DCard?: (anime: Anime) => void;
 }
 

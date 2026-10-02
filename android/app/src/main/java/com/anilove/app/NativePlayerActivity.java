@@ -10,30 +10,41 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.graphics.PixelFormat;
-import android.content.res.Configuration;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import java.io.ByteArrayInputStream;
-import java.io.OutputStream;
-import android.os.Message;
-import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -41,6 +52,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -137,7 +150,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean isOfflineMode = false;
     private ProgressBar loadingProgress;
     private View controlsOverlay;
-    private ImageButton btnPlayPause, btnNextEpisode, btnPrevEpisode, btnCaptions, btnPip;
+    private ImageButton btnPlayPause;
     private SeekBar seekBar;
     private TextView textCurrentTime, textTotalTime, textTimeLeft, indicator2x;
     private TextView indicatorRewind, indicatorForward;
@@ -157,13 +170,16 @@ public class NativePlayerActivity extends AppCompatActivity {
     private TextView captionPreview;
     
     // Dual Player Engine (ExoPlayer <-> WebView Player)
+    private static final Pattern SERVER2_EXTRACT_PATTERN = Pattern.compile("(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)");
+    private static final Pattern VIDLINK_EXTRACT_PATTERN = Pattern.compile("vidlink\\.pro/anime/(\\d+)/(\\d+)");
+
     private WebView playerWebView;
     private TextView btnEngineToggle;
     private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
 
     private void injectAdEraserScript(WebView webView) {
-        if (webView == null) return;
+        if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
         String script =
             "(function() {" +
             "  var cssRules = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
@@ -430,11 +446,11 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
     
-    private Handler updateHandler = new Handler(Looper.getMainLooper());
-    private Handler hideHandler = new Handler(Looper.getMainLooper());
+    private final Handler updateHandler = new Handler(Looper.getMainLooper());
+    private final Handler hideHandler = new Handler(Looper.getMainLooper());
     private GestureDetector gestureDetector;
 
-    private BroadcastReceiver pipReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver pipReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent == null || !"ACTION_PIP_CONTROL".equals(intent.getAction())) return;
@@ -495,6 +511,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private boolean isFullscreenMode = false;
+    @SuppressWarnings("StaticFieldLeak")
     public static NativePlayerActivity currentInstance;
 
     @UnstableApi
@@ -610,7 +627,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (audio == null || audio.isEmpty()) audio = "DUB";
 
         if (rawTitle == null || rawTitle.isEmpty()) {
-            rawTitle = animeTitle != null ? animeTitle : "Now Playing";
+            rawTitle = Objects.requireNonNullElse(animeTitle, "Now Playing");
         }
         
         // Clean duplicate episode suffix if present (e.g., "Title - Ep 8 - EP 8" -> "Title - Ep 8")
@@ -976,7 +993,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
                                 try {
                                     String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
-                                    if (!host.isEmpty() && !host.equals(originalHost) && !host.contains(originalHost) && !originalHost.contains(host) && !host.contains("about:blank")) {
+                                    if (!Objects.equals(host, originalHost) && !host.contains(originalHost) && !originalHost.contains(host) && !host.contains("about:blank")) {
                                         Log.i("AniLove_AdBlock", "Blocked top-level domain redirect from " + originalHost + " to " + host);
                                         return true; // Cancel top-level domain redirect
                                     }
@@ -1040,6 +1057,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         setPlaybackSpeedWebView(currentPermanentSpeed);
                         if (indicator2x != null) indicator2x.setVisibility(View.GONE);
                     }
+                    if (event.getAction() == MotionEvent.ACTION_UP) {
+                        v.performClick();
+                    }
                 }
                 webViewGestureDetector.onTouchEvent(event);
                 return false;
@@ -1061,8 +1081,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         textTotalTime = findViewById(R.id.text_total_time);
         textTimeLeft = findViewById(R.id.text_time_left);
         
-        btnNextEpisode = findViewById(R.id.btn_next_episode);
-        btnPrevEpisode = findViewById(R.id.btn_prev_episode);
+        ImageButton btnNextEpisode = findViewById(R.id.btn_next_episode);
+        ImageButton btnPrevEpisode = findViewById(R.id.btn_prev_episode);
         
         scrubberContainer = findViewById(R.id.scrubber_preview_container);
         scrubberTime = findViewById(R.id.scrubber_time);
@@ -1099,10 +1119,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             });
         }
 
-        btnCaptions = findViewById(R.id.btn_captions);
-        btnCaptions.setOnClickListener(v -> showCaptionMenu());
+        ImageButton btnCaptions = findViewById(R.id.btn_captions);
+        if (btnCaptions != null) {
+            btnCaptions.setOnClickListener(v -> showCaptionMenu());
+        }
         
-        btnPip = findViewById(R.id.btn_pip);
+        ImageButton btnPip = findViewById(R.id.btn_pip);
         if (btnPip != null) {
             btnPip.setOnClickListener(v -> enterPipMode());
         }
@@ -1131,7 +1153,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     targetSec = (Integer) tag;
                 }
                 if (isWebViewPlayerMode && playerWebView != null) {
-                    final int finalTarget = targetSec;
                     String seekScript =
                         "(function() {" +
                         "  function seekAll(win, target) {" +
@@ -1143,7 +1164,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "      try { seekAll(win.frames[k], target); } catch(e) {}" +
                         "    }" +
                         "  }" +
-                        "  seekAll(window, " + finalTarget + ");" +
+                        "  seekAll(window, " + targetSec + ");" +
                         "})();";
                     playerWebView.evaluateJavascript(seekScript, null);
                 } else {
@@ -1208,6 +1229,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
                 initialVolume = -1;
                 initialBrightness = -1.0f;
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.performClick();
+                }
             }
             return gestureDetector.onTouchEvent(event);
         };
@@ -1229,7 +1253,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 isDragging = false; 
                 if (exoPlayer != null) {
                     long duration = exoPlayer.getDuration();
-                    if (duration > 0 && duration != C.TIME_UNSET) {
+                    if (duration > 0) {
                         long targetMs = s.getProgress() * 1000L;
                         exoPlayer.seekTo(Math.min(targetMs, duration));
                     }
@@ -1376,8 +1400,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             return "https://google.com/";
         }
         try {
+            if (primary.contains("moviebox") || primary.contains("netfilm") || (videoUrl != null && (videoUrl.contains("netfilm") || videoUrl.contains("moviebox")))) {
+                return "https://netfilm.world/";
+            }
             if (videoUrl != null) {
                 String vHost = new URL(videoUrl).getHost().toLowerCase();
+                if (vHost.contains("netfilm") || vHost.contains("moviebox")) return "https://netfilm.world/";
                 if (vHost.contains("rumble.cloud") || vHost.contains("rumble")) return "https://blakiteapi.xyz/";
                 if (vHost.contains("googleapis.com") || vHost.contains("googleusercontent.com")) {
                     if (primary.contains("animesalt")) return "https://animesalt.me/";
@@ -1386,6 +1414,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             URL parsed = new URL(primary);
             String host = parsed.getHost().toLowerCase();
+            if (host.contains("moviebox") || host.contains("netfilm")) return "https://netfilm.world/";
             if (host.contains("animesalt")) return "https://animesalt.me/";
             if (host.contains("abyssplayer") || host.contains("abyss") || host.contains("short.icu")) return "https://abyssplayer.com/";
             if (host.contains("vidmoly")) return "https://vidmoly.biz/";
@@ -1469,8 +1498,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             boolean isTryEmbed = embedUrl.contains("tryembed.us.cc");
             String baseHost = isTryEmbed ? "https://tryembed.us.cc" : "https://vidnest.fun";
 
-            Pattern pattern = Pattern.compile("(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)");
-            Matcher matcher = pattern.matcher(embedUrl);
+            Matcher matcher = SERVER2_EXTRACT_PATTERN.matcher(embedUrl);
             if (!matcher.find()) return false;
 
             String routeType = matcher.group(1);
@@ -1529,8 +1557,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private boolean attemptVidLinkDirectExtract(String embedUrl, String referer, Map<String, String> headers) {
         if (embedUrl == null || !embedUrl.contains("vidlink.pro")) return false;
         try {
-            Pattern pattern = Pattern.compile("vidlink\\.pro/anime/(\\d+)/(\\d+)");
-            Matcher matcher = pattern.matcher(embedUrl);
+            Matcher matcher = VIDLINK_EXTRACT_PATTERN.matcher(embedUrl);
             if (!matcher.find()) return false;
 
             String animeId = matcher.group(1);
@@ -1611,8 +1638,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     String target = url.substring(urlIdx + 4);
                     int ampIdx = target.indexOf('&');
                     if (ampIdx != -1) target = target.substring(0, ampIdx);
-                    String decoded = URLDecoder.decode(target, "UTF-8");
-                    if (decoded != null && !decoded.isEmpty() && decoded.contains(".m3u8")) {
+                    String decoded = URLDecoder.decode(target, StandardCharsets.UTF_8.name());
+                    if (decoded != null && decoded.contains(".m3u8")) {
                         Log.i("AniLove", "Unwrapped proxy stream target: " + decoded);
                         return decoded;
                     }
@@ -1645,7 +1672,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .setAllowCrossProtocolRedirects(true);
 
             Map<String, String> requestHeaders = new HashMap<>();
-            if (effectiveReferer != null && !effectiveReferer.trim().isEmpty()) {
+            if (!effectiveReferer.trim().isEmpty()) {
                 requestHeaders.put("Referer", effectiveReferer);
                 try {
                     URL refUrl = new URL(effectiveReferer);
@@ -1750,7 +1777,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         hasRetriedSniffer = true;
 
                         String unwrapped = getUnwrappedProxyUrl(hlsUrl);
-                        if (unwrapped != null && !unwrapped.equals(hlsUrl)) {
+                        if (unwrapped != null && !Objects.equals(unwrapped, hlsUrl)) {
                             Log.w("AniLove", "Proxy 400 error — retrying with unwrapped target stream: " + unwrapped);
                             setupExoPlayerOnlineDirect(unwrapped, getBestRefererForUrl(unwrapped, null), headers);
                             return;
@@ -1896,14 +1923,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                     if (!list.isEmpty()) detectedSubtitles = list;
                 }
                 String cQ = obj.optString("currentQuality");
-                if (cQ != null && !cQ.isEmpty() && !cQ.equals("null")) currentSelectedQuality = cQ;
+                if (!cQ.isEmpty() && !"null".equals(cQ)) currentSelectedQuality = cQ;
                 String cA = obj.optString("currentAudio");
-                if (cA != null && !cA.isEmpty() && !cA.equals("null")) {
+                if (!cA.isEmpty() && !"null".equals(cA)) {
                     currentSelectedAudio = cA;
                     updateAudioBadge(cA);
                 }
                 String cS = obj.optString("currentSub");
-                if (cS != null && !cS.isEmpty() && !cS.equals("null")) currentSelectedSubtitle = cS;
+                if (!cS.isEmpty() && !"null".equals(cS)) currentSelectedSubtitle = cS;
             } catch (Exception ignored) {}
         }
 
@@ -1941,7 +1968,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     if (isPlaying && current > 0) {
                         broadcastProgress(current, duration);
-                        if (duration > 0 && (duration - current <= 120 || current >= duration * 0.85)) {
+                        if (duration - current <= 120 || current >= duration * 0.85) {
                             triggerNextEpisodePreFetch();
                         }
                     }
@@ -2021,7 +2048,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         JSONObject streamObj = resObj.optJSONObject("stream");
                         if (streamObj != null) {
                             String mainLink = streamObj.optString("streamLink", streamObj.optString("file", ""));
-                            if (mainLink != null && !mainLink.isEmpty()) {
+                            if (!mainLink.isEmpty()) {
                                 StreamCache.put(anilistId, nextEp, audio, mainLink);
                                 Log.i("AniLove_PreFetch", "Successfully pre-fetched next episode stream for Ep " + nextEp + ": " + mainLink);
                             }
@@ -2061,6 +2088,28 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void changeAudioLanguage(String audioLang) {
         currentSelectedAudio = audioLang;
         updateAudioBadge(audioLang);
+        
+        // HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
+        if (currentEmbedUrl != null && (currentEmbedUrl.contains("vidnest.fun") || currentEmbedUrl.contains("tryembed.us.cc") || currentEmbedUrl.toLowerCase().contains("hianime"))) {
+            String lower = audioLang.toLowerCase();
+            boolean wantsSub = lower.contains("jap") || lower.contains("sub") || lower.contains("japanese");
+            boolean wantsDub = lower.contains("eng") || lower.contains("dub") || lower.contains("english");
+            
+            String newEmbedUrl = currentEmbedUrl;
+            if (wantsSub && currentEmbedUrl.endsWith("/dub")) {
+                newEmbedUrl = currentEmbedUrl.substring(0, currentEmbedUrl.length() - 4) + "/sub";
+            } else if (wantsDub && currentEmbedUrl.endsWith("/sub")) {
+                newEmbedUrl = currentEmbedUrl.substring(0, currentEmbedUrl.length() - 4) + "/dub";
+            }
+            
+            if (!newEmbedUrl.equals(currentEmbedUrl)) {
+                currentEmbedUrl = newEmbedUrl;
+                Toast.makeText(this, "Switching audio stream...", Toast.LENGTH_SHORT).show();
+                setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
+                return;
+            }
+        }
+
         if (exoPlayer == null) return;
         try {
             String targetLangCode = "en";
@@ -2149,7 +2198,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (opt == null || target == null) return false;
         String o = opt.toLowerCase();
         String t = target.toLowerCase();
-        if (o.equals(t)) return true;
+        if (Objects.equals(o, t)) return true;
         if (t.contains("hin") && o.contains("hin")) return true;
         if ((t.contains("eng") || t.contains("dub")) && (o.contains("eng") || o.contains("dub"))) return true;
         if ((t.contains("jpn") || t.contains("sub") || t.contains("jap")) && (o.contains("jpn") || o.contains("sub") || o.contains("jap"))) return true;
@@ -2157,8 +2206,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (t.contains("tel") && o.contains("tel")) return true;
         if (t.contains("mal") && o.contains("mal")) return true;
         if (t.contains("kan") && o.contains("kan")) return true;
-        if (t.contains("ben") && o.contains("ben")) return true;
-        return false;
+        return t.contains("ben") && o.contains("ben");
     }
 
     private void updateAudioBadge(String audioText) {
@@ -2184,23 +2232,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                 .scaleX(1.05f)
                 .scaleY(1.05f)
                 .setDuration(120)
-                .withEndAction(() -> {
-                    indicator.animate()
-                            .scaleX(1.0f)
-                            .scaleY(1.0f)
-                            .setDuration(80)
-                            .withEndAction(() -> {
-                                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                    indicator.animate()
-                                            .alpha(0f)
-                                            .scaleX(0.7f)
-                                            .scaleY(0.7f)
-                                            .setDuration(180)
-                                            .withEndAction(() -> indicator.setVisibility(View.GONE))
-                                            .start();
-                                }, 450);
-                            }).start();
-                }).start();
+                .withEndAction(() -> indicator.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(80)
+                        .withEndAction(() -> new Handler(Looper.getMainLooper()).postDelayed(() -> indicator.animate()
+                                .alpha(0f)
+                                .scaleX(0.7f)
+                                .scaleY(0.7f)
+                                .setDuration(180)
+                                .withEndAction(() -> indicator.setVisibility(View.GONE))
+                                .start(), 450)).start()).start();
     }
 
     private void togglePlayPause() {
@@ -2267,7 +2309,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     try {
                         unregisterReceiver(pipReceiver);
-                    } catch (Exception e) {}
+                    } catch (Exception ignored) {}
                     
                     ContextCompat.registerReceiver(this, pipReceiver, new IntentFilter("ACTION_PIP_CONTROL"), ContextCompat.RECEIVER_EXPORTED);
                     updatePipParams();
@@ -2325,7 +2367,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (topBar != null) topBar.setVisibility(View.VISIBLE);
             try {
                 unregisterReceiver(pipReceiver);
-            } catch (Exception e) {}
+            } catch (Exception ignored) {}
 
             applyWindowSettings(getIntent());
             hideControlsQuietly();
@@ -2335,9 +2377,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     private void showSettingsMenu() {
         BottomSheetDialog dialog = new BottomSheetDialog(this);
-        View view = getLayoutInflater().inflate(R.layout.settings_bottom_sheet, null);
+        View view = getLayoutInflater().inflate(R.layout.settings_bottom_sheet, findViewById(android.R.id.content), false);
         dialog.setContentView(view);
-        BottomSheetBehavior behavior = BottomSheetBehavior.from((View) view.getParent());
+        BottomSheetBehavior<?> behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 
         String curSrv = getIntent().getStringExtra("serverName");
@@ -2534,7 +2576,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void showCaptionMenu() {
         BottomSheetDialog dialog = new BottomSheetDialog(this);
-        View view = getLayoutInflater().inflate(R.layout.layout_caption_customization, null);
+        View view = getLayoutInflater().inflate(R.layout.layout_caption_customization, findViewById(android.R.id.content), false);
         dialog.setContentView(view);
         
         final View[] groups = {
@@ -2558,7 +2600,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 View child = mainLayout.getChildAt(i);
                 if (child instanceof TextView) {
                     String text = ((TextView)child).getText().toString();
-                    if (text.matches(".*[A-Z]{3,}.*") && !text.equals("SHOW SUBTITLES")) {
+                    if (text.matches(".*[A-Z]{3,}.*") && !"SHOW SUBTITLES".equals(text)) {
                         child.setVisibility(vis);
                     }
                 }
@@ -2699,7 +2741,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         preview.setTextColor(Color.parseColor(captionColorHex));
         
         float opacityVal = 0f; 
-        if (!bgOpacity.equals("Off")) opacityVal = Integer.parseInt(bgOpacity.replace("%", "")) / 100f;
+        if (!"Off".equals(bgOpacity)) opacityVal = Integer.parseInt(bgOpacity.replace("%", "")) / 100f;
         int bgColorInt = bgColor.equalsIgnoreCase("Gray") ? Color.GRAY : (bgColor.equalsIgnoreCase("Navy") ? Color.BLUE : (bgColor.equalsIgnoreCase("White") ? Color.WHITE : Color.BLACK));
         preview.setBackgroundColor(Color.argb((int)(opacityVal * 255), Color.red(bgColorInt), Color.green(bgColorInt), Color.blue(bgColorInt)));
 
@@ -2829,7 +2871,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             // 5. Background Color & Opacity
             float bgAlpha = 0f;
-            if (bgOpacity != null && !bgOpacity.equalsIgnoreCase("Off") && !bgOpacity.equals("0")) {
+            if (bgOpacity != null && !"Off".equalsIgnoreCase(bgOpacity) && !"0".equals(bgOpacity)) {
                 try {
                     bgAlpha = Integer.parseInt(bgOpacity.replace("%", "").trim()) / 100f;
                 } catch (Exception ignored) {}
@@ -2911,7 +2953,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void seekVideo(int delta) {
         if (exoPlayer != null) {
             long duration = exoPlayer.getDuration();
-            if (duration <= 0 || duration == C.TIME_UNSET) {
+            if (duration <= 0) {
                 duration = Long.MAX_VALUE;
             }
             long current = exoPlayer.getCurrentPosition();
@@ -2945,7 +2987,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                         "  } catch(e) { return '{}'; }" +
                         "})();";
                     playerWebView.evaluateJavascript(queryScript, value -> {
-                        if (value != null && !value.isEmpty() && !value.equals("null") && !value.equals("\"{}\"")) {
+                        if (value != null && !value.isEmpty() && !"null".equals(value) && !"\"{}\"".equals(value)) {
                             try {
                                 String clean = value;
                                 if (clean.startsWith("\"") && clean.endsWith("\"")) {
@@ -3001,6 +3043,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void updateDiagnosticHud() {
         TextView hudServer = findViewById(R.id.hud_server_name);
+        TextView hudTarget = findViewById(R.id.hud_target_url);
         TextView hudUrl = findViewById(R.id.hud_stream_url);
         TextView hudRef = findViewById(R.id.hud_referer);
         TextView hudStatus = findViewById(R.id.hud_playback_status);
@@ -3013,10 +3056,16 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         hudServer.setText("SERVER: " + serverName);
 
-        String urlText = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : "Loading...";
-        hudUrl.setText("URL: " + urlText);
+        if (hudTarget != null) {
+            String rawTarget = getIntent().getStringExtra("url");
+            if (rawTarget == null || rawTarget.isEmpty()) rawTarget = currentEmbedUrl;
+            hudTarget.setText("TARGET: " + (rawTarget != null ? rawTarget : "N/A"));
+        }
 
-        String refText = getBestRefererForUrl(currentLoadedStreamUrl, null);
+        String urlText = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : "Loading...";
+        hudUrl.setText("PLAYING: " + urlText);
+
+        String refText = getBestRefererForUrl(currentLoadedStreamUrl, currentEmbedUrl);
         hudRef.setText("REFERER: " + refText);
 
         if (exoPlayer != null) {
@@ -3045,7 +3094,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
-            if (durationMs > 0 && durationMs != C.TIME_UNSET) {
+            if (durationMs > 0) {
                 int current = (int) (currentMs / 1000);
                 int duration = (int) (durationMs / 1000);
                 currentVideoTime = current;
@@ -3266,7 +3315,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (line.matches("^\\d+$")) continue; // Filter out SRT sequence numbers (1, 2, 3, 424...)
 
             if (line.contains("-->")) {
-                if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
+                if (currentStart >= 0 && currentEnd > currentStart && !currentText.toString().trim().isEmpty()) {
                     String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
                     if (!cleanText.isEmpty()) {
                         newCues.add(new VttCue(currentStart, currentEnd, cleanText));
@@ -3281,7 +3330,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     currentEnd = parseVttTimestampToMs(endStr);
                 }
             } else if (currentStart >= 0 && !line.isEmpty() && !line.startsWith("WEBVTT") && !line.startsWith("NOTE") && !line.startsWith("STYLE")) {
-                if (currentText.length() > 0) currentText.append("\n");
+                if (!currentText.toString().isEmpty()) currentText.append("\n");
                 currentText.append(line);
             }
         }
@@ -3385,7 +3434,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                                 String baseLang = t.optString("language", "English");
                                 if (baseLang.isEmpty()) baseLang = "English";
 
-                                int count = langCounts.getOrDefault(baseLang, 0) + 1;
+                                Integer prevCount = langCounts.get(baseLang);
+                                int count = (prevCount != null ? prevCount : 0) + 1;
                                 langCounts.put(baseLang, count);
 
                                 String displayLabel = count == 1 ? baseLang : baseLang + " " + count;
@@ -3419,38 +3469,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
-    private String detectLanguageFromVttUrl(String url) {
-        if (url == null) return "English";
-        String lower = url.toLowerCase();
-        if (lower.contains("_spa") || lower.contains("spanish") || lower.contains("lang=es")) return "Spanish";
-        if (lower.contains("_fre") || lower.contains("_fra") || lower.contains("french") || lower.contains("lang=fr")) return "French";
-        if (lower.contains("_por") || lower.contains("portuguese") || lower.contains("lang=pt")) return "Portuguese";
-        if (lower.contains("_ger") || lower.contains("_deu") || lower.contains("german") || lower.contains("lang=de")) return "German";
-        if (lower.contains("_ita") || lower.contains("italian") || lower.contains("lang=it")) return "Italian";
-        if (lower.contains("_hin") || lower.contains("hindi") || lower.contains("lang=hi")) return "Hindi";
-        if (lower.contains("_ara") || lower.contains("arabic") || lower.contains("lang=ar")) return "Arabic";
-        if (lower.contains("_rus") || lower.contains("russian") || lower.contains("lang=ru")) return "Russian";
-        if (lower.contains("_ind") || lower.contains("indonesian") || lower.contains("lang=id")) return "Indonesian";
-        return "English";
-    }
 
-    private void attachCapturedVttTrack(String vttUrl) {
-        attachCapturedVttTrack(vttUrl, detectLanguageFromVttUrl(vttUrl));
-    }
-
-    private void attachCapturedVttTrack(String vttUrl, String langName) {
-        if (vttUrl == null || !vttUrl.contains(".vtt")) return;
-        subtitleUrl = vttUrl;
-        if (langName != null && !langName.isEmpty()) {
-            subtitleLang = langName;
-            capturedServer2BSubtitles.put(langName, vttUrl);
-            if (!detectedSubtitles.contains(langName)) {
-                detectedSubtitles.add(langName);
-            }
-        }
-        downloadAndParseVttFile(vttUrl);
-        applyCaptionStyle();
-    }
 
     private boolean isAdUrl(String lower) {
         if (lower == null) return false;
@@ -3500,7 +3519,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     private void loadResolvedUrl(String url) {
         if (url == null || url.isEmpty()) return;
-        String referer = "https://www.google.com/";
+        String referer;
         if (url.contains("watchanimeworld")) {
             referer = "https://watchanimeworld.one/";
         } else if (url.contains("megaplay")) {
@@ -3530,8 +3549,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        boolean isLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE;
-        isFullscreenMode = isLandscape;
+        isFullscreenMode = (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
         Intent intent = getIntent();
         if (intent != null) intent.putExtra("startFullscreen", isFullscreenMode);
         applyWindowSettings(intent);
@@ -3632,6 +3650,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override 
     protected void onDestroy() { 
         if (currentInstance == this) currentInstance = null;
+        navigationListener = null;
         
         VideoSniffer.cancelActiveSniffers();
         NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);

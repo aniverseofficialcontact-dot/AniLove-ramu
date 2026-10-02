@@ -127,9 +127,7 @@ In `WatchView.tsx`, the player UI features a side-by-side **SOURCES** selector p
 ```
 
 #### 📺 1. Sources Available:
-1. **`AnimeDekho`**: Uses the custom AnimeWorld India v1 PHP Stream API (`/api/anime-world-india/v1/stream.php`).
-2. **`HiAnime`**: Uses HiAnime streaming API & Tier 1 client generator.
-3. **`AnimeSalt`**: Uses the AnimeSalt Vercel API (`/api/stream?id=...`).
+4. **`MovieBox`**: Uses MovieBox Render API (`/api/stream-by-name?title=...&se=...&ep=...`) with CDN `Referer: https://netfilm.world/` header authorization.
 
 #### 🏷️ 2. Filtered Server Naming & Mapping:
 When a Source is chosen, the **SERVERS** dropdown displays **only** the servers available for that Source, simplified into clean, user-friendly labels (**`Server 1`**, **`Server 2`**, **`Server 3`**, **`Server 4`**...):
@@ -144,6 +142,7 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
 | **`HiAnime`** | **`Server 2`** | `HiAnime-Server-2` | HiAnime TryEmbed stream (`tryembed.us.cc/embed/anime/{id}/{ep}/sub` or `/dub` based on audio language). |
 | **`HiAnime`** | **`Server 3`** | `HiAnime-Server-3` | HiAnime AnimePahe stream (`vidnest.fun/animepahe/{id}/{ep}/sub` or `/dub` based on audio language). |
 | **`AnimeSalt`** | **`Server 1`** | `AnimeSalt-Server-1` | AnimeSalt API stream (`animesalt-api-omega.vercel.app`). |
+| **`MovieBox`** | **`Server 1`** | `MovieBox-Server-1` | MovieBox Render API stream (`moviebox-api-mklm.onrender.com`) with `Referer: https://netfilm.world/`. |
 
 #### 🗣️ Dynamic HiAnime SUB / DUB Link Triggering & Instant Source Routing:
 1. **Clean 3-Server List**: Instead of cluttering the UI with 6 separate SUB/DUB links, HiAnime displays **3 clean servers** (`Server 1`, `Server 2`, `Server 3`).
@@ -151,7 +150,8 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
    - When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
    - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
    - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
-3. **Deterministic Direct HiAnime Routing**: `resolveEpisodeSource()` in `streamingProviders.ts` routes HiAnime requests (`HiAnime-Server-1/2/3`) directly and instantly to the deterministic URL patterns (`https://vidnest.fun/anime/{anilistId}/{episodeNumber}/{sub|dub}`, `https://tryembed.us.cc/embed/anime/...`, `https://vidnest.fun/animepahe/...`) with 0ms latency and zero external API dependencies. HiAnime requests never touch or default to AnimeDekho.
+3. **MovieBox Multi-Quality Stream & Subtitle Integration**: Queries `/api/stream-by-name?title={title}&se={season}&ep={episode}`, returns multiple MP4 quality variants (`1080p`, `720p`, `480p`, `360p`) and `.srt` / `.vtt` captions, authorizing ExoPlayer requests with `Referer: https://netfilm.world/`.
+4. **Enhanced Diagnostic HUD**: Diagnostic overlay displays **`TARGET`** (requested embed/api URL) alongside **`PLAYING`** (resolved media URL) and `REFERER` headers for full real-time stream transparency.
 4. **Native Route Extractor & Engine Toggle Unblock**:
    - Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` with regex pattern `(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)` to match both numeric IDs and alphanumeric slugs, enabling instant direct extraction for HiAnime/TryEmbed streams.
    - Repositioned `btn_engine_toggle` (`⚡ EXO` / `🌐 WEB`) in `activity_native_player.xml` to `top|center_horizontal`, completely unblocking the top-right settings gear icon (`btn_settings`).

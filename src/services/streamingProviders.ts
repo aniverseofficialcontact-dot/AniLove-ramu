@@ -428,8 +428,8 @@ export async function resolveEpisodeSource({
       source: {
         provider,
         url: selectedItem.linkId,
-        subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
-        subtitleLang: 'Multi-Sub (TryEmbed)',
+        subtitleUrl: undefined,
+        subtitleLang: 'Multi-Sub',
         language,
         resolution,
         isEmbeddable: true,
@@ -460,7 +460,7 @@ export async function resolveEpisodeSource({
       source: {
         provider,
         url: saltUrl,
-        subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
+        subtitleUrl: undefined,
         subtitleLang: 'Multi-Sub',
         language,
         resolution,
@@ -604,7 +604,7 @@ export async function resolveEpisodeSource({
     source: {
       provider,
       url: selectedUrl,
-      subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
+      subtitleUrl: undefined,
       subtitleLang: 'Multi-Sub',
       language,
       resolution,

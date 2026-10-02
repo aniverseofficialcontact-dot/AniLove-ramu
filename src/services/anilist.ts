@@ -232,7 +232,7 @@ export interface HomeFeedData {
   romcom: Anime[];
 }
 
-export async function fetchHomeFeed(perPage: number = 24): Promise<HomeFeedData> {
+export async function fetchHomeFeed(perPage: number = 12): Promise<HomeFeedData> {
   const query = `
     query ($perPage: Int) {
       trending: Page (page: 1, perPage: $perPage) {

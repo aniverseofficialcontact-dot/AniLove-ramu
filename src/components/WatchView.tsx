@@ -122,29 +122,35 @@ export const WatchView: React.FC<WatchViewProps> = ({
     AnimeDekho: {
       label: 'AnimeDekho',
       servers: [
-        { displayName: 'Server 1', internalCode: 'Server 1-C' },
-        { displayName: 'Server 2', internalCode: 'Server 1-P' },
-        { displayName: 'Server 3', internalCode: 'Server 1-Q' },
-        { displayName: 'Server 4', internalCode: 'Server 1-R' },
+        { displayName: 'Server 1', internalCode: 'AnimeDekho-Server-1' },
+        { displayName: 'Server 2', internalCode: 'AnimeDekho-Server-2' },
+        { displayName: 'Server 3', internalCode: 'AnimeDekho-Server-3' },
+        { displayName: 'Server 4', internalCode: 'AnimeDekho-Server-4' },
       ],
     },
     HiAnime: {
       label: 'HiAnime',
       servers: [
-        { displayName: 'Server 1', internalCode: 'Server 2-A-DUB' },
-        { displayName: 'Server 2', internalCode: 'Server 2-B-DUB' },
-        { displayName: 'Server 3', internalCode: 'Server 2-C-DUB' },
+        { displayName: 'Server 1', internalCode: 'HiAnime-Server-1' },
+        { displayName: 'Server 2', internalCode: 'HiAnime-Server-2' },
+        { displayName: 'Server 3', internalCode: 'HiAnime-Server-3' },
       ],
     },
     AnimeSalt: {
       label: 'AnimeSalt',
       servers: [
-        { displayName: 'Server 1', internalCode: 'Server 3-A' },
+        { displayName: 'Server 1', internalCode: 'AnimeSalt-Server-1' },
+      ],
+    },
+    MovieBox: {
+      label: 'MovieBox',
+      servers: [
+        { displayName: 'Server 1', internalCode: 'MovieBox-Server-1' },
       ],
     },
   }), []);
 
-  type StreamSourceId = 'AnimeDekho' | 'HiAnime' | 'AnimeSalt';
+  type StreamSourceId = 'AnimeDekho' | 'HiAnime' | 'AnimeSalt' | 'MovieBox';
 
   const [selectedSource, setSelectedSource] = useState<StreamSourceId>('AnimeDekho');
   const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
@@ -515,7 +521,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
               {isSourceMenuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
-                  {(['AnimeDekho', 'HiAnime', 'AnimeSalt'] as StreamSourceId[]).map((src) => {
+                  {(['AnimeDekho', 'HiAnime', 'AnimeSalt', 'MovieBox'] as StreamSourceId[]).map((src) => {
                     const isSelected = selectedSource === src;
                     return (
                       <button

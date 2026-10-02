@@ -42,8 +42,13 @@ export const ContinueWatchingSection: React.FC<ContinueWatchingSectionProps> = (
 
   useEffect(() => {
     reloadHistory();
-    const interval = setInterval(reloadHistory, 2500);
-    return () => clearInterval(interval);
+    const handleUpdate = () => reloadHistory();
+    window.addEventListener('watch_history_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('watch_history_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const formatTime = (secs: number) => {

@@ -172,9 +172,6 @@ export function App() {
   const [romComAnime, setRomComAnime] = useState<Anime[]>([]);
   const [isMainLoading, setIsMainLoading] = useState(true);
 
-  // Selected Studio/Genre for Search Navigation
-  const [selectedStudioForSearch, setSelectedStudioForSearch] = useState<string | null>(null);
-
   // Modals
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -439,7 +436,7 @@ export function App() {
 
     setIsMainLoading(true);
     try {
-      const feed = await fetchHomeFeed(24);
+      const feed = await fetchHomeFeed(12);
       if (feed && feed.trending && feed.trending.length > 0) {
         setTrendingAnime(feed.trending);
         setPopularAnime(feed.popular);
@@ -471,7 +468,7 @@ export function App() {
   }, [loadHomeContent]);
 
   // Two-Way Sync Dispatcher (AniList + MyAnimeList)
-  const performAniListSync = async (anime: Anime, updates: { status?: MediaListStatus; progress?: number; score?: number }) => {
+  const performAniListSync = useCallback(async (anime: Anime, updates: { status?: MediaListStatus; progress?: number; score?: number }) => {
     // 1. AniList Sync
     if (settings.twoWaySyncEnabled && settings.anilistToken) {
       try {
@@ -484,8 +481,6 @@ export function App() {
 
         const title = anime.title?.english || anime.title?.romaji || 'Anime';
 
-        // Silence notifications for routine progress updates to prevent "every second" popups during playback.
-        // We only show the sync notification for status changes, scores, or when an anime is completed.
         const shouldNotify = updates.progress === undefined || updates.status === 'COMPLETED' || updates.score !== undefined;
 
         if (shouldNotify) {
@@ -524,83 +519,91 @@ export function App() {
         console.warn('MyAnimeList sync notice:', malErr);
       }
     }
-  };
+  }, [settings, triggerNotification]);
 
   // User Library Handlers
-  const handleUpdateStatus = (anime: Anime, status: MediaListStatus) => {
-    const updated = updateLibraryItem(library, anime, { status });
-    setLibrary(updated);
-    saveUserLibrary(updated);
+  const handleUpdateStatus = useCallback((anime: Anime, status: MediaListStatus) => {
+    setLibrary(prevLib => {
+      const updated = updateLibraryItem(prevLib, anime, { status });
+      saveUserLibrary(updated);
+      return updated;
+    });
 
     const title = anime.title?.english || anime.title?.romaji || 'Anime';
     showToast('success', `Moved "${title}" to ${status.toLowerCase()} list.`, 'Library Updated');
     performAniListSync(anime, { status });
-  };
+  }, [showToast, performAniListSync]);
 
-  const handleUpdateProgress = (anime: Anime, progress: number) => {
+  const handleUpdateProgress = useCallback((anime: Anime, progress: number) => {
     const totalEps = typeof anime.episodes === 'number' && anime.episodes > 0 ? anime.episodes : null;
     const max = totalEps !== null ? totalEps : 9999;
     const clampedProgress = Math.max(0, Math.min(max, Math.floor(progress)));
 
-    const existingItem = library.find(item => item.mediaId === anime.id);
-    const isCompleted = totalEps !== null && clampedProgress >= totalEps;
+    setLibrary(prevLib => {
+      const existingItem = prevLib.find(item => item.mediaId === anime.id);
+      const isCompleted = totalEps !== null && clampedProgress >= totalEps;
 
-    let nextStatus: MediaListStatus | undefined = undefined;
-    if (isCompleted) {
-      nextStatus = 'COMPLETED';
-    } else if (clampedProgress > 0 && (!existingItem || existingItem.status === 'PLANNING' || existingItem.status === 'COMPLETED')) {
-      nextStatus = 'CURRENT';
-    }
+      let nextStatus: MediaListStatus | undefined = undefined;
+      if (isCompleted) {
+        nextStatus = 'COMPLETED';
+      } else if (clampedProgress > 0 && (!existingItem || existingItem.status === 'PLANNING' || existingItem.status === 'COMPLETED')) {
+        nextStatus = 'CURRENT';
+      }
 
-    const updates: Partial<UserMediaListItem> = {
-      progress: clampedProgress,
-      ...(nextStatus ? { status: nextStatus } : {}),
-    };
+      const updates: Partial<UserMediaListItem> = {
+        progress: clampedProgress,
+        ...(nextStatus ? { status: nextStatus } : {}),
+      };
 
-    const updated = updateLibraryItem(library, anime, updates);
-    setLibrary(updated);
-    saveUserLibrary(updated);
+      const updated = updateLibraryItem(prevLib, anime, updates);
+      saveUserLibrary(updated);
 
-    const title = anime.title?.english || anime.title?.romaji || 'Anime';
-    if (isCompleted && existingItem?.status !== 'COMPLETED') {
-      showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} eps)! 🎉`, 'Completed');
-    } else if (clampedProgress > (existingItem?.progress || 0)) {
-      showToast('info', `Updated "${title}" progress to Episode ${clampedProgress}.`, 'Progress Saved');
-    }
-    performAniListSync(anime, { progress: clampedProgress, status: nextStatus || existingItem?.status });
-  };
+      const title = anime.title?.english || anime.title?.romaji || 'Anime';
+      if (isCompleted && existingItem?.status !== 'COMPLETED') {
+        showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} eps)! 🎉`, 'Completed');
+      } else if (clampedProgress > (existingItem?.progress || 0)) {
+        showToast('info', `Updated "${title}" progress to Episode ${clampedProgress}.`, 'Progress Saved');
+      }
+      performAniListSync(anime, { progress: clampedProgress, status: nextStatus || existingItem?.status });
+      return updated;
+    });
+  }, [showToast, performAniListSync]);
 
-  const handleUpdateScore = (anime: Anime, score: number) => {
-    const updated = updateLibraryItem(library, anime, { score });
-    setLibrary(updated);
-    saveUserLibrary(updated);
+  const handleUpdateScore = useCallback((anime: Anime, score: number) => {
+    setLibrary(prevLib => {
+      const updated = updateLibraryItem(prevLib, anime, { score });
+      saveUserLibrary(updated);
+      return updated;
+    });
 
     const title = anime.title?.english || anime.title?.romaji || 'Anime';
     showToast('info', `Rated "${title}" ${score}/10.`, 'Score Saved');
     performAniListSync(anime, { score });
-  };
+  }, [showToast, performAniListSync]);
 
   // Quick Add from Card
-  const handleQuickAdd = (anime: Anime, status: MediaListStatus = 'CURRENT') => {
+  const handleQuickAdd = useCallback((anime: Anime, status: MediaListStatus = 'CURRENT') => {
     handleUpdateStatus(anime, status);
-  };
+  }, [handleUpdateStatus]);
 
   // Open Details Modal with stacked history support
-  const handleOpenDetails = (anime: Anime) => {
-    if (isDetailModalOpen && selectedAnime && selectedAnime.id !== anime.id) {
-      setAnimeDetailsHistory(prev => [...prev, selectedAnime]);
-    } else if (!isDetailModalOpen) {
-      setAnimeDetailsHistory([]);
-    }
-    setSelectedAnime(anime);
+  const handleOpenDetails = useCallback((anime: Anime) => {
+    setSelectedAnime(prev => {
+      if (prev && prev.id !== anime.id) {
+        setAnimeDetailsHistory(historyPrev => [...historyPrev, prev]);
+      } else {
+        setAnimeDetailsHistory([]);
+      }
+      return anime;
+    });
     setStreamInitialEpisode(undefined);
     setStreamInitialTime(undefined);
     setStartInWatchMode(false);
     setIsDetailModalOpen(true);
-  };
+  }, []);
 
   // Open 360° 3D Anime Card Modal (or bypass to details if disabled in settings)
-  const handleInspect3DCard = (anime: Anime) => {
+  const handleInspect3DCard = useCallback((anime: Anime) => {
     if (settings.enable3DCardPreview === false) {
       handleOpenDetails(anime);
       return;
@@ -608,10 +611,10 @@ export function App() {
     setSelectedAnimeFor3D(anime);
     setIs3DCardModalOpen(true);
     soundEffects.playCardFlip();
-  };
+  }, [settings.enable3DCardPreview, handleOpenDetails]);
 
   // Open Direct Stream / Watch with Live Resume
-  const handlePlayStream = (anime: Anime, episodeNumber?: number, startTime?: number) => {
+  const handlePlayStream = useCallback((anime: Anime, episodeNumber?: number, startTime?: number) => {
     const epNum = episodeNumber || 1;
     setIsDetailModalOpen(false);
     setIs3DCardModalOpen(false);
@@ -620,11 +623,10 @@ export function App() {
       episodeNumber: epNum,
       startTime: startTime || 0,
     });
-    // On native Android the player is an overlay — scrolling the page causes the jump bug
     if (!Capacitor.isNativePlatform()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
+  }, []);
 
   const currentWatchingAnimeRef = React.useRef<Anime | null>(null);
   const activeWatchEpisodeRef = React.useRef(activeWatchEpisode);
@@ -782,14 +784,9 @@ export function App() {
   };
 
   // Genre & Studio Filters Navigation -> Switch to Discover/Search Tab
-  const handleSelectGenre = (_genre: string) => {
+  const handleSelectGenre = useCallback((_genre: string) => {
     setCurrentTab('discover');
-  };
-
-  const handleSelectStudio = (studio: string) => {
-    setSelectedStudioForSearch(studio);
-    setCurrentTab('discover');
-  };
+  }, []);
 
   // Profile PIN Protected Tab Interceptor
   const handleSelectTab = (tab: TabType) => {
@@ -1148,7 +1145,7 @@ export function App() {
           <>
             {/* VIEW 1: HOME (Hero Spotlight, Continue Watching, Categories: Trending, Popular, Top Rated, Newest) */}
             {currentTab === 'home' && (
-              <div className="space-y-8 pb-12 -mt-16">
+              <div className={`space-y-8 pb-12 ${trendingAnime.length > 0 ? '-mt-16' : 'pt-4'}`}>
                 {/* Hero Carousel Spotlight */}
                 {trendingAnime.length > 0 && (
                   <HeroSpotlight
@@ -1193,7 +1190,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1210,7 +1206,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1227,7 +1222,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1244,7 +1238,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1261,7 +1254,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1278,7 +1270,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1295,7 +1286,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1312,7 +1302,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
 
@@ -1329,7 +1318,6 @@ export function App() {
                         onUpdateStatus={handleUpdateStatus}
                         onUpdateProgress={handleUpdateProgress}
                         onSelectGenre={handleSelectGenre}
-                        onSelectStudio={handleSelectStudio}
                       />
                     )}
                   </div>
@@ -1340,15 +1328,12 @@ export function App() {
             {/* VIEW 2: DEDICATED SEARCH & MULTI-CATEGORY DISCOVERY */}
             {currentTab === 'discover' && (
               <SearchView
-                initialStudio={selectedStudioForSearch}
-                onClearStudio={() => setSelectedStudioForSearch(null)}
                 userLibrary={library}
                 onOpenDetails={handleOpenDetails}
                 onPlayStream={handlePlayStream}
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateProgress={handleUpdateProgress}
-                onSelectGenre={handleSelectGenre}
-                onSelectStudio={handleSelectStudio}
+                onInspect3DCard={handleOpen3DCard}
               />
             )}
 
@@ -1557,7 +1542,6 @@ export function App() {
           setSelectedAnime(anime);
         }}
         onSelectGenre={handleSelectGenre}
-        onSelectStudio={handleSelectStudio}
         isTwoWaySyncActive={Boolean(settings.twoWaySyncEnabled && settings.anilistToken)}
         initialEpisode={streamInitialEpisode}
         initialTime={streamInitialTime}

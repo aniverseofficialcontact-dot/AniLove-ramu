@@ -601,6 +601,9 @@ export function saveStoredWatchHistory(history: WatchHistoryEntry[]): void {
     }
     const cleanList = Array.from(animeMap.values()).slice(0, 30);
     localStorage.setItem(WATCH_HISTORY_KEY, JSON.stringify(cleanList));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('watch_history_updated', { detail: cleanList }));
+    }
     scheduleCloudSync();
   } catch (e) {
     console.error('Error saving stored watch history:', e);

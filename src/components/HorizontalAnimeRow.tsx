@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Anime, UserMediaListItem, MediaListStatus } from '../types';
 import { AnimeCard } from './AnimeCard';
 
@@ -13,7 +13,6 @@ interface HorizontalAnimeRowProps {
   onUpdateStatus: (anime: Anime, status: MediaListStatus) => void;
   onUpdateProgress: (anime: Anime, newProgress: number) => void;
   onSelectGenre?: (genre: string) => void;
-  onSelectStudio?: (studio: string) => void;
   onInspect3DCard?: (anime: Anime) => void;
 }
 
@@ -27,10 +26,16 @@ const HorizontalAnimeRowComponent: React.FC<HorizontalAnimeRowProps> = ({
   onUpdateStatus,
   onUpdateProgress,
   onSelectGenre,
-  onSelectStudio,
   onInspect3DCard,
 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
+
+  // Pre-compute O(1) library map for fast lookups
+  const userLibraryMap = useMemo(() => {
+    const map = new Map<number, UserMediaListItem>();
+    userLibrary.forEach(item => map.set(item.mediaId, item));
+    return map;
+  }, [userLibrary]);
 
   return (
     <section className="space-y-3.5" style={{ contentVisibility: 'auto', containIntrinsicSize: '1px 320px' }}>
@@ -61,13 +66,12 @@ const HorizontalAnimeRowComponent: React.FC<HorizontalAnimeRowProps> = ({
               >
                 <AnimeCard
                   anime={anime}
-                  userItem={userLibrary.find(i => i.mediaId === anime.id)}
+                  userItem={userLibraryMap.get(anime.id)}
                   onOpenDetails={onOpenDetails}
                   onPlayStream={onPlayStream}
                   onUpdateStatus={onUpdateStatus}
                   onUpdateProgress={onUpdateProgress}
                   onSelectGenre={onSelectGenre}
-                  onSelectStudio={onSelectStudio}
                   onInspect3DCard={onInspect3DCard}
                 />
               </div>

@@ -45,20 +45,6 @@ if (Capacitor.isNativePlatform()) {
       });
     }
   });
-
-  window.addEventListener('nativeEpisodeNavigation', async (e: any) => {
-    if (!activeAnimeForNative) return;
-    const direction = e?.detail?.direction;
-    const targetEp = direction === 'next' ? currentEpNumForNative + 1 : currentEpNumForNative - 1;
-    if (targetEp >= 1) {
-      await launchNativePlayer({
-        anime: activeAnimeForNative,
-        episodeNumber: targetEp,
-        audio: currentAudioForNative,
-        totalEpisodes: activeAnimeForNative.episodes,
-      });
-    }
-  });
 }
 
 /**

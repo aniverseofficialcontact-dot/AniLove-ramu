@@ -16,8 +16,28 @@ interface QuoteOfTheDayProps {
 // Guaranteed fallback portrait (Madara Uchiha high-res official portrait)
 const DEFAULT_FALLBACK_IMAGE = 'https://s4.anilist.co/file/anilistcdn/character/large/b53901-HnRKSoHMG5Vg.png';
 
-// Global memory cache for dynamically resolved character images
+// Global memory + localStorage cache for dynamically resolved character images
+const QUOTE_CHAR_CACHE_KEY = 'anilove_quote_char_cache_v1';
 const resolvedCharImageCache = new Map<string, string>();
+
+try {
+  const stored = localStorage.getItem(QUOTE_CHAR_CACHE_KEY);
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    Object.entries(parsed).forEach(([k, v]) => {
+      if (typeof v === 'string') resolvedCharImageCache.set(k, v);
+    });
+  }
+} catch {}
+
+function setCachedCharImage(name: string, url: string) {
+  resolvedCharImageCache.set(name, url);
+  try {
+    const obj: Record<string, string> = {};
+    resolvedCharImageCache.forEach((v, k) => { obj[k] = v; });
+    localStorage.setItem(QUOTE_CHAR_CACHE_KEY, JSON.stringify(obj));
+  } catch {}
+}
 
 export const QuoteOfTheDay: React.FC<QuoteOfTheDayProps> = ({
   onOpenAnimeDetails,
@@ -84,7 +104,7 @@ export const QuoteOfTheDay: React.FC<QuoteOfTheDayProps> = ({
           charName.toLowerCase().includes(c.name.toLowerCase())
       );
       if (poolMatch && poolMatch.image && poolMatch.image.startsWith('http')) {
-        resolvedCharImageCache.set(charName, poolMatch.image);
+        setCachedCharImage(charName, poolMatch.image);
         if (isMounted) setCharacterImage(poolMatch.image);
         return;
       }
@@ -95,7 +115,7 @@ export const QuoteOfTheDay: React.FC<QuoteOfTheDayProps> = ({
         if (details?.image?.large || details?.image?.medium) {
           const imgUrl = details.image.large || details.image.medium || '';
           if (imgUrl) {
-            resolvedCharImageCache.set(charName, imgUrl);
+            setCachedCharImage(charName, imgUrl);
             if (isMounted) setCharacterImage(imgUrl);
             return;
           }

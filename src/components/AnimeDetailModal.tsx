@@ -50,7 +50,6 @@ interface AnimeDetailModalProps {
   onOpenTrailer: (trailer: AnimeTrailer, title: string) => void;
   onNavigateToAnime: (anime: Anime) => void;
   onSelectGenre?: (genre: string) => void;
-  onSelectStudio?: (studio: string) => void;
   isTwoWaySyncActive: boolean;
   initialEpisode?: number;
   initialTime?: number;
@@ -80,7 +79,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   onOpenTrailer,
   onNavigateToAnime,
   onSelectGenre,
-  onSelectStudio,
   isTwoWaySyncActive,
   initialEpisode,
   initialTime,
@@ -284,13 +282,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         onUpdateStatus(currentAnime, 'CURRENT');
       }
       onUpdateProgress(currentAnime, clamped);
-    }
-  };
-
-  const handleStudioClick = (studioName: string) => {
-    if (onSelectStudio) {
-      onSelectStudio(studioName);
-      onClose();
     }
   };
 

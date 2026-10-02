@@ -178,10 +178,20 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/hud_target_url"
+                android:layout_width="260dp"
+                android:layout_height="wrap_content"
+                android:text="TARGET: https://..."
+                android:textColor="#38BDF8"
+                android:textSize="10sp"
+                android:ellipsize="middle"
+                android:singleLine="true" />
+
+            <TextView
                 android:id="@+id/hud_stream_url"
                 android:layout_width="260dp"
                 android:layout_height="wrap_content"
-                android:text="URL: https://..."
+                android:text="PLAYING: https://..."
                 android:textColor="#34D399"
                 android:textSize="10sp"
                 android:ellipsize="middle"
