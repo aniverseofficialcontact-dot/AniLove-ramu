@@ -109,9 +109,13 @@ public class VideoSniffer {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (request != null && request.getUrl() != null) {
                     String u = request.getUrl().toString().toLowerCase();
-                    if (u.equals("https://abyss.to") || u.equals("https://abyss.to/")) {
-                        Log.i(TAG, "Prevented anti-frame redirect to abyss.to homepage!");
-                        return true; // Abort homepage redirect
+                    String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
+                    if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
+                        u.startsWith("intent://") || u.startsWith("market://") || u.startsWith("itmss://") ||
+                        u.startsWith("whatsapp://") || u.startsWith("tg://") ||
+                        u.equals("https://abyss.to") || u.equals("https://abyss.to/")) {
+                        Log.i(TAG, "Prevented redirect in VideoSniffer: " + u);
+                        return true; // Abort YouTube / App / Frame redirect
                     }
                 }
                 return super.shouldOverrideUrlLoading(view, request);

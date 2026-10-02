@@ -961,20 +961,30 @@ public class NativePlayerActivity extends AppCompatActivity {
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request != null && request.getUrl() != null) {
                         String url = request.getUrl().toString().toLowerCase();
-                        boolean isMainFrame = request.isForMainFrame();
+                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
 
-                        if (!isMainFrame) {
-                            if (isAdUrl(url) || url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
-                                Log.i("AniLove_AdBlock", "Blocked popup / ad navigation in WebView Player: " + url);
-                                return true; // Cancel popup / ad navigation
-                            }
-                        } else {
-                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://")) {
-                                return true;
+                        // 1. ALWAYS block YouTube, external app links, and ad domains across all frame levels
+                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
+                            url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://") ||
+                            url.startsWith("whatsapp://") || url.startsWith("tg://") || isAdUrl(url)) {
+                            Log.i("AniLove_AdBlock", "Blocked YouTube / App / Ad redirect in WebView Player: " + url);
+                            return true; // Cancel navigation completely
+                        }
+
+                        // 2. Block main frame redirects away from the original embed server
+                        if (request.isForMainFrame()) {
+                            if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                                try {
+                                    String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
+                                    if (!host.isEmpty() && !host.equals(originalHost) && !host.contains(originalHost) && !originalHost.contains(host) && !host.contains("about:blank")) {
+                                        Log.i("AniLove_AdBlock", "Blocked top-level domain redirect from " + originalHost + " to " + host);
+                                        return true; // Cancel top-level domain redirect
+                                    }
+                                } catch (Exception ignored) {}
                             }
                         }
                     }
-                    return false;
+                    return false; // Allow internal stream / embed sub-resources
                 }
 
                 @Override

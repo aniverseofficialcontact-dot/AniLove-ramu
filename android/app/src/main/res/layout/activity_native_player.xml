@@ -596,7 +596,7 @@
 
     </FrameLayout>
 
-    <!-- 2. Half-screen Bottom Area in Portrait (Dark background) -->
+    <!-- 2. Half-screen Bottom Area in Portrait (Dark background - used only in offline playback) -->
     <LinearLayout
         android:id="@+id/portrait_bottom_container"
         android:layout_width="match_parent"
@@ -605,7 +605,7 @@
         android:orientation="vertical"
         android:background="#0B0B0E"
         android:padding="20dp"
-        android:visibility="visible">
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/portrait_anime_title"
@@ -673,51 +673,5 @@
             android:textSize="13sp" />
 
     </LinearLayout>
-
-    <TabHost
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
-
-            <TabWidget
-                android:id="@android:id/tabs"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <FrameLayout
-                android:id="@android:id/tabcontent"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <LinearLayout
-                    android:id="@+id/tab1"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical">
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/tab2"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical">
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/tab3"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical">
-
-                </LinearLayout>
-            </FrameLayout>
-        </LinearLayout>
-    </TabHost>
 
 </LinearLayout>

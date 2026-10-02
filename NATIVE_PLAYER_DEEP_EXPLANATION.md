@@ -158,8 +158,12 @@ To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS
 3. **Smart Stream Path Exemption (`VideoSniffer.java`)**:
    - Prioritizes direct media URLs (`.m3u8`, `.mp4`, `.mpd`, `manifest.m3u8`, `master.m3u8`) over generic resource rules.
    - Removed false-positive blacklists (`/track`, `/events`, `/log`, `/stats`, `.php`, `.json`) that previously caused VideoSniffer to ignore valid HLS playlist URLs containing track identifiers or dynamic PHP/JSON endpoints.
-4. **Safe Frame Anti-Redirect**:
-   - Disables `window.open` popups and navigation unload prompts in `injectAntiRedirectScript()` without replacing `window.top` with a broken object, preventing `TypeError` when player scripts access `window.top.document`.
+4. **Strict YouTube & Top-Level Redirect Cancellation**:
+   - `shouldOverrideUrlLoading()` strictly intercepts and cancels (`return true`) any navigation attempt to YouTube (`youtube.com`, `youtu.be`, `ytimg.com`), external app schemes (`intent://`, `market://`, `itmss://`, `whatsapp://`, `tg://`), or top-level domain redirects away from the original embed server host (`originalHost`).
+   - Prevents embed players from navigating `playerWebView` away to YouTube or ad pages during playback.
+5. **Touch Interception & App Freezing Fix (`activity_native_player.xml`)**:
+   - Removed an obsolete `<TabHost>` element that spanned `match_parent` height across the screen.
+   - Set `portrait_bottom_container` to `android:visibility="gone"` during portrait streaming mode so `NativePlayerActivity` bounds strictly fit the top video frame and do NOT block touch events on the React UI underneath.
 
 ---
 
