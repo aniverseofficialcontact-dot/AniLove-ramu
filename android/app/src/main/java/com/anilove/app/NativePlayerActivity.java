@@ -516,9 +516,52 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isFullscreenMode = false;
     @SuppressWarnings("StaticFieldLeak")
     public static NativePlayerActivity currentInstance;
+
+    private boolean isFullscreenMode = false;
+    private void cleanupPlaybackEngines() {
+        // 1. Immediately cancel all active background Sniffers
+        VideoSniffer.cancelActiveSniffers();
+
+        // 2. Mute, pause and clear playerWebView (Embedded Web Player Mode)
+        if (playerWebView != null) {
+            try {
+                playerWebView.evaluateJavascript(
+                    "(function(){" +
+                    "  try {" +
+                    "    var m = document.querySelectorAll('video, audio');" +
+                    "    for (var i = 0; i < m.length; i++) { m[i].pause(); m[i].muted = true; m[i].src = ''; }" +
+                    "  } catch(e) {}" +
+                    "})();", null
+                );
+                playerWebView.onPause();
+                playerWebView.pauseTimers();
+                playerWebView.stopLoading();
+                playerWebView.loadUrl("about:blank");
+                playerWebView.setVisibility(View.GONE);
+            } catch (Exception ignored) {}
+        }
+        isWebViewPlayerMode = false;
+        if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
+
+        // 3. Immediately mute & stop ExoPlayer on UI Thread (0ms audio leak) & release in background thread
+        if (exoPlayer != null) {
+            final Player oldPlayer = exoPlayer;
+            exoPlayer = null;
+            try {
+                oldPlayer.setVolume(0f);
+                oldPlayer.setPlayWhenReady(false);
+                oldPlayer.stop();
+                oldPlayer.clearMediaItems();
+                Executors.newSingleThreadExecutor().execute(() -> {
+                    try {
+                        oldPlayer.release();
+                    } catch (Exception ignored) {}
+                });
+            } catch (Exception ignored) {}
+        }
+    }
 
     @UnstableApi
     @Override
@@ -527,32 +570,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
         setIntent(intent);
 
-        // 1. Immediately kill any active background sniffing WebViews
-        VideoSniffer.cancelActiveSniffers();
+        cleanupPlaybackEngines();
 
-        // 2. Immediately stop & clear Embedded Web View player if active
-        if (playerWebView != null) {
-            try {
-                playerWebView.stopLoading();
-                playerWebView.loadUrl("about:blank");
-                playerWebView.setVisibility(View.GONE);
-            } catch (Exception ignored) {}
-        }
-        isWebViewPlayerMode = false;
-        if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
         View touchWall = findViewById(R.id.touch_wall);
         if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
-
-        // 3. Immediately stop & release previous ExoPlayer instance to prevent dual audio
-        if (exoPlayer != null) {
-            try {
-                exoPlayer.setPlayWhenReady(false);
-                exoPlayer.stop();
-                exoPlayer.clearMediaItems();
-                exoPlayer.release();
-            } catch (Exception ignored) {}
-            exoPlayer = null;
-        }
 
         updateMetadataFromIntent(intent);
         applyWindowSettings(intent);
@@ -1741,16 +1762,10 @@ public class NativePlayerActivity extends AppCompatActivity {
     @UnstableApi
     private void setupExoPlayerOnlineDirect(String hlsUrlInput, String referer, Map<String, String> headers) {
         if (hlsUrlInput == null || hlsUrlInput.isEmpty()) return;
-        VideoSniffer.cancelActiveSniffers();
+        cleanupPlaybackEngines();
         final String hlsUrl = sanitizeStreamUrl(hlsUrlInput);
         currentLoadedStreamUrl = hlsUrl;
         try {
-            if (exoPlayer != null) {
-                exoPlayer.stop();
-                exoPlayer.release();
-                exoPlayer = null;
-            }
-
             String effectiveReferer = getBestRefererForUrl(hlsUrl, referer);
 
             // Set desktop User-Agent to match VideoSniffer so proxy signature (sig) validation passes
@@ -3876,7 +3891,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (currentInstance == this) currentInstance = null;
         navigationListener = null;
         
-        VideoSniffer.cancelActiveSniffers();
+        cleanupPlaybackEngines();
         NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         updateHandler.removeCallbacksAndMessages(null); 
         hideHandler.removeCallbacksAndMessages(null); 
@@ -3885,15 +3900,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             unregisterReceiver(pipReceiver);
         } catch (Exception ignored) {}
 
-        if (exoPlayer != null) {
-            try {
-                exoPlayer.setPlayWhenReady(false);
-                exoPlayer.stop();
-                exoPlayer.clearMediaItems();
-                exoPlayer.release();
-            } catch (Exception ignored) {}
-            exoPlayer = null;
-        }
         super.onDestroy(); 
         overridePendingTransition(0, 0);
     }

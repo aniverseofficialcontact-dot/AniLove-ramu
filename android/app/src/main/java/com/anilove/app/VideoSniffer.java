@@ -418,6 +418,7 @@ public class VideoSniffer {
                     webView.stopLoading();
                     webView.loadUrl("about:blank");
                     webView.onPause();
+                    webView.pauseTimers();
                     webView.destroy();
                 } catch (Exception ignored) {}
                 webView = null;
