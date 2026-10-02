@@ -150,7 +150,9 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
    - When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
    - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
    - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
-3. **MovieBox Multi-Quality Stream & Subtitle Integration**: Queries `/api/stream-by-name?title={title}&se={season}&ep={episode}`, returns multiple MP4 quality variants (`1080p`, `720p`, `480p`, `360p`) and `.srt` / `.vtt` captions, authorizing ExoPlayer requests with `Referer: https://netfilm.world/`.
+3. **MovieBox Direct MP4 & ExoPlayer / Web View Stabilization**:
+   - Updated `isDirectMediaStream()` in `NativePlayerActivity.java` to recognize `.mp4`, `netfilm`, and `moviebox` URLs as direct media, bypassing VideoSniffer timeouts and playing MP4 streams directly in ExoPlayer with `MimeTypes.VIDEO_MP4`.
+   - Updated `switchPlayerEngine()` so `currentEmbedUrl` is cleanly reset on every intent/server switch. When switching to Web View (`🌐 WEB`) for direct MP4 streams, it renders an HTML5 `<video src="...">` element instead of an iframe, preventing old or random AnimeDekho embed pages from displaying!
 4. **Enhanced Diagnostic HUD**: Diagnostic overlay displays **`TARGET`** (requested embed/api URL) alongside **`PLAYING`** (resolved media URL) and `REFERER` headers for full real-time stream transparency.
 4. **Native Route Extractor & Engine Toggle Unblock**:
    - Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` with regex pattern `(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)` to match both numeric IDs and alphanumeric slugs, enabling instant direct extraction for HiAnime/TryEmbed streams.

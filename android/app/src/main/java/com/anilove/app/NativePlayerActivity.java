@@ -1446,9 +1446,10 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
 
         return lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m3u") ||
-               lower.contains(".mpd") || lower.contains("/cdn/hls/") ||
-               lower.contains("/hls/") || lower.contains("manifest.m3u8") || lower.contains("master.m3u8") ||
-               lower.contains("index.m3u8") || lower.contains("googlevideo.com") || lower.contains("/proxy?");
+               lower.contains(".mpd") || lower.contains("/cdn/") || lower.contains("netfilm") ||
+               lower.contains("moviebox") || lower.contains("/hls/") || lower.contains("manifest.m3u8") ||
+               lower.contains("master.m3u8") || lower.contains("index.m3u8") || lower.contains("googlevideo.com") ||
+               lower.contains("/proxy?");
     }
 
     @UnstableApi
@@ -2539,12 +2540,23 @@ public class NativePlayerActivity extends AppCompatActivity {
                     playerWebView.setVisibility(View.VISIBLE);
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
                     if (targetUrl != null && !targetUrl.trim().isEmpty()) {
-                        String iframeHtml = "<!DOCTYPE html>" +
-                                "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
-                                "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}iframe{width:100%;height:100vh;border:none;}</style>" +
-                                "</head><body>" +
-                                "<iframe src='" + targetUrl.replace("'", "\\'") + "' style='width:100%;height:100vh;border:none;' allow='autoplay; fullscreen; encrypted-media' allowfullscreen></iframe>" +
-                                "</body></html>";
+                        String iframeHtml;
+                        boolean isDirectMp4OrMedia = isDirectMediaStream(targetUrl) || targetUrl.toLowerCase().contains(".mp4");
+                        if (isDirectMp4OrMedia) {
+                            iframeHtml = "<!DOCTYPE html>" +
+                                    "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                                    "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}video{width:100%;height:100vh;object-fit:contain;}</style>" +
+                                    "</head><body>" +
+                                    "<video src='" + targetUrl.replace("'", "\\'") + "' controls autoplay playsinline style='width:100%;height:100vh;'></video>" +
+                                    "</body></html>";
+                        } else {
+                            iframeHtml = "<!DOCTYPE html>" +
+                                    "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                                    "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}iframe{width:100%;height:100vh;border:none;}</style>" +
+                                    "</head><body>" +
+                                    "<iframe src='" + targetUrl.replace("'", "\\'") + "' style='width:100%;height:100vh;border:none;' allow='autoplay; fullscreen; encrypted-media' allowfullscreen></iframe>" +
+                                    "</body></html>";
+                        }
                         String baseUrl = getBestRefererForUrl(targetUrl, targetUrl);
                         Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
                         playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
