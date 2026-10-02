@@ -151,8 +151,10 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
    - When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
    - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
    - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
-3. **Instant Source-Based Server Routing**: `resolveEpisodeSource()` in `streamingProviders.ts` evaluates server requests directly by source prefix (`hianime`, `animesalt`, `animedekho`) before making network calls. HiAnime and AnimeSalt requests are routed instantly to their dedicated stream generators and never fall back to AnimeDekho.
-4. **Native TryEmbed Route Extractor Fix**: Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` to support `embed/anime` path routes (`Pattern.compile("(embed/anime|anime|animepahe)/(\\d+)/(\\d+)/(sub|dub)")`), enabling instant direct extraction for `tryembed.us.cc/embed/anime/...` streams.
+3. **Instant Source-Based Server Routing & Live HiAnime Resolution**: `resolveEpisodeSource()` in `streamingProviders.ts` evaluates server requests directly by source prefix (`hianime`, `animesalt`, `animedekho`) before making network calls. For HiAnime requests, it queries live HiAnime API stream endpoints (`fetchHiAnimeApiServers`) to resolve exact anime slugs and returns dedicated HiAnime stream URLs, completely isolated from AnimeDekho.
+4. **Native Route Extractor & Engine Toggle Unblock**:
+   - Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` with regex pattern `(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)` to match both numeric IDs and alphanumeric slugs, enabling instant direct extraction for HiAnime/TryEmbed streams.
+   - Repositioned `btn_engine_toggle` (`⚡ EXO` / `🌐 WEB`) in `activity_native_player.xml` to `top|center_horizontal`, completely unblocking the top-right settings gear icon (`btn_settings`).
 
 ### 🛡️ WebView Ad-Blocker & Sniffer Filter Optimization Engine
 To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS exceptions while keeping ads, popups, and fullscreens hidden:

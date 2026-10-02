@@ -214,17 +214,16 @@
                 android:textSize="10sp" />
         </LinearLayout>
 
-        <!-- Independent Floating Engine Toggle Button (Always visible in both ExoPlayer & Web View modes) -->
+        <!-- Independent Floating Engine Toggle Button (Positioned top-center to unblock settings gear icon) -->
         <TextView
             android:id="@+id/btn_engine_toggle"
             android:layout_width="wrap_content"
             android:layout_height="32dp"
-            android:layout_gravity="top|end"
-            android:layout_marginTop="12dp"
-            android:layout_marginEnd="12dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="10dp"
             android:background="@drawable/speed_btn_bg"
             android:gravity="center"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="14dp"
             android:text="⚡ EXO"
             android:textColor="#FFD700"
             android:textSize="12sp"

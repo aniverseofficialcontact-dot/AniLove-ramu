@@ -507,13 +507,28 @@ export async function resolveEpisodeSource({
   // ROUTE 1: HiAnime Source
   // ==========================================
   if (requestedServer.startsWith('hianime') || requestedServer.includes('server2')) {
-    const hiAnimeServers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
+    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    let fetchedServers = await fetchHiAnimeApiServers(
+      anilistId,
+      englishTitle,
+      episodeNumber,
+      isOngoing,
+      refresh
+    );
 
-    let selectedItem = hiAnimeServers[0];
+    let activePool = fetchedServers && fetchedServers.length > 0
+      ? fetchedServers.filter(s => s.type === (isDub ? 'DUB' : 'SUB'))
+      : [];
+
+    if (activePool.length === 0) {
+      activePool = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
+    }
+
+    let selectedItem = activePool[0];
     if (requestedServer.includes('2') || requestedServer.includes('server-2')) {
-      selectedItem = hiAnimeServers[1] || hiAnimeServers[0];
+      selectedItem = activePool[1] || activePool[0];
     } else if (requestedServer.includes('3') || requestedServer.includes('server-3')) {
-      selectedItem = hiAnimeServers[2] || hiAnimeServers[0];
+      selectedItem = activePool[2] || activePool[0];
     }
 
     return {
@@ -528,7 +543,7 @@ export async function resolveEpisodeSource({
         isEmbeddable: true,
         external: false,
         skipData: { intro: [0, 0], outro: [0, 0] },
-        availableServers: hiAnimeServers,
+        availableServers: activePool,
         availableLanguages: ['SUB', 'DUB'],
         availableResolutions: ['1080p', '720p', '480p'],
         selectedServerName: selectedItem.name,
