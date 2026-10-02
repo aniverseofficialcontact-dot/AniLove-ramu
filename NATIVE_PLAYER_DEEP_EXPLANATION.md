@@ -117,13 +117,39 @@ Abyss Player (`abyssplayer.com` / `short.icu`) enforces a strict iframe frame-bu
    - Injects JavaScript ad eraser (`window.open = function() { return null; }`) in `onPageStarted()` and `onPageFinished()` to remove pop-up triggers and overlay ad banners.
 9. **Auto-Fallback**: If ExoPlayer encounters an unrecoverable source / CORS error, `NativePlayerActivity` automatically falls back to Embedded Web Player Mode so the video plays without interruption.
 
-### 🚀 Direct Server Switch Bridge (`WatchView.tsx`)
-- When any server option is selected in the UI dropdown (`Server 1-C`, `Server 1-P`, `Server 1-Q`, `Server 1-R`, `Server 2-A/B/C`, `Server 3-A (AnimeSalt)`), `handleServerSwitchDirect` is invoked **instantly**, delegating to `launchNativePlayer` and switching the active video stream in Java immediately!
+### 🌐 Dual Side-by-Side SOURCES & SERVERS Dropdowns (`WatchView.tsx`)
+In `WatchView.tsx`, the player UI features a side-by-side **SOURCES** selector placed directly beside the **SERVERS** selector:
+
+```
+┌───────────────────────────┐    ┌───────────────────────────┐
+│ SOURCES  [AnimeDekho  ▼]  │    │ SERVERS  [Server 1    ▼]  │
+└───────────────────────────┘    └───────────────────────────┘
+```
+
+#### 📺 1. Sources Available:
+1. **`AnimeDekho`**: Uses the custom AnimeWorld India v1 PHP Stream API (`/api/anime-world-india/v1/stream.php`).
+2. **`HiAnime`**: Uses HiAnime streaming API & Tier 1 client generator.
+3. **`AnimeSalt`**: Uses the AnimeSalt Vercel API (`/api/stream?id=...`).
+
+#### 🏷️ 2. Filtered Server Naming & Mapping:
+When a Source is chosen, the **SERVERS** dropdown displays **only** the servers available for that Source, simplified into clean, user-friendly labels (**`Server 1`**, **`Server 2`**, **`Server 3`**, **`Server 4`**...):
+
+| Active Source | Display Name in SERVERS Dropdown | Internal Server Code | Description / Backend Endpoint |
+| :--- | :--- | :--- | :--- |
+| **`AnimeDekho`** | **`Server 1`** | `Server 1-C` | Multi-audio proxy (`piratexplay.cc`) providing Hindi, Tamil, Telugu, English & Japanese audio links unpacked into `abyssplayer.com`. |
+| **`AnimeDekho`** | **`Server 2`** | `Server 1-P` | Direct API embed stream server (`blakiteapi.xyz`). |
+| **`AnimeDekho`** | **`Server 3`** | `Server 1-Q` | High-performance Abyss Player server (`abyssplayer.com`). |
+| **`AnimeDekho`** | **`Server 4`** | `Server 1-R` | Ultra-reliable HLS video stream server (`vidmoly.biz`). |
+| **`HiAnime`** | **`Server 1`** | `Server 2-A-DUB` / `SUB` | HiAnime Server 2-A direct stream (`vidnest.fun`). |
+| **`HiAnime`** | **`Server 2`** | `Server 2-B-DUB` / `SUB` | HiAnime Server 2-B direct stream (`tryembed.us.cc`). |
+| **`HiAnime`** | **`Server 3`** | `Server 2-C-DUB` / `SUB` | HiAnime Server 2-C credit stream (`vidnest.fun/animepahe`). |
+| **`AnimeSalt`** | **`Server 1`** | `Server 3-A` | AnimeSalt API stream (`animesalt-api-omega.vercel.app`). |
 
 ### 🛡️ WebView Ad-Blocker & Sniffer Filter Optimization Engine
 To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS exceptions while keeping ads, popups, and fullscreens hidden:
 1. **Non-Destructive CSS Ad Eraser (`NativePlayerActivity.java`)**:
    - Replaced destructive JavaScript DOM node removal (`el.remove()`) with pure CSS rules (`display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;`) injected into `<style id="anilove_style">`.
+   - **Unblocked 10sec +/- Seek Buttons**: Removed all CSS rules targeting +/-10s rewind and forward skip buttons (`.jw-icon-rewind`, `.art-control-jump`, `[class*="-10"]`, etc.) so internal player 10sec seek controls remain functional, while maintaining 100% ad, popup, and redirect blocking (`.ad-container`, `.popunder`, `win.open = null`).
    - **Why**: Removing DOM nodes destroyed internal state objects in web player frameworks (JWPlayer, ArtPlayer, Video.js), throwing unhandled JS `TypeError`s that caused infinite buffering or player crashes. CSS hiding keeps nodes intact so player scripts run smoothly while remaining completely hidden and non-interactive.
    - **Interval Optimization**: Optimized the injection loop from 250ms to 1000ms, drastically reducing CPU thrashing in WebView.
 2. **Cloudflare Turnstile & Challenge Protection Exemption**:

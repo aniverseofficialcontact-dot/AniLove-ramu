@@ -174,10 +174,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             "                 '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, .plyr__controls__item[data-plyr=\"settings\"], ' +" +
             "                 'button[data-plyr=\"settings\"], .vjs-setting-menu-button, .vjs-quality-selector, button[title*=\"Setting\" i], button[title*=\"Quality\" i], ' +" +
             "                 'button[aria-label*=\"Setting\" i], button[aria-label*=\"Quality\" i], [data-tooltip*=\"Setting\" i], [data-tooltip*=\"Quality\" i], ' +" +
-            "                 '.jw-icon-rewind, .jw-icon-forward, .jw-btn-rewind, .jw-btn-forward, .art-icon-rewind, .art-icon-forward, .art-control-jump, .art-control-rewind, .art-control-forward, .art-icon-jump, button[data-plyr=\"rewind\"], ' +" +
-            "                 'button[data-plyr=\"fast-forward\"], .vjs-seek-button, .vjs-skip-backward-10, .vjs-skip-forward-10, button[title*=\"10\" i], ' +" +
-            "                 'button[title*=\"Rewind\" i], button[title*=\"Forward\" i], button[title*=\"Jump\" i], button[title*=\"Skip\" i], button[aria-label*=\"10\" i], button[aria-label*=\"Rewind\" i], ' +" +
-            "                 'button[aria-label*=\"Forward\" i], button[aria-label*=\"Jump\" i], button[aria-label*=\"Skip\" i], [data-tooltip*=\"10\" i], [data-tooltip*=\"Rewind\" i], [data-tooltip*=\"Forward\" i], [data-tooltip*=\"Jump\" i], [data-tooltip*=\"Skip\" i], .blakite-skip, .blakite-rewind, ' +" +
             "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], .btn-download, ' +" +
             "                 '.jw-icon-hd, .jw-settings-content, .v-quality, ' +" +
             "                 '.jw-icon-cc, .art-icon-subtitle, .v-cc, ' +" +

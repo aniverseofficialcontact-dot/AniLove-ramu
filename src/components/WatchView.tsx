@@ -22,6 +22,7 @@ import {
   Layers,
   Download,
   Server,
+  Globe,
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
@@ -116,17 +117,49 @@ export const WatchView: React.FC<WatchViewProps> = ({
     };
   }, [anime?.id, anime?.idMal, episodeNumber, selectedEpisodeRange]);
 
-  // Derive initial server preference (Priority 1)
+  // Dual Dropdown Sources & Servers Configuration
+  const SOURCE_CONFIG = useMemo(() => ({
+    AnimeDekho: {
+      label: 'AnimeDekho',
+      servers: [
+        { displayName: 'Server 1', internalCode: 'Server 1-C' },
+        { displayName: 'Server 2', internalCode: 'Server 1-P' },
+        { displayName: 'Server 3', internalCode: 'Server 1-Q' },
+        { displayName: 'Server 4', internalCode: 'Server 1-R' },
+      ],
+    },
+    HiAnime: {
+      label: 'HiAnime',
+      servers: [
+        { displayName: 'Server 1', internalCode: 'Server 2-A-DUB' },
+        { displayName: 'Server 2', internalCode: 'Server 2-B-DUB' },
+        { displayName: 'Server 3', internalCode: 'Server 2-C-DUB' },
+      ],
+    },
+    AnimeSalt: {
+      label: 'AnimeSalt',
+      servers: [
+        { displayName: 'Server 1', internalCode: 'Server 3-A' },
+      ],
+    },
+  }), []);
+
+  type StreamSourceId = 'AnimeDekho' | 'HiAnime' | 'AnimeSalt';
+
+  const [selectedSource, setSelectedSource] = useState<StreamSourceId>('AnimeDekho');
+  const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
+  const [isSourceMenuOpen, setIsSourceMenuOpen] = useState<boolean>(false);
+  const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);
+
   const initialServer = settings?.preferredServers?.[0] || DEFAULT_STREAM_PROVIDER_ID;
   const [selectedServer, setSelectedServer] = useState<StreamServerId>(initialServer);
   const [selectedSubServer, setSelectedSubServer] = useState<string>('Server 1');
-  const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);
 
   const handleServerSwitchDirect = async (srvName: string) => {
     if (!Capacitor.isNativePlatform()) return;
 
     const ep = episodeNumber || 1;
-    const isDub = srvName.toLowerCase().includes('dub');
+    const isDub = srvName.toLowerCase().includes('dub') || selectedAudio === 'DUB';
 
     console.log(`[WatchView] Direct Native Server Switch -> ${srvName}`);
 
@@ -134,13 +167,31 @@ export const WatchView: React.FC<WatchViewProps> = ({
       await launchNativePlayer({
         anime,
         episodeNumber: ep,
-        audio: isDub ? 'DUB' : selectedLanguage || 'SUB',
+        audio: isDub ? 'DUB' : selectedAudio || 'SUB',
         serverName: srvName,
-        totalEpisodes: episodesList.length,
+        totalEpisodes: episodeList.length,
       });
     } catch (e) {
       console.warn('Direct server switch error:', e);
     }
+  };
+
+  const handleSourceChange = (newSource: StreamSourceId) => {
+    setSelectedSource(newSource);
+    setIsSourceMenuOpen(false);
+    const firstServer = SOURCE_CONFIG[newSource]?.servers[0];
+    if (firstServer) {
+      setSelectedServerDisplay(firstServer.displayName);
+      setSelectedSubServer(firstServer.displayName);
+      handleServerSwitchDirect(firstServer.internalCode);
+    }
+  };
+
+  const handleServerDisplayChange = (serverItem: { displayName: string; internalCode: string }) => {
+    setSelectedServerDisplay(serverItem.displayName);
+    setSelectedSubServer(serverItem.displayName);
+    setIsServerMenuOpen(false);
+    handleServerSwitchDirect(serverItem.internalCode);
   };
 
   // Derive initial audio preference (English DUB or Japanese SUB by default)
@@ -442,56 +493,87 @@ export const WatchView: React.FC<WatchViewProps> = ({
           />
         </div>
 
-        {/* Compact Right-Aligned Expandable Server Selector Dropdown */}
-        <div className="flex justify-end px-3 sm:px-0 mt-5 mb-2">
+        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: SOURCES & SERVERS */}
+        <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
+          {/* SOURCES Dropdown */}
+          <div className="relative flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+              SOURCES
+            </span>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setIsSourceMenuOpen(!isSourceMenuOpen);
+                  setIsServerMenuOpen(false);
+                }}
+                className="bg-neutral-900/90 border border-neutral-800 hover:border-neutral-600 text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
+              >
+                <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{selectedSource}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isSourceMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSourceMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
+                  {(['AnimeDekho', 'HiAnime', 'AnimeSalt'] as StreamSourceId[]).map((src) => {
+                    const isSelected = selectedSource === src;
+                    return (
+                      <button
+                        key={src}
+                        onClick={() => handleSourceChange(src)}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600/20 text-emerald-300 font-bold'
+                            : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <span>{src}</span>
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SERVERS Dropdown */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
               SERVERS
             </span>
             <div className="relative">
               <button
-                onClick={() => setIsServerMenuOpen(!isServerMenuOpen)}
+                onClick={() => {
+                  setIsServerMenuOpen(!isServerMenuOpen);
+                  setIsSourceMenuOpen(false);
+                }}
                 className="bg-neutral-900/90 border border-neutral-800 hover:border-neutral-600 text-white rounded-xl px-3.5 py-1.5 text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
               >
                 <Server className="w-3.5 h-3.5 text-indigo-400" />
-                <span>{selectedSubServer || 'Server 1'}</span>
+                <span>{selectedServerDisplay}</span>
                 <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isServerMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isServerMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-48 max-h-64 overflow-y-auto rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
-                  {(() => {
-                    const cachedServers: any[] = (window as any).__lastAvailableServers || [];
-                    let serverList = cachedServers.map(s => s.name);
-                    if (!serverList || serverList.length === 0) {
-                      serverList = [
-                        'Server 1-A', 'Server 1-B', 'Server 1-C', 'Server 1-D', 'Server 1-E', 'Server 1-F',
-                        'Server 2-A-SUB', 'Server 2-B-SUB', 'Server 2-C-SUB',
-                        'Server 2-A-DUB', 'Server 2-B-DUB', 'Server 2-C-DUB'
-                      ];
-                    }
-                    return serverList.map((srvName) => {
-                      const isSelected = (selectedSubServer || 'Server 1-A').toLowerCase().trim() === srvName.toLowerCase().trim();
-                      return (
-                        <button
-                          key={srvName}
-                          onClick={() => {
-                            setSelectedSubServer(srvName);
-                            setIsServerMenuOpen(false);
-                            handleServerSwitchDirect(srvName);
-                          }}
-                          className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'bg-indigo-600/20 text-indigo-300 font-bold'
-                              : 'text-neutral-300 hover:bg-white/5 hover:text-white'
-                          }`}
-                        >
-                          <span>{srvName}</span>
-                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
-                        </button>
-                      );
-                    });
-                  })()}
+                <div className="absolute right-0 top-full mt-1.5 w-44 max-h-64 overflow-y-auto rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
+                  {SOURCE_CONFIG[selectedSource]?.servers.map((srvItem) => {
+                    const isSelected = selectedServerDisplay === srvItem.displayName;
+                    return (
+                      <button
+                        key={srvItem.displayName}
+                        onClick={() => handleServerDisplayChange(srvItem)}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-600/20 text-indigo-300 font-bold'
+                            : 'text-neutral-300 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <span>{srvItem.displayName}</span>
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
