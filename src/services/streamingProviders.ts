@@ -482,7 +482,7 @@ export async function resolveEpisodeSource({
   // ==========================================
   // ROUTE 3: AnimeDekho Source (AnimeWorld India v1 API)
   // ==========================================
-  const cacheKey = `${anilistId || anime.title}_ep${episodeNumber}_${language}`;
+  const cacheKey = `AnimeDekho_${requestedServer}_${anilistId || anime.title}_ep${episodeNumber}_${language}`;
   let data: any = null;
 
   if (!refresh && EPISODE_STREAM_CACHE.has(cacheKey)) {

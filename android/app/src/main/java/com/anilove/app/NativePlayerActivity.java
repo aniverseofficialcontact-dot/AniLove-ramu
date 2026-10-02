@@ -3066,7 +3066,13 @@ public class NativePlayerActivity extends AppCompatActivity {
         String serverName = getIntent().getStringExtra("serverName");
         if (serverName == null || serverName.isEmpty()) serverName = currentActiveServerName;
 
-        hudServer.setText("SERVER: " + serverName);
+        String sourcePrefix = "AnimeDekho";
+        String sLower = serverName.toLowerCase();
+        if (sLower.contains("hianime")) sourcePrefix = "HiAnime";
+        else if (sLower.contains("animesalt")) sourcePrefix = "AnimeSalt";
+        else if (sLower.contains("moviebox")) sourcePrefix = "MovieBox";
+
+        hudServer.setText("SRC: " + sourcePrefix + " | SRV: " + serverName);
 
         if (hudTarget != null) {
             String rawTarget = getIntent().getStringExtra("url");

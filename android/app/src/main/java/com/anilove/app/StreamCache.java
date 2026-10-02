@@ -12,7 +12,7 @@ public class StreamCache {
 
     private static String makeKey(int anilistId, int episodeNumber, String audio, String serverName) {
         String aud = (audio != null && !audio.isEmpty()) ? audio.trim().toUpperCase() : "DUB";
-        String srv = (serverName != null && !serverName.isEmpty()) ? serverName.trim().toLowerCase().replaceAll("[^a-z0-9]", "") : "default";
+        String srv = (serverName != null && !serverName.isEmpty()) ? serverName.trim().toLowerCase().replaceAll("[^a-z0-9]", "") : "none";
         return anilistId + "_ep" + episodeNumber + "_" + aud + "_" + srv;
     }
 
@@ -50,30 +50,33 @@ public class StreamCache {
     }
 
     public static String get(int anilistId, int episodeNumber, String audio, String serverName) {
+        if (serverName == null || serverName.trim().isEmpty()) return null;
         String key = makeKey(anilistId, episodeNumber, audio, serverName);
         return videoCache.get(key);
     }
 
     public static String get(int anilistId, int episodeNumber, String audio) {
-        return get(anilistId, episodeNumber, audio, null);
+        return null; // Require explicit serverName to prevent cross-server cache collision
     }
 
     public static String getSubtitle(int anilistId, int episodeNumber, String audio, String serverName) {
+        if (serverName == null || serverName.trim().isEmpty()) return null;
         String key = makeKey(anilistId, episodeNumber, audio, serverName);
         return subCache.get(key);
     }
 
     public static String getSubtitle(int anilistId, int episodeNumber, String audio) {
-        return getSubtitle(anilistId, episodeNumber, audio, null);
+        return null; // Require explicit serverName to prevent cross-server cache collision
     }
 
     public static boolean has(int anilistId, int episodeNumber, String audio, String serverName) {
+        if (serverName == null || serverName.trim().isEmpty()) return false;
         String key = makeKey(anilistId, episodeNumber, audio, serverName);
         return videoCache.containsKey(key);
     }
 
     public static boolean has(int anilistId, int episodeNumber, String audio) {
-        return has(anilistId, episodeNumber, audio, null);
+        return false;
     }
 
     public static void clear() {
