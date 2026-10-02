@@ -190,7 +190,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
     if (firstServer) {
       setSelectedServerDisplay(firstServer.displayName);
       setSelectedSubServer(firstServer.displayName);
-      handleServerSwitchDirect(firstServer.internalCode);
     }
   };
 
@@ -198,7 +197,6 @@ export const WatchView: React.FC<WatchViewProps> = ({
     setSelectedServerDisplay(serverItem.displayName);
     setSelectedSubServer(serverItem.displayName);
     setIsServerMenuOpen(false);
-    handleServerSwitchDirect(serverItem.internalCode);
   };
 
   // Derive initial audio preference (English DUB or Japanese SUB by default)

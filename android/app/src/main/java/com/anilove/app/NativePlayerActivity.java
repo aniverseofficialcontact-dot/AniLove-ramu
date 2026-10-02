@@ -580,6 +580,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (intent == null) return;
         String rawUrl = intent.getStringExtra("url");
         if (rawUrl != null && !rawUrl.trim().isEmpty()) {
+            if (rawUrl.contains("short.icu/")) {
+                rawUrl = rawUrl.replace("short.icu/", "abyssplayer.com/");
+            }
             currentEmbedUrl = rawUrl;
         }
         String animeTitle = intent.getStringExtra("animeTitle");
@@ -2091,19 +2094,23 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateAudioBadge(audioLang);
         
         // HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
-        if (currentEmbedUrl != null && (currentEmbedUrl.contains("vidnest.fun") || currentEmbedUrl.contains("tryembed.us.cc") || currentEmbedUrl.toLowerCase().contains("hianime"))) {
+        String checkUrl = (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) ? currentEmbedUrl : (currentLoadedStreamUrl != null ? currentLoadedStreamUrl : "");
+        String curSrv = getIntent().getStringExtra("serverName");
+        if (curSrv == null) curSrv = "";
+
+        if (checkUrl.contains("vidnest.fun") || checkUrl.contains("tryembed.us.cc") || curSrv.toLowerCase().contains("hianime")) {
             String lower = audioLang.toLowerCase();
             boolean wantsSub = lower.contains("jap") || lower.contains("sub") || lower.contains("japanese");
             boolean wantsDub = lower.contains("eng") || lower.contains("dub") || lower.contains("english");
             
-            String newEmbedUrl = currentEmbedUrl;
-            if (wantsSub && currentEmbedUrl.endsWith("/dub")) {
-                newEmbedUrl = currentEmbedUrl.substring(0, currentEmbedUrl.length() - 4) + "/sub";
-            } else if (wantsDub && currentEmbedUrl.endsWith("/sub")) {
-                newEmbedUrl = currentEmbedUrl.substring(0, currentEmbedUrl.length() - 4) + "/dub";
+            String newEmbedUrl = checkUrl;
+            if (wantsSub && newEmbedUrl.contains("/dub")) {
+                newEmbedUrl = newEmbedUrl.replace("/dub", "/sub");
+            } else if (wantsDub && newEmbedUrl.contains("/sub")) {
+                newEmbedUrl = newEmbedUrl.replace("/sub", "/dub");
             }
             
-            if (!newEmbedUrl.equals(currentEmbedUrl)) {
+            if (!newEmbedUrl.equals(checkUrl)) {
                 currentEmbedUrl = newEmbedUrl;
                 Toast.makeText(this, "Switching audio stream...", Toast.LENGTH_SHORT).show();
                 setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
@@ -2385,23 +2392,42 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         String curSrv = getIntent().getStringExtra("serverName");
         if (curSrv == null) curSrv = "";
-        boolean isServer2 = curSrv.toLowerCase().contains("server 2");
+        String srvLower = curSrv.toLowerCase();
+        String currentUrl = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : (currentEmbedUrl != null ? currentEmbedUrl : "");
+        String urlLower = currentUrl.toLowerCase();
+
+        boolean isHiAnime = srvLower.contains("hianime") || urlLower.contains("vidnest.fun") || urlLower.contains("tryembed.us.cc");
+        boolean isAnimeSalt = srvLower.contains("animesalt") || urlLower.contains("animesalt");
+        boolean isMovieBox = srvLower.contains("moviebox") || urlLower.contains("hakunaymatata") || urlLower.contains("netfilm");
 
         // 1. Dynamic Video Quality Buttons
         LinearLayout qualityContainer = view.findViewById(R.id.quality_container);
         if (qualityContainer != null) {
             qualityContainer.removeAllViews();
-            List<String> qList = new ArrayList<>(detectedQualities);
-            if (isServer2) {
-                qList.clear();
+            List<String> qList = new ArrayList<>();
+            if (isHiAnime || isAnimeSalt) {
                 qList.add("1080p");
-            } else if (qList.isEmpty()) {
-                qList.add("Auto");
-                qList.add("1080p");
-                qList.add("720p");
-                qList.add("480p");
-                qList.add("360p");
+            } else if (isMovieBox) {
+                if (!detectedQualities.isEmpty()) {
+                    qList.addAll(detectedQualities);
+                } else {
+                    qList.add("1080p");
+                    qList.add("720p");
+                    qList.add("480p");
+                    qList.add("360p");
+                }
+            } else {
+                if (!detectedQualities.isEmpty()) {
+                    qList.addAll(detectedQualities);
+                } else {
+                    qList.add("Auto");
+                    qList.add("1080p");
+                    qList.add("720p");
+                    qList.add("480p");
+                    qList.add("360p");
+                }
             }
+
             for (String q : qList) {
                 TextView btn = new TextView(this);
                 btn.setText(q);
@@ -2430,27 +2456,27 @@ public class NativePlayerActivity extends AppCompatActivity {
         LinearLayout audioContainer = view.findViewById(R.id.audio_container);
         if (audioContainer != null) {
             audioContainer.removeAllViews();
-            List<String> aList = new ArrayList<>(detectedAudios);
-            if (isServer2) {
-                aList.clear();
-                if (curSrv.toLowerCase().contains("sub")) {
-                    aList.add("JAP (Sub)");
-                } else if (curSrv.toLowerCase().contains("dub")) {
-                    aList.add("ENG (Dub)");
-                } else {
-                    aList.add("JAP (Sub)");
-                    aList.add("ENG (Dub)");
-                }
-            } else if (aList.isEmpty()) {
-                aList.add("Hindi");
+            List<String> aList = new ArrayList<>();
+            if (isHiAnime) {
+                aList.add("JAP (Sub)");
+                aList.add("ENG (Dub)");
+            } else if (isAnimeSalt) {
+                aList.add("JAP (Sub)");
+            } else if (isMovieBox) {
                 aList.add("ENG (Dub)");
                 aList.add("JAP (Sub)");
-                aList.add("Tamil");
-                aList.add("Telugu");
-                aList.add("Malayalam");
-                aList.add("Kannada");
-                aList.add("Bengali");
+            } else {
+                if (!detectedAudios.isEmpty()) {
+                    aList.addAll(detectedAudios);
+                } else {
+                    aList.add("ENG (Dub)");
+                    aList.add("JAP (Sub)");
+                    aList.add("Hindi");
+                    aList.add("Tamil");
+                    aList.add("Telugu");
+                }
             }
+
             for (String a : aList) {
                 TextView btn = new TextView(this);
                 btn.setText(a);
