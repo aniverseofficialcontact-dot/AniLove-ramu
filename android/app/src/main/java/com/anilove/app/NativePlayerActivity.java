@@ -177,6 +177,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     private TextView btnEngineToggle;
     private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
+    private String currentActiveEmbedUrl = null;
+    private String currentActiveServerName = "";
+    private String currentActiveSourceName = "";
 
     private void injectAdEraserScript(WebView webView) {
         if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
@@ -584,6 +587,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                 rawUrl = rawUrl.replace("short.icu/", "abyssplayer.com/");
             }
             currentEmbedUrl = rawUrl;
+            currentActiveEmbedUrl = rawUrl;
+        }
+
+        String sName = intent.getStringExtra("serverName");
+        if (sName != null && !sName.isEmpty()) {
+            currentActiveServerName = sName;
+        }
+
+        String srcName = intent.getStringExtra("sourceName");
+        if (srcName != null && !srcName.isEmpty()) {
+            currentActiveSourceName = srcName;
         }
         String animeTitle = intent.getStringExtra("animeTitle");
         String rawTitle = intent.getStringExtra("title");
@@ -2094,27 +2108,32 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateAudioBadge(audioLang);
         
         // HiAnime / TryEmbed / VidNest dynamic URL audio switching (sub vs dub)
-        String checkUrl = (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) ? currentEmbedUrl : (currentLoadedStreamUrl != null ? currentLoadedStreamUrl : "");
-        String curSrv = getIntent().getStringExtra("serverName");
-        if (curSrv == null) curSrv = "";
+        String embedUrl = (currentActiveEmbedUrl != null && !currentActiveEmbedUrl.isEmpty()) ? currentActiveEmbedUrl : (currentEmbedUrl != null ? currentEmbedUrl : "");
+        String srv = (currentActiveServerName != null ? currentActiveServerName : "") + " " + (currentActiveSourceName != null ? currentActiveSourceName : "");
+        String srvLower = srv.toLowerCase();
+        String embedLower = embedUrl.toLowerCase();
+        String combined = srvLower + " " + embedLower;
 
-        if (checkUrl.contains("vidnest.fun") || checkUrl.contains("tryembed.us.cc") || curSrv.toLowerCase().contains("hianime")) {
+        if (combined.contains("hianime") || combined.contains("vidnest") || combined.contains("tryembed")) {
             String lower = audioLang.toLowerCase();
             boolean wantsSub = lower.contains("jap") || lower.contains("sub") || lower.contains("japanese");
             boolean wantsDub = lower.contains("eng") || lower.contains("dub") || lower.contains("english");
             
-            String newEmbedUrl = checkUrl;
-            if (wantsSub && newEmbedUrl.contains("/dub")) {
-                newEmbedUrl = newEmbedUrl.replace("/dub", "/sub");
-            } else if (wantsDub && newEmbedUrl.contains("/sub")) {
-                newEmbedUrl = newEmbedUrl.replace("/sub", "/dub");
-            }
-            
-            if (!newEmbedUrl.equals(checkUrl)) {
-                currentEmbedUrl = newEmbedUrl;
-                Toast.makeText(this, "Switching audio stream...", Toast.LENGTH_SHORT).show();
-                setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
-                return;
+            if (!embedUrl.isEmpty()) {
+                String newEmbedUrl = embedUrl;
+                if (wantsSub && newEmbedUrl.contains("/dub")) {
+                    newEmbedUrl = newEmbedUrl.replace("/dub", "/sub");
+                } else if (wantsDub && newEmbedUrl.contains("/sub")) {
+                    newEmbedUrl = newEmbedUrl.replace("/sub", "/dub");
+                }
+
+                if (!newEmbedUrl.equalsIgnoreCase(embedUrl)) {
+                    currentEmbedUrl = newEmbedUrl;
+                    currentActiveEmbedUrl = newEmbedUrl;
+                    Toast.makeText(this, "Switching stream to " + (wantsSub ? "Japanese Sub" : "English Dub") + "...", Toast.LENGTH_SHORT).show();
+                    setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
+                    return;
+                }
             }
         }
 
@@ -2390,15 +2409,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         BottomSheetBehavior<?> behavior = BottomSheetBehavior.from((View) view.getParent());
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 
-        String curSrv = getIntent().getStringExtra("serverName");
-        if (curSrv == null) curSrv = "";
-        String srvLower = curSrv.toLowerCase();
-        String currentUrl = (currentLoadedStreamUrl != null && !currentLoadedStreamUrl.isEmpty()) ? currentLoadedStreamUrl : (currentEmbedUrl != null ? currentEmbedUrl : "");
-        String urlLower = currentUrl.toLowerCase();
+        String srvLower = (currentActiveServerName != null ? currentActiveServerName : "").toLowerCase();
+        String srcLower = (currentActiveSourceName != null ? currentActiveSourceName : "").toLowerCase();
+        String embedLower = (currentActiveEmbedUrl != null ? currentActiveEmbedUrl : "").toLowerCase();
+        String loadedLower = (currentLoadedStreamUrl != null ? currentLoadedStreamUrl : "").toLowerCase();
+        String combinedCheck = srcLower + " " + srvLower + " " + embedLower + " " + loadedLower;
 
-        boolean isHiAnime = srvLower.contains("hianime") || urlLower.contains("vidnest.fun") || urlLower.contains("tryembed.us.cc");
-        boolean isAnimeSalt = srvLower.contains("animesalt") || urlLower.contains("animesalt");
-        boolean isMovieBox = srvLower.contains("moviebox") || urlLower.contains("hakunaymatata") || urlLower.contains("netfilm");
+        boolean isHiAnime = combinedCheck.contains("hianime") || combinedCheck.contains("vidnest") || combinedCheck.contains("tryembed");
+        boolean isAnimeSalt = combinedCheck.contains("animesalt");
+        boolean isMovieBox = combinedCheck.contains("moviebox") || combinedCheck.contains("hakunaymatata") || combinedCheck.contains("netfilm");
 
         // 1. Dynamic Video Quality Buttons
         LinearLayout qualityContainer = view.findViewById(R.id.quality_container);
@@ -3075,8 +3094,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             } 
         }, 1000); 
     }
-
-    private String currentActiveServerName = "Server 1";
 
     private void syncPlayerState() {
         if (exoPlayer != null) {
