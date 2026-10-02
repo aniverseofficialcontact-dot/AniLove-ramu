@@ -1736,12 +1736,6 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
 
-            if (hlsUrl.contains(".m3u8") || hlsUrl.contains("hls") || hlsUrl.contains("m3u")) {
-                mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
-            } else if (hlsUrl.contains(".mp4")) {
-                mediaBuilder.setMimeType(MimeTypes.VIDEO_MP4);
-            }
-
             if (subtitleUrl != null && !subtitleUrl.isEmpty()) {
                 MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
                         .setMimeType(MimeTypes.TEXT_VTT)
@@ -1751,9 +1745,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                 mediaBuilder.setSubtitleConfigurations(Collections.singletonList(subtitle));
             }
 
-            MediaItem mediaItem = mediaBuilder.build();
-            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(httpDataSourceFactory);
-            MediaSource mediaSource = mediaSourceFactory.createMediaSource(mediaItem);
+            MediaSource mediaSource;
+            if (hlsUrl.contains(".mp4") || hlsUrl.contains("hakunaymatata.com")) {
+                mediaBuilder.setMimeType(MimeTypes.VIDEO_MP4);
+                mediaSource = new ProgressiveMediaSource.Factory(httpDataSourceFactory).createMediaSource(mediaBuilder.build());
+            } else if (hlsUrl.contains(".m3u8") || hlsUrl.contains("hls") || hlsUrl.contains("m3u")) {
+                mediaBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+                mediaSource = new HlsMediaSource.Factory(httpDataSourceFactory).createMediaSource(mediaBuilder.build());
+            } else {
+                mediaSource = new DefaultMediaSourceFactory(httpDataSourceFactory).createMediaSource(mediaBuilder.build());
+            }
 
             exoPlayer.setMediaSource(mediaSource);
             if (startTime > 0) {
