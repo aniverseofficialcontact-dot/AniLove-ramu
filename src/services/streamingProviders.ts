@@ -498,9 +498,84 @@ export async function resolveEpisodeSource({
   const provider = ANIME_WORLD_V1;
   const anilistId = anime.id;
   const isOngoing = anime.status === 'RELEASING';
+  const isDub = language === 'DUB' || language === 'ENG' || language === 'HIN';
+  const subOrDub = isDub ? 'dub' : 'sub';
 
+  const requestedServer = (serverName || '').toLowerCase().trim();
+
+  // ==========================================
+  // ROUTE 1: HiAnime Source
+  // ==========================================
+  if (requestedServer.startsWith('hianime') || requestedServer.includes('server2')) {
+    const hiAnimeServers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
+
+    let selectedItem = hiAnimeServers[0];
+    if (requestedServer.includes('2') || requestedServer.includes('server-2')) {
+      selectedItem = hiAnimeServers[1] || hiAnimeServers[0];
+    } else if (requestedServer.includes('3') || requestedServer.includes('server-3')) {
+      selectedItem = hiAnimeServers[2] || hiAnimeServers[0];
+    }
+
+    return {
+      status: 'available',
+      source: {
+        provider,
+        url: selectedItem.linkId,
+        subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
+        subtitleLang: 'Multi-Sub (TryEmbed)',
+        language,
+        resolution,
+        isEmbeddable: true,
+        external: false,
+        skipData: { intro: [0, 0], outro: [0, 0] },
+        availableServers: hiAnimeServers,
+        availableLanguages: ['SUB', 'DUB'],
+        availableResolutions: ['1080p', '720p', '480p'],
+        selectedServerName: selectedItem.name,
+        isDubAvailable: true,
+        isFallback: false,
+        requestedLanguage: language,
+        actualLanguage: language,
+      },
+    };
+  }
+
+  // ==========================================
+  // ROUTE 2: AnimeSalt Source
+  // ==========================================
+  if (requestedServer.startsWith('animesalt') || requestedServer.includes('server3')) {
+    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    const saltRaw = await fetchAnimeSaltStream(englishTitle, episodeNumber);
+    const saltUrl = saltRaw[0]?.linkId || `https://animesalt-api-omega.vercel.app/api/stream?id=${encodeURIComponent(englishTitle)}&ep=ep-${episodeNumber}`;
+
+    return {
+      status: 'available',
+      source: {
+        provider,
+        url: saltUrl,
+        subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
+        subtitleLang: 'Multi-Sub',
+        language,
+        resolution,
+        isEmbeddable: true,
+        external: false,
+        skipData: { intro: [0, 0], outro: [0, 0] },
+        availableServers: [{ name: 'AnimeSalt-Server-1', type: 'SUB', linkId: saltUrl }],
+        availableLanguages: ['SUB', 'DUB'],
+        availableResolutions: ['1080p', '720p', '480p'],
+        selectedServerName: 'AnimeSalt-Server-1',
+        isDubAvailable: true,
+        isFallback: false,
+        requestedLanguage: language,
+        actualLanguage: language,
+      },
+    };
+  }
+
+  // ==========================================
+  // ROUTE 3: AnimeDekho Source (AnimeWorld India v1 API)
+  // ==========================================
   const cacheKey = `${anilistId || anime.title}_ep${episodeNumber}_${language}`;
-
   let data: any = null;
 
   if (!refresh && EPISODE_STREAM_CACHE.has(cacheKey)) {
@@ -519,13 +594,8 @@ export async function resolveEpisodeSource({
       queryParams.set('id', `${cleanSlug}-season-1-1x${episodeNumber}`);
     }
 
-    if (isOngoing) {
-      queryParams.set('ongoing', 'true');
-    }
-
-    if (refresh) {
-      queryParams.set('refresh', 'true');
-    }
+    if (isOngoing) queryParams.set('ongoing', 'true');
+    if (refresh) queryParams.set('refresh', 'true');
 
     const BASE_API = 'https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1';
     const streamUrlReq = `${BASE_API}/stream.php?${queryParams.toString()}`;
@@ -553,9 +623,7 @@ export async function resolveEpisodeSource({
           headers: { 'Accept': 'application/json' },
           signal: controller.signal,
         });
-        if (res.ok) {
-          data = await res.json();
-        }
+        if (res.ok) data = await res.json();
       } catch {
         // Fallback
       } finally {
@@ -568,26 +636,21 @@ export async function resolveEpisodeSource({
     }
   }
 
+  const processedServers: Array<{ name: string; url: string }> = [];
+  const ALLOWED_SERVER1_CODES = new Set(['Server 1-C', 'Server 1-P', 'Server 1-Q', 'Server 1-R']);
+
   if (data && data.success && data.stream) {
-    const streamInfo = data.stream;
-    const rawServers: Array<{ name: string; url: string }> = streamInfo.servers || [];
-
-    const processedServers: Array<{ name: string; url: string }> = [];
-
-    // Map and filter raw servers from AnimeWorld API
-    // Strictly keep only the 4 verified working Server 1 options: Server 1-C, Server 1-P, Server 1-Q, Server 1-R
-    const ALLOWED_SERVER1_CODES = new Set(['Server 1-C', 'Server 1-P', 'Server 1-Q', 'Server 1-R']);
+    const rawServers: Array<{ name: string; url: string }> = data.stream.servers || [];
 
     if (rawServers && rawServers.length > 0) {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       rawServers.forEach((srv, idx) => {
         const letter = letters[idx] || `${idx + 1}`;
-        const cleanName = `Server 1-${letter}`;
+        const cleanName = `AnimeDekho-Server-${idx + 1}`;
         const rawUrlLower = (srv.url || '').toLowerCase();
 
-        // Keep strictly Server 1-C, 1-P, 1-Q, 1-R or matching domain signatures
         const isAllowed =
-          ALLOWED_SERVER1_CODES.has(cleanName) ||
+          ALLOWED_SERVER1_CODES.has(`Server 1-${letter}`) ||
           rawUrlLower.includes('multi.php') ||
           rawUrlLower.includes('blakiteapi') ||
           rawUrlLower.includes('abyssplayer') ||
@@ -603,135 +666,52 @@ export async function resolveEpisodeSource({
           }
         }
       });
-    } else if (streamInfo.streamLink || streamInfo.file) {
+    } else if (data.stream.streamLink || data.stream.file) {
       processedServers.push({
-        name: 'Server 1-C',
-        url: unpackServerUrl(streamInfo.streamLink || streamInfo.file, language),
+        name: 'AnimeDekho-Server-1',
+        url: unpackServerUrl(data.stream.streamLink || data.stream.file, language),
       });
-    }
-
-    const availableLangs = extractAvailableLanguagesFromStreamData(rawServers);
-
-    const availableServers: AvailableServerOption[] = processedServers.map(srv => ({
-      name: srv.name,
-      type: language,
-      linkId: srv.url,
-    }));
-
-    // Tier 1: Instant Client-Side URL Generator (0ms Latency for all HiAnime options)
-    const tier1Servers = generateTier1HiAnimeServers(anilistId, episodeNumber, language);
-
-    // Tier 2: Check if remote API cache or fresh remote fetch overrides Tier 1
-    let hiAnimeServers = tier1Servers;
-    if (HIANIME_EPISODE_CACHE.has(`${anilistId || anime.title}_ep${episodeNumber}`)) {
-      hiAnimeServers = HIANIME_EPISODE_CACHE.get(`${anilistId || anime.title}_ep${episodeNumber}`)!;
-    } else if (refresh && anilistId) {
-      try {
-        const fetched = await fetchHiAnimeApiServers(
-          anilistId,
-          anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime',
-          episodeNumber,
-          isOngoing,
-          refresh
-        );
-        if (fetched && fetched.length > 0) {
-          hiAnimeServers = fetched;
-        }
-      } catch {
-        // Fallback to Tier 1
-      }
-    }
-
-    const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-    const saltRaw = await fetchAnimeSaltStream(englishTitle, episodeNumber);
-    const animeSaltServers: AvailableServerOption[] = [
-      {
-        name: 'AnimeSalt-Server-1',
-        type: 'SUB',
-        linkId: saltRaw[0]?.linkId || `https://animesalt-api-omega.vercel.app/api/stream?id=${cleanSlug}-season-1&ep=ep-${episodeNumber}`,
-      },
-    ];
-
-    const combinedAvailableServers: AvailableServerOption[] = [
-      ...availableServers,
-      ...hiAnimeServers,
-      ...animeSaltServers,
-    ];
-
-    // Universal Background Multi-Language Subtitle Track (Powered by TryEmbed)
-    const universalSubtitleUrl = `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`;
-
-    // Select requested server URL strictly
-    let selectedUrl = processedServers[0]?.url || streamInfo.streamLink || streamInfo.file;
-    let selectedServerName = processedServers[0]?.name || 'Server 1-R';
-
-    if (serverName) {
-      const norm = serverName.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-      // Match exact API server (Server 1-C, Server 1-P, Server 1-Q, Server 1-R, Server 3-A, etc.)
-      const matchedApi = processedServers.find(s => {
-        const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return sNorm === norm || sNorm.startsWith(norm);
-      });
-
-      if (matchedApi) {
-        selectedUrl = matchedApi.url;
-        selectedServerName = matchedApi.name;
-      } else {
-        const matchedHi = hiAnimeServers.find(s => {
-          const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return sNorm === norm || sNorm.startsWith(norm);
-        });
-
-        if (matchedHi) {
-          selectedUrl = matchedHi.linkId;
-          selectedServerName = matchedHi.name;
-        } else {
-          const matchedSalt = animeSaltServers.find(s => {
-            const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-            return sNorm === norm || sNorm.startsWith(norm) || norm.includes('server3');
-          });
-          if (matchedSalt) {
-            selectedUrl = matchedSalt.linkId;
-            selectedServerName = matchedSalt.name;
-          }
-        }
-      }
-    }
-
-    selectedUrl = unpackServerUrl(selectedUrl, language);
-    const detectedResolutions = await probeHlsResolutions(selectedUrl);
-
-    if (selectedUrl) {
-      return {
-        status: 'available',
-        source: {
-          provider,
-          url: selectedUrl,
-          subtitleUrl: universalSubtitleUrl,
-          subtitleLang: 'Multi-Sub (TryEmbed)',
-          language,
-          resolution,
-          isEmbeddable: true,
-          external: false,
-          skipData: { intro: [0, 0], outro: [0, 0] },
-          availableServers: combinedAvailableServers,
-          availableLanguages: availableLangs,
-          availableResolutions: detectedResolutions,
-          selectedServerName,
-          isDubAvailable: true,
-          isFallback: false,
-          requestedLanguage: language,
-          actualLanguage: language,
-        },
-      };
     }
   }
 
-  // Direct fallback embed
-  const directSource = createDirectStreamSource(anime, episodeNumber, provider, language, resolution, serverName);
+  let selectedUrl = processedServers[0]?.url || `https://vidlink.pro/anime/${anilistId}/${episodeNumber}?dub=${isDub ? 'true' : 'false'}`;
+  let selectedServerName = processedServers[0]?.name || 'AnimeDekho-Server-1';
+
+  if (serverName) {
+    const norm = requestedServer.replace(/[^a-z0-9]/g, '');
+    const matchedApi = processedServers.find(s => {
+      const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return sNorm === norm || sNorm.includes(norm) || norm.includes(sNorm);
+    });
+
+    if (matchedApi) {
+      selectedUrl = matchedApi.url;
+      selectedServerName = matchedApi.name;
+    }
+  }
+
+  selectedUrl = unpackServerUrl(selectedUrl, language);
+
   return {
     status: 'available',
-    source: directSource,
+    source: {
+      provider,
+      url: selectedUrl,
+      subtitleUrl: `https://tryembed.us.cc/embed/anime/${anilistId || 1}/${episodeNumber}/sub`,
+      subtitleLang: 'Multi-Sub',
+      language,
+      resolution,
+      isEmbeddable: true,
+      external: false,
+      skipData: { intro: [0, 0], outro: [0, 0] },
+      availableServers: processedServers.map(s => ({ name: s.name, type: language, linkId: s.url })),
+      availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
+      availableResolutions: ['1080p', '720p', '480p'],
+      selectedServerName,
+      isDubAvailable: true,
+      isFallback: false,
+      requestedLanguage: language,
+      actualLanguage: language,
+    },
   };
 }

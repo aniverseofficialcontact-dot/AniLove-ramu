@@ -145,11 +145,14 @@ When a Source is chosen, the **SERVERS** dropdown displays **only** the servers 
 | **`HiAnime`** | **`Server 3`** | `HiAnime-Server-3` | HiAnime AnimePahe stream (`vidnest.fun/animepahe/{id}/{ep}/sub` or `/dub` based on audio language). |
 | **`AnimeSalt`** | **`Server 1`** | `AnimeSalt-Server-1` | AnimeSalt API stream (`animesalt-api-omega.vercel.app`). |
 
-#### 🗣️ Dynamic HiAnime SUB / DUB Link Triggering:
-Instead of cluttering the UI with 6 separate SUB/DUB links, HiAnime displays **3 clean servers** (`Server 1`, `Server 2`, `Server 3`). Each server dynamically generates and triggers its `/sub` or `/dub` URL endpoint based on the selected Audio Language:
-- When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
-- When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
-- Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
+#### 🗣️ Dynamic HiAnime SUB / DUB Link Triggering & Instant Source Routing:
+1. **Clean 3-Server List**: Instead of cluttering the UI with 6 separate SUB/DUB links, HiAnime displays **3 clean servers** (`Server 1`, `Server 2`, `Server 3`).
+2. **Dynamic URL Construction**: Each server dynamically constructs and triggers its `/sub` or `/dub` URL endpoint based on the selected Audio Language:
+   - When **Japanese (SUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/sub`
+   - When **English (DUB)** is selected: `HiAnime-Server-1` -> `https://vidnest.fun/anime/{id}/{ep}/dub`
+   - Switching language in Native Player or WatchView automatically triggers the corresponding SUB or DUB endpoint!
+3. **Instant Source-Based Server Routing**: `resolveEpisodeSource()` in `streamingProviders.ts` evaluates server requests directly by source prefix (`hianime`, `animesalt`, `animedekho`) before making network calls. HiAnime and AnimeSalt requests are routed instantly to their dedicated stream generators and never fall back to AnimeDekho.
+4. **Native TryEmbed Route Extractor Fix**: Updated `attemptServer2DirectExtract()` in `NativePlayerActivity.java` to support `embed/anime` path routes (`Pattern.compile("(embed/anime|anime|animepahe)/(\\d+)/(\\d+)/(sub|dub)")`), enabling instant direct extraction for `tryembed.us.cc/embed/anime/...` streams.
 
 ### 🛡️ WebView Ad-Blocker & Sniffer Filter Optimization Engine
 To eliminate infinite buffering, Cloudflare challenge lockups, and web player JS exceptions while keeping ads, popups, and fullscreens hidden:

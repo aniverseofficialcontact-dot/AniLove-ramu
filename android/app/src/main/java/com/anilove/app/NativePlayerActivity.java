@@ -1469,11 +1469,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             boolean isTryEmbed = embedUrl.contains("tryembed.us.cc");
             String baseHost = isTryEmbed ? "https://tryembed.us.cc" : "https://vidnest.fun";
 
-            Pattern pattern = Pattern.compile("(anime|animepahe)/(\\d+)/(\\d+)/(sub|dub)");
+            Pattern pattern = Pattern.compile("(embed/anime|anime|animepahe)/(\\d+)/(\\d+)/(sub|dub)");
             Matcher matcher = pattern.matcher(embedUrl);
             if (!matcher.find()) return false;
 
             String routeType = matcher.group(1);
+            if ("embed/anime".equals(routeType)) routeType = "anime";
             String animeId = matcher.group(2);
             String epNum = matcher.group(3);
             String audioType = matcher.group(4);
