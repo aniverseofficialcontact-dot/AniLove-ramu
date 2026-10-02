@@ -2302,17 +2302,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                     } else if (trackType == C.TRACK_TYPE_AUDIO) {
                         String lang = format.language;
                         String label = format.label;
-                        String name = (label != null && !label.isEmpty()) ? label : (lang != null ? lang : "Audio " + (audios.size() + 1));
-                        if (!audios.contains(name)) audios.add(name);
+                        String name = (label != null && !label.isEmpty()) ? label : (lang != null && !lang.equalsIgnoreCase("und") ? lang : "");
+                        if (!name.isEmpty() && !name.equalsIgnoreCase("und") && !audios.contains(name)) {
+                            audios.add(name);
+                        }
                     }
                 }
             }
 
-            if (!qualities.isEmpty()) {
+            if (!qualities.isEmpty() && detectedQualities.isEmpty()) {
                 if (!qualities.contains("Auto")) qualities.add(0, "Auto");
                 detectedQualities = qualities;
             }
-            if (!audios.isEmpty()) {
+            if (!audios.isEmpty() && (detectedAudios.isEmpty() || (detectedAudios.size() == 1 && detectedAudios.get(0).equalsIgnoreCase("und")))) {
                 detectedAudios = audios;
             }
         } catch (Exception ignored) {}

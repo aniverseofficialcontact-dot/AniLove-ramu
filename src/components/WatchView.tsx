@@ -521,7 +521,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
               {isSourceMenuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
-                  {(['AnimeDekho', 'HiAnime', 'AnimeSalt', 'MovieBox'] as StreamSourceId[]).map((src) => {
+                  {(['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'] as StreamSourceId[]).map((src) => {
                     const isSelected = selectedSource === src;
                     return (
                       <button
