@@ -126,6 +126,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
         { displayName: 'Server 2', internalCode: 'AnimeDekho-Server-2' },
         { displayName: 'Server 3', internalCode: 'AnimeDekho-Server-3' },
         { displayName: 'Server 4', internalCode: 'AnimeDekho-Server-4' },
+        { displayName: 'Server 5', internalCode: 'AnimeDekho-Server-5' },
       ],
     },
     HiAnime: {
