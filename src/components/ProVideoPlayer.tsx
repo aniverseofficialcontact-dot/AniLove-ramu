@@ -457,7 +457,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       providerId: activeServer,
       language: audioMode,
       resolution: quality,
-      serverName: requestedServer,
+      serverName: `${activeSrcName}-${requestedServer}`,
+      sourceName: activeSrcName,
     })
       .then(result => {
         if (cancelled) return;

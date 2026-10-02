@@ -77,6 +77,7 @@ export interface ResolveEpisodeSourceInput {
   language?: StreamLanguage;
   resolution?: StreamResolution;
   serverName?: string;
+  sourceName?: string;
   refresh?: boolean;
 }
 
@@ -234,7 +235,13 @@ async function resolveAnimeDekhoSource(
   if (pirateMatch) candidates.push({ codeKey: 'piratexplay', url: pirateMatch.url });
   if (blakiteMatch) candidates.push({ codeKey: 'blakiteapi', url: blakiteMatch.url });
   if (vidmolyMatch) candidates.push({ codeKey: 'vidmoly', url: vidmolyMatch.url });
-  if (abyssMatch) candidates.push({ codeKey: 'abyssplayer', url: abyssMatch.url });
+  if (abyssMatch) {
+    let abyssUrl = abyssMatch.url;
+    if (abyssUrl.includes('short.icu/')) {
+      abyssUrl = abyssUrl.replace('short.icu/', 'abyssplayer.com/');
+    }
+    candidates.push({ codeKey: 'abyssplayer', url: abyssUrl });
+  }
 
   // Map to dynamic Server 1, Server 2, Server 3...
   const availableServers: AvailableServerOption[] = candidates.map((cand, idx) => ({
@@ -472,15 +479,18 @@ export async function resolveEpisodeSource({
   language = 'DUB',
   resolution = '1080p',
   serverName,
+  sourceName,
   refresh = false,
 }: ResolveEpisodeSourceInput): Promise<ResolveEpisodeSourceResult> {
   const englishTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const anilistId = anime.id;
 
+  const reqSrc = (sourceName || '').toLowerCase().trim();
   const reqServer = (serverName || '').toLowerCase().trim();
+  const combined = `${reqSrc} ${reqServer}`;
 
   // ROUTE 1: MovieBox Source
-  if (reqServer.includes('moviebox')) {
+  if (combined.includes('moviebox')) {
     const mb = await resolveMovieBoxSource(englishTitle, 1, episodeNumber, resolution, refresh);
     if (!mb.selectedUrl) {
       return {
@@ -511,7 +521,7 @@ export async function resolveEpisodeSource({
   }
 
   // ROUTE 2: HiAnime Source
-  if (reqServer.includes('hianime')) {
+  if (combined.includes('hianime')) {
     const hi = resolveHiAnimeSource(anilistId, episodeNumber, language, serverName);
     return {
       status: 'available',
@@ -525,7 +535,7 @@ export async function resolveEpisodeSource({
         skipData: { intro: [0, 0], outro: [0, 0] },
         availableServers: hi.availableServers,
         availableLanguages: ['SUB', 'DUB'],
-        availableResolutions: ['1080p', '720p', '480p'],
+        availableResolutions: ['1080p'],
         selectedServerName: hi.selectedServerName,
         isDubAvailable: true,
       },
@@ -533,7 +543,7 @@ export async function resolveEpisodeSource({
   }
 
   // ROUTE 3: AnimeSalt Source
-  if (reqServer.includes('animesalt')) {
+  if (combined.includes('animesalt')) {
     const salt = await resolveAnimeSaltSource(englishTitle, episodeNumber, anilistId, refresh);
     return {
       status: 'available',
@@ -546,8 +556,8 @@ export async function resolveEpisodeSource({
         external: false,
         skipData: { intro: [0, 0], outro: [0, 0] },
         availableServers: salt.availableServers,
-        availableLanguages: ['SUB', 'DUB'],
-        availableResolutions: ['1080p', '720p', '480p'],
+        availableLanguages: ['SUB'],
+        availableResolutions: ['1080p'],
         selectedServerName: salt.selectedServerName,
         isDubAvailable: true,
       },
@@ -593,7 +603,7 @@ export function createDirectStreamSource(
     skipData: { intro: [0, 0], outro: [0, 0] },
     availableServers: [],
     availableLanguages: ['SUB', 'DUB'],
-    availableResolutions: ['1080p', '720p', '480p'],
+    availableResolutions: ['1080p'],
     selectedServerName: serverName || 'Server 1',
     isDubAvailable: true,
     isFallback: false,
