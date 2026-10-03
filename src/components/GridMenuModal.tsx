@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Home,
@@ -13,8 +13,8 @@ import {
   Settings,
   Lock,
   RefreshCw,
-  TrendingUp,
-  Sparkles,
+  ChevronDown,
+  ChevronRight,
   Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -42,6 +42,8 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
   isPinLocked = false,
   onOpenAiSensei,
 }) => {
+  const [isHomeExpanded, setIsHomeExpanded] = useState(false);
+
   const isTwoWayConnected = Boolean(settings.twoWaySyncEnabled && settings.anilistToken);
   const isPinConfigured = Boolean(settings.profilePinEnabled && settings.profilePin);
 
@@ -63,31 +65,27 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
     onClose();
   };
 
-  const navItems = [
+  // Sub-items that belong to the lower navigation bar, shown when Home is expanded
+  const lowerNavSubItems = [
     {
       id: 'home' as TabType,
-      label: 'Home',
+      label: 'Home Feed',
       icon: Home,
     },
     {
       id: 'discover' as TabType,
-      label: 'Search & Trending',
-      icon: TrendingUp,
-    },
-    {
-      id: 'schedule' as TabType,
-      label: 'Schedule',
-      icon: Calendar,
+      label: 'Search & Discover',
+      icon: Search,
     },
     {
       id: 'reels' as TabType,
-      label: 'Anime Reels',
+      label: 'Reels Clips',
       icon: Film,
     },
     {
-      id: 'arcade' as TabType,
-      label: 'Arcade Center',
-      icon: Gamepad2,
+      id: 'downloads' as TabType,
+      label: 'Offline Downloads',
+      icon: Download,
     },
     {
       id: 'library' as TabType,
@@ -96,16 +94,33 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
       badge: libraryCount > 0 && !isPinLocked ? `${libraryCount}` : null,
     },
     {
+      id: 'account' as TabType,
+      label: 'Account & Settings',
+      icon: User,
+    },
+  ];
+
+  // Top-level standalone menu items (other than Home)
+  const standaloneMenuItems = [
+    {
+      id: 'schedule' as TabType,
+      label: 'Schedule',
+      icon: Calendar,
+    },
+    {
+      id: 'arcade' as TabType,
+      label: 'Arcade Center',
+      icon: Gamepad2,
+    },
+    {
       id: 'cards' as TabType,
       label: 'Cards Inventory',
       icon: Rotate3d,
     },
-    {
-      id: 'downloads' as TabType,
-      label: 'Downloads',
-      icon: Download,
-    },
   ];
+
+  // Check if any sub-item under Home is currently active
+  const isHomeSubActive = lowerNavSubItems.some((item) => item.id === currentTab);
 
   return (
     <AnimatePresence>
@@ -120,7 +135,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
           className="fixed inset-0 bg-black/75 backdrop-blur-sm"
         />
 
-        {/* Side Navigation Drawer (Inspired by Miruro TV) */}
+        {/* Side Navigation Drawer */}
         <motion.div
           initial={{ x: '-100%' }}
           animate={{ x: 0 }}
@@ -147,7 +162,78 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
 
           {/* Navigation Links List */}
           <div className="px-3 py-4 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
-            {navItems.map((item) => {
+            {/* 1. Collapsible Home Group (Contains all lower navigation bar options) */}
+            <div className="rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02]">
+              <button
+                onClick={() => setIsHomeExpanded((prev) => !prev)}
+                className={`w-full flex items-center justify-between px-4 py-3 font-semibold text-sm transition-all duration-200 cursor-pointer ${
+                  isHomeSubActive
+                    ? 'bg-white/10 text-white font-bold border-b border-white/10'
+                    : 'text-slate-200 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Home className={`w-4.5 h-4.5 ${isHomeSubActive ? 'text-pink-400' : 'text-slate-400'}`} />
+                  <span>Home</span>
+                </div>
+
+                {/* Small indicator sign for expansion */}
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="text-[10px] font-medium text-slate-500">
+                    {isHomeExpanded ? 'Hide Tabs' : 'View Tabs'}
+                  </span>
+                  {isHomeExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-pink-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )}
+                </div>
+              </button>
+
+              {/* Sub-menu options under Home */}
+              <AnimatePresence>
+                {isHomeExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden bg-black/40 border-t border-white/5 pl-3 py-1 space-y-1"
+                  >
+                    {lowerNavSubItems.map((subItem) => {
+                      const SubIcon = subItem.icon;
+                      const isSubActive = currentTab === subItem.id;
+
+                      return (
+                        <button
+                          key={subItem.id}
+                          onClick={() => handleNavigate(subItem.id)}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-xs transition-all cursor-pointer ${
+                            isSubActive
+                              ? 'bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30'
+                              : 'text-slate-400 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <SubIcon className={`w-4 h-4 ${isSubActive ? 'text-pink-400' : 'text-slate-500'}`} />
+                            <span>{subItem.label}</span>
+                          </div>
+
+                          {subItem.badge && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-pink-500/30 text-pink-300 border border-pink-500/40">
+                              {subItem.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* 2. Other Standalone Menu Items */}
+            {standaloneMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentTab === item.id;
 
@@ -164,22 +250,16 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
                   <div className="flex items-center gap-3.5">
                     <Icon
                       className={`w-4.5 h-4.5 ${
-                        isActive ? 'text-pink-400' : 'text-slate-400 group-hover:text-slate-200'
+                        isActive ? 'text-pink-400' : 'text-slate-400'
                       }`}
                     />
                     <span>{item.label}</span>
                   </div>
-
-                  {item.badge && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-pink-500/30 text-pink-300 border border-pink-500/40">
-                      {item.badge}
-                    </span>
-                  )}
                 </button>
               );
             })}
 
-            {/* AI Sensei Helper Button if available */}
+            {/* 3. Ask AI Sensei Button */}
             {onOpenAiSensei && (
               <button
                 onClick={() => {
@@ -194,7 +274,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
             )}
           </div>
 
-          {/* Bottom Profile / Sync Footer (Matching Miruro TV style) */}
+          {/* Bottom Profile / Sync Footer */}
           <div className="p-4 border-t border-white/5 bg-neutral-900/40 space-y-3">
             <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 font-medium">
               <span className="flex items-center gap-1.5">

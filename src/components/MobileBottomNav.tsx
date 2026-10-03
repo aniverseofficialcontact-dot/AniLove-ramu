@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Search, Download, Bookmark, User, Rotate3d, Lock, Film } from 'lucide-react';
+import { Home, Search, Download, Bookmark, User, Lock, Film } from 'lucide-react';
 import { UserSettings } from '../types';
 import { TabType } from './Navbar';
 
@@ -66,7 +66,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <span className="text-[10px]">Reels</span>
       </button>
 
-      {/* Downloads Tab (Replacing Schedule in Bottom Navigation Bar) */}
+      {/* Downloads Tab */}
       <button
         onClick={() => onSelectTab('downloads')}
         className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl relative transition cursor-pointer ${
@@ -79,6 +79,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <span className="text-[10px]">Downloads</span>
       </button>
 
+      {/* Library Tab */}
       <button
         onClick={() => onSelectTab('library')}
         className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl relative transition cursor-pointer ${
@@ -102,25 +103,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         )}
       </button>
 
-      {/* Cards Collectible Tab */}
-      <button
-        onClick={() => onSelectTab('cards')}
-        className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl relative transition cursor-pointer ${
-          currentTab === 'cards'
-            ? 'text-pink-400 font-bold bg-white/10'
-            : 'text-slate-400 hover:text-slate-200'
-        }`}
-      >
-        {isPinConfigured && isPinLocked ? (
-          <Lock className="w-4 h-4 text-amber-400" />
-        ) : (
-          <Rotate3d className="w-4 h-4" />
-        )}
-        <span className="text-[10px]">
-          {isPinConfigured && isPinLocked ? 'Cards 🔒' : 'Cards'}
-        </span>
-      </button>
-
+      {/* Account Tab */}
       <button
         onClick={() => onSelectTab('account')}
         className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl relative transition cursor-pointer ${
