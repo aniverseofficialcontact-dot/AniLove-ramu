@@ -24,6 +24,7 @@ import {
   Server,
   Globe,
   RotateCw,
+  Hash,
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
@@ -86,7 +87,8 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const [watchOrderData, setWatchOrderData] = useState<FranchiseWatchOrder | null>(null);
   const [episodeSearchQuery, setEpisodeSearchQuery] = useState<string>('');
   const [selectedEpisodeRange, setSelectedEpisodeRange] = useState<string>('all');
-  const [episodeViewMode, setEpisodeViewMode] = useState<'list' | 'grid'>('list');
+  const initialLayout = settings?.preferredEpisodeLayout || 'grid';
+  const [episodeViewMode, setEpisodeViewMode] = useState<'grid' | 'list' | 'compact'>(initialLayout);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [showFullSynopsis, setShowFullSynopsis] = useState<boolean>(false);
   const [thumbnailStyle, setThumbnailStyle] = useState<ThumbnailAppearance>('snapshot');
@@ -794,20 +796,8 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <span className="hidden md:inline text-xs">{sortAsc ? '1-N' : 'N-1'}</span>
               </button>
 
-              {/* Grid / List Layout Switcher (Single Unified Toggle) */}
+              {/* Grid / List / Compact Layout Switcher */}
               <div className="flex items-center bg-[#0d101a] border border-white/10 p-1 rounded-2xl shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEpisodeViewMode('list')}
-                  className={`p-1.5 rounded-xl transition cursor-pointer ${
-                    episodeViewMode === 'list'
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title="List layout"
-                >
-                  <List className="w-4 h-4" />
-                </button>
                 <button
                   type="button"
                   onClick={() => setEpisodeViewMode('grid')}
@@ -816,9 +806,33 @@ export const WatchView: React.FC<WatchViewProps> = ({
                       ? 'bg-indigo-600 text-white shadow-sm font-bold'
                       : 'text-neutral-400 hover:text-white'
                   }`}
-                  title="Grid layout"
+                  title="Card Grid layout"
                 >
                   <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEpisodeViewMode('list')}
+                  className={`p-1.5 rounded-xl transition cursor-pointer ${
+                    episodeViewMode === 'list'
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Detailed List layout"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEpisodeViewMode('compact')}
+                  className={`p-1.5 rounded-xl transition cursor-pointer ${
+                    episodeViewMode === 'compact'
+                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                  title="Compact Number Tiles layout"
+                >
+                  <Hash className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -855,8 +869,36 @@ export const WatchView: React.FC<WatchViewProps> = ({
             )}
           </div>
 
-          {/* Episode Cards Display (Grid or List) */}
-          {episodeViewMode === 'grid' ? (
+          {/* Episode Display: Grid, List, or Compact Numbers Grid */}
+          {episodeViewMode === 'compact' ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 max-h-[600px] overflow-y-auto pr-1">
+              {filteredEpisodes.map(ep => {
+                const isCurrent = ep.number === episodeNumber;
+                const isWatched = ep.number <= currentProgress;
+
+                return (
+                  <button
+                    key={ep.number}
+                    onClick={() => {
+                      onEpisodeChange(ep.number);
+                      onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
+                      handleSourceChange(selectedSource);
+                    }}
+                    className={`group relative py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all duration-200 border cursor-pointer select-none ${
+                      isCurrent
+                        ? 'bg-pink-600 text-white border-pink-500 shadow-lg shadow-pink-600/30 ring-2 ring-pink-400'
+                        : isWatched
+                        ? 'bg-[#0b1418] text-emerald-400 border-emerald-500/30 hover:border-emerald-500/60'
+                        : 'bg-[#0d101a] text-slate-200 border-white/10 hover:bg-[#141828] hover:border-indigo-500/50 hover:text-white'
+                    }`}
+                  >
+                    <Play className={`w-3 h-3 ${isCurrent ? 'fill-white' : isWatched ? 'fill-emerald-400' : 'fill-slate-400 group-hover:fill-indigo-400'}`} />
+                    <span>{ep.number}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : episodeViewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[600px] overflow-y-auto pr-1">
               {filteredEpisodes.map(ep => {
                 const isCurrent = ep.number === episodeNumber;

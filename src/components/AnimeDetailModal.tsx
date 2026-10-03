@@ -108,6 +108,18 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
   const playerRef = useRef<HTMLDivElement>(null);
 
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectTab = (tabId: DetailTab) => {
+    setActiveTab(tabId);
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTo({
+        top: 280,
+        behavior: 'smooth',
+      });
+    }
+  };
+
   // Close kebab menu on outside click
   useEffect(() => {
     const handleDocumentClick = () => {
@@ -582,6 +594,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     <AnimatePresence>
       <motion.div
         id="anime-detail-page-view"
+        ref={modalScrollRef}
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 15 }}
@@ -974,12 +987,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id as DetailTab);
-                    if (tab.id === 'episodes' && playingEpisode === null && userItem?.progress) {
-                      // Keep in browser mode initially or open last watched if requested
-                    }
-                  }}
+                  onClick={() => handleSelectTab(tab.id as DetailTab)}
                   className={`px-3 sm:px-4 py-3 text-xs sm:text-sm font-bold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     active
                       ? 'text-white'

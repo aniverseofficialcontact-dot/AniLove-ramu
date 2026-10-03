@@ -42,8 +42,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<'all' | 'series' | 'essential' | 'movies' | 'ovas'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [expandedEpisodeItems, setExpandedEpisodeItems] = useState<Record<number, boolean>>({});
-  const [expandedCardIds, setExpandedCardIds] = useState<Record<number, boolean>>({});
   const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem(`anilove_watch_order_progress_${currentAnime.id}`);
@@ -52,36 +50,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
       return {};
     }
   });
-
-  const isCardExpanded = (itemId?: number, isCurrentAnime?: boolean): boolean => {
-    const key = itemId || 0;
-    if (expandedCardIds[key] !== undefined) {
-      return expandedCardIds[key];
-    }
-    // By default, keep all cards collapsed & compact (including current anime)
-    return false;
-  };
-
-  const toggleCardExpanded = (itemId: number, isCurrentAnime: boolean, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedCardIds(prev => {
-      const currentlyExpanded = prev[itemId] !== undefined ? prev[itemId] : false;
-      return {
-        ...prev,
-        [itemId]: !currentlyExpanded,
-      };
-    });
-  };
-
-  const toggleAllCards = (expand: boolean) => {
-    const newMap: Record<number, boolean> = {};
-    const list = getActiveList();
-    list.forEach((item, index) => {
-      const key = item.id || (index + 1);
-      newMap[key] = expand;
-    });
-    setExpandedCardIds(newMap);
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -602,24 +570,18 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
                         </button>
                       )}
 
-                      {/* View More / View Less Toggle Button */}
-                      <button
-                        type="button"
-                        onClick={e => toggleCardExpanded(cardId, isCurrent, e)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer shrink-0 ${
-                          cardExpanded
-                            ? 'bg-indigo-950/80 border-indigo-500/50 text-indigo-300 shadow-sm'
-                            : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-indigo-300'
-                        }`}
-                        title={cardExpanded ? 'Collapse card details' : 'View more details and guide'}
-                      >
-                        <span>{cardExpanded ? 'View Less' : 'View More'}</span>
-                        {cardExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                      </button>
+                      {/* View Anime Button */}
+                      {item.animeObj && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToAnime(item.animeObj!)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition cursor-pointer shrink-0"
+                          title={`View details for ${item.title}`}
+                        >
+                          <Info className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>View Anime</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Expandable Details Section (Shown when cardExpanded is true) */}
