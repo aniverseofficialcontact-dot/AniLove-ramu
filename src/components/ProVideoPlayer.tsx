@@ -763,12 +763,30 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready' ? (
+        {Capacitor.isNativePlatform() ? (
           <div className="w-full h-full relative group bg-black z-10">
             <div className="absolute inset-0 bg-black z-0" />
             <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
-               <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
-               <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Hybrid Native Player Active</div>
+              {streamStatus === 'loading' ? (
+                <>
+                  <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
+                  <div className="text-xs font-bold text-white mb-1">Loading Episode {episodeNumber}...</div>
+                  <div className="text-[10px] text-neutral-400 font-medium">Connecting to {selectedSource || 'Multi-Lang'}...</div>
+                </>
+              ) : streamStatus === 'error' ? (
+                <div className="p-4 max-w-md mx-auto space-y-2 text-center">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-sm font-bold text-white">Stream Not Available</h3>
+                  <p className="text-xs text-neutral-400">{streamMessage}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
+                  <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Hybrid Native Player Active</div>
+                </>
+              )}
             </div>
           </div>
         ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
