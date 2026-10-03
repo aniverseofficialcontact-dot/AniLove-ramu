@@ -503,6 +503,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       episodeNumber: currentEpNum,
       audio: audioMode,
       advancePlayer: settings?.advancePlayerEnabled ?? false,
+      autoSkipIntro: settings?.autoSkipIntro ?? false,
       startTime: initialTime || 0,
     }).catch(() => {});
   };

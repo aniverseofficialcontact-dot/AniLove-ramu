@@ -2076,6 +2076,26 @@ public class NativePlayerActivity extends AppCompatActivity {
                         }
                     }
 
+                    boolean autoSkip = getIntent().getBooleanExtra("autoSkipIntro", false);
+
+                    if (autoSkip && isPlaying) {
+                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
+                            if (exoPlayer != null) {
+                                double targetPos = aniSkipOpEnd;
+                                aniSkipOpStart = -1; // Clear trigger to prevent repeat loops
+                                exoPlayer.seekTo((long) (targetPos * 1000L));
+                                Toast.makeText(NativePlayerActivity.this, "Auto-skipped Opening Theme ⏭️", Toast.LENGTH_SHORT).show();
+                            }
+                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
+                            if (exoPlayer != null) {
+                                double targetPos = aniSkipEdEnd;
+                                aniSkipEdStart = -1; // Clear trigger to prevent repeat loops
+                                exoPlayer.seekTo((long) (targetPos * 1000L));
+                                Toast.makeText(NativePlayerActivity.this, "Auto-skipped Ending Theme ⏭️", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    }
+
                     TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
                     if (btnSkipIntro != null) {
                         if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
@@ -3450,8 +3470,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (targetMalId <= 0) return;
 
             try {
-                int length = videoDuration > 0 ? (int) videoDuration : 1440;
-                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + targetMalId + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=" + length;
+                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + targetMalId + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap";
                 URL url = new URL(reqUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");

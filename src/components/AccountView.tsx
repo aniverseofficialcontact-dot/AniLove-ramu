@@ -1025,6 +1025,32 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 </select>
               </div>
 
+              {/* Auto-Skip Intros & Outros (AniSkip) */}
+              <div className="flex items-center justify-between py-3.5 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-white/5 text-amber-300">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Auto-Skip Intros & Outros (AniSkip)</p>
+                    <p className="text-xs text-slate-400">Automatically skip opening and ending theme songs during video playback</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.autoSkipIntro)}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    onSaveSettings({
+                      ...settings,
+                      autoSkipIntro: enabled,
+                    });
+                    onShowToast('success', `Auto-skip intro/outro ${enabled ? 'enabled' : 'disabled'}.`, 'Settings Updated');
+                  }}
+                  className="w-4 h-4 text-pink-500 rounded bg-slate-900 border-white/20 cursor-pointer"
+                />
+              </div>
+
               {/* 12 Streaming Scrapers Top-3 Priority Setup */}
               <div className="py-3.5 space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">

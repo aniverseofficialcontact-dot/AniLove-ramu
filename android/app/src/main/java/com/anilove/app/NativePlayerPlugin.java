@@ -125,6 +125,8 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("audio", call.getString("audio", "DUB"));
             intent.putExtra("subtitleUrl", call.getString("subtitleUrl"));
             intent.putExtra("subtitleLang", call.getString("subtitleLang", "English"));
+            Boolean autoSkipIntro = call.getBoolean("autoSkipIntro", false);
+            intent.putExtra("autoSkipIntro", autoSkipIntro != null ? autoSkipIntro : false);
             intent.putExtra("allSubtitles", call.getString("allSubtitles"));
             intent.putExtra("startTime", call.getInt("startTime", 0));
             intent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
