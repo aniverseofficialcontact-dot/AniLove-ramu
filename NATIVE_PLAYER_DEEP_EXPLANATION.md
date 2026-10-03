@@ -26,8 +26,9 @@ AniLove is engineered as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** a
                ┌──────────────────────────────────────────────────┐
                │           NativePlayerActivity.java              │
                │  ┌────────────────────────────────────────────┐  │
-               │  │   100% Native Media3 ExoPlayer Engine      │  │
-               │  │   (GPU Acceleration / HLS / MP4 / VTT)     │  │
+               │  │   Dual Engine Player System:               │  │
+               │  │   1. ⚡ ExoPlayer (Media3 GPU Engine)     │  │
+               │  │   2. 🌐 WebView Player (AdBlock/Sandbox)  │  │
                │  └────────────────────────────────────────────┘  │
                │  ┌────────────────────────────────────────────┐  │
                │  │   VideoSniffer.java (Headless WebView)     │  │
@@ -44,7 +45,7 @@ AniLove is engineered as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** a
 
 | File | Subsystem | Responsibility |
 | :--- | :--- | :--- |
-| [`NativePlayerActivity.java`](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), direct MP4/HLS playback, position-preserving quality & language switching, background thread player release (`03e2eb4`), `ExoPlaybackException` source error auto-recovery via `VideoSniffer` fallback, `.m4s` segment chunk filtering, Cookie sync from CookieManager, custom Referer header injection, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention, shared-element landscape transitions, gesture overlays, floating layout, PiP mode, AniSkip skip buttons with yellow seekbar indicators, and custom native caption overlay. |
+| [`NativePlayerActivity.java`](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerActivity.java) | Native Android | Primary activity hosting 100% Native Media3 ExoPlayer engine (`PlayerView`), Dual Engine mode toggle (`ExoPlayer` <-> `WebView Player`), direct MP4/HLS playback, position-preserving quality & language switching, background thread player release, `ExoPlaybackException` source error auto-recovery via `VideoSniffer` fallback, `.m4s` segment chunk filtering, Cookie sync from CookieManager, custom Referer header injection, dedicated Subtitle API (`subtitles.php`) parser, dual-audio prevention, shared-element landscape transitions, gesture overlays, floating layout, native Picture-in-Picture (`enterPipMode()`), AniSkip skip buttons with yellow seekbar indicators, and custom native caption overlay. |
 | [`VideoSniffer.java`](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/VideoSniffer.java) | Native Utilities | Background headless WebView sniffer intercepting XHR/Fetch/DOM streams with static instance tracking (`cancelActiveSniffers()`), audio-only track variant filtering (`-a1.m3u8`, `audio.m3u8`), dummy wrapper link filtering (`tryembed.us.cc/s/`, `vidnest.fun/s/`), and `.m4s` chunk filtering to extract direct `.m3u8` master video playlists and `.vtt` subtitles. |
 | [`NativePlayerPlugin.java`](file:///C:/Users/sanya/StudioProjects/AniLove2/android/app/src/main/java/com/anilove/app/NativePlayerPlugin.java) | Capacitor Bridge | Exposes native player controls (`play`, `pause`, `seek`, `updatePosition`, `notifyLanguageChange`) to React with rapid `play()` call de-duplication and navigation listener callbacks. |
 | [`streamingProviders.ts`](file:///C:/Users/sanya/StudioProjects/AniLove2/src/services/streamingProviders.ts) | Server Resolvers | Core multi-source streaming resolver managing 4 streaming sources (`Multi-Lang`, `AnimeDekho`, `HiAnime`, `AnimeSalt`), 20-minute local caching (`STREAM_CACHE`), dynamic audio/resolution mapping, and primary/secondary language hierarchy fallback. |
@@ -107,24 +108,18 @@ In Account Settings (`AccountView.tsx`), users select:
 
 ---
 
-## ⚡ 5. Native ExoPlayer Lifecycle & Performance Optimization
+## ⚡ 5. Native ExoPlayer & WebView Dual Engine Architecture
 
-### 🧵 Offloaded ExoPlayer Release (`03e2eb4`)
-- Previously, releasing ExoPlayer synchronously on the main UI thread during activity finishing caused screen freezes and UI stuttering.
-- **Fix**: ExoPlayer release is executed asynchronously on a dedicated background thread executor:
-  ```java
-  Executors.newSingleThreadExecutor().execute(() -> {
-      if (player != null) {
-          player.stop();
-          player.release();
-          player = null;
-      }
-  });
-  ```
-- **Silent JS Media Pausing**: When launching the native player, JavaScript html5 audio/video elements in WebView are muted and paused silently to eliminate background audio overlap.
+### ⚡ 1. Media3 ExoPlayer Engine (`isWebViewPlayerMode = false`)
+- Default 1080p hardware-accelerated playback engine using AndroidX Media3 ExoPlayer.
+- **Position-Preserving Quality & Audio Switching**: Captures `player.getCurrentPosition()` and seeks smoothly when switching resolutions or audio tracks.
+- **Offloaded Player Release**: Releases ExoPlayer asynchronously on a background thread executor when closing the activity to prevent main thread UI locks.
 
-### ⏱️ Position-Preserving Quality & Audio Switching (`7fe4a8a`)
-- Changing audio language or video quality captures current playback position `long currentPos = player.getCurrentPosition()` and seeks seamlessly without re-buffering or resetting back to 00:00.
+### 🌐 2. Embedded WebView Player Engine (`isWebViewPlayerMode = true`)
+- Triggered by user toggle (`btnEngineToggle`) or when embed URLs are not direct video streams.
+- Loads an iframe or HTML5 video container inside `playerWebView`.
+- **Ad-Eraser & Anti-Redirect Sandbox**: Intercepts `shouldOverrideUrlLoading` and `onCreateWindow` to block popups, YouTube redirects, and malicious ad scripts.
+- **Custom Gesture Overlay**: Captures touch gestures on WebView to allow double-tap seeking and long-press 2.0x speed boost directly over web embeds!
 
 ---
 
