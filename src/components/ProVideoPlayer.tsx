@@ -424,6 +424,32 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Synchronously invalidate streamSource during render whenever episode, anime, or server source changes
+  const prevEpRef = useRef(episodeNumber);
+  const prevAnimeRef = useRef(anime.id);
+  const prevSourceRef = useRef(selectedSource);
+  const prevSubServerRef = useRef(selectedSubServerName);
+
+  if (
+    prevEpRef.current !== episodeNumber ||
+    prevAnimeRef.current !== anime.id ||
+    prevSourceRef.current !== selectedSource ||
+    prevSubServerRef.current !== selectedSubServerName
+  ) {
+    prevEpRef.current = episodeNumber;
+    prevAnimeRef.current = anime.id;
+    prevSourceRef.current = selectedSource;
+    prevSubServerRef.current = selectedSubServerName;
+
+    setStreamSource(null);
+    setStreamStatus('loading');
+    setStreamMessage(`Connecting to ${selectedSource || 'Multi-Lang'}...`);
+    serverUrlCache.current = {};
+    episodeCacheKey.current = '';
+    baseSourceRef.current = null;
+    lastLaunchedKey.current = null;
+  }
+
   // Main stream resolution effect — with server URL cache for instant server switching
   useEffect(() => {
     let cancelled = false;
@@ -628,11 +654,11 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   // Auto-launch Hybrid Native Player for Inline Experience on Android
   useEffect(() => {
     if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
-      const launchKey = `${streamSource.url}__${audioMode}__${episodeNumber}__${activeServer}__${selectedSubServerName || ''}`;
+      const currentEpNum = Number(episodeNumber);
+      const launchKey = `${anime.id}__ep${currentEpNum}__${streamSource.url}__${audioMode}__${activeServer}__${selectedSubServerName || ''}`;
       if (lastLaunchedKey.current === launchKey) return;
       lastLaunchedKey.current = launchKey;
 
-      const currentEpNum = Number(episodeNumber);
       const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
       (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
@@ -683,6 +709,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           console.warn('Error fetching unified subtitles in ProVideoPlayer:', e);
         }
 
+        // Stale guard check: Ensure user hasn't switched episodes while async subtitles were fetching
+        if (prevEpRef.current !== currentEpNum) return;
+
         NativePlayer.play({
           url: streamSource.url,
           serverName: streamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
@@ -694,14 +723,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           subtitleUrl: activeSubUrl,
           subtitleLang: activeSubLang,
           allSubtitles: allSubtitlesJson,
-          title: `${dTitle} - Ep ${episodeNumber}`,
-          hasNext: episodesList.length > episodeNumber,
-          hasPrev: episodeNumber > 1,
+          title: `${dTitle} - Ep ${currentEpNum}`,
+          hasNext: episodesList.length > currentEpNum,
+          hasPrev: currentEpNum > 1,
           startFullscreen: false,
           yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
           anilistId: anime.id,
           idMal: anime.idMal || 0,
-          episodeNumber: Number(episodeNumber),
+          episodeNumber: currentEpNum,
           audio: audioMode,
           advancePlayer: settings?.advancePlayerEnabled ?? false,
           startTime: initialTime || 0,
