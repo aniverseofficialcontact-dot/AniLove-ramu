@@ -545,20 +545,12 @@ public class NativePlayerActivity extends AppCompatActivity {
         isWebViewPlayerMode = false;
         if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
 
-        // 3. Immediately mute & stop ExoPlayer on UI Thread (0ms audio leak) & release in background thread
+        // 3. Stop ExoPlayer playback synchronously without destroying the player instance for stream reuse
         if (exoPlayer != null) {
-            final Player oldPlayer = exoPlayer;
-            exoPlayer = null;
             try {
-                oldPlayer.setVolume(0f);
-                oldPlayer.setPlayWhenReady(false);
-                oldPlayer.stop();
-                oldPlayer.clearMediaItems();
-                Executors.newSingleThreadExecutor().execute(() -> {
-                    try {
-                        oldPlayer.release();
-                    } catch (Exception ignored) {}
-                });
+                exoPlayer.setPlayWhenReady(false);
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
             } catch (Exception ignored) {}
         }
     }
@@ -1816,10 +1808,60 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .setPrioritizeTimeOverSizeThresholds(true)
                     .build();
 
-            exoPlayer = new ExoPlayer.Builder(this)
-                    .setLoadControl(loadControl)
-                    .build();
-            exoPlayerView.setPlayer(exoPlayer);
+            if (exoPlayer == null) {
+                exoPlayer = new ExoPlayer.Builder(this)
+                        .setLoadControl(loadControl)
+                        .build();
+                exoPlayerView.setPlayer(exoPlayer);
+
+                exoPlayer.addListener(new Player.Listener() {
+                    @Override
+                    public void onIsPlayingChanged(boolean playing) {
+                        isPlaying = playing;
+                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                        if (isPlaying) resetHideTimer(); else stopHideTimer();
+                    }
+
+                    @Override
+                    public void onPlaybackStateChanged(int playbackState) {
+                        if (playbackState == Player.STATE_BUFFERING) {
+                            if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
+                        } else if (playbackState == Player.STATE_READY) {
+                            if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                            populateTracksFromExoPlayer();
+                        } else if (playbackState == Player.STATE_ENDED) {
+                            isPlaying = false;
+                            btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
+                            navigateEpisode(true);
+                        }
+                    }
+
+                    @Override
+                    public void onPlayerError(PlaybackException error) {
+                        Log.e("AniLove", "ExoPlayer error (code " + error.errorCode + "): " + error.getMessage(), error);
+                        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+
+                        boolean isSourceOrNetworkError = (error.getCause() instanceof IOException) ||
+                                                         (error.getCause() instanceof HttpDataSource.HttpDataSourceException) ||
+                                                         (error.getCause() instanceof UnrecognizedInputFormatException) ||
+                                                         (error.errorCode >= 2000 && error.errorCode <= 2008);
+
+                        boolean isDirect = isDirectMediaStream(currentLoadedStreamUrl) || isDirectMediaStream(currentEmbedUrl) || (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains(".mp4"));
+
+                        if (isSourceOrNetworkError && !hasRetriedSniffer) {
+                            hasRetriedSniffer = true;
+                            if (isDirect) {
+                                setupExoPlayerOnlineDirect(currentLoadedStreamUrl, getBestRefererForUrl(currentLoadedStreamUrl, null), null);
+                            } else if (!isWebViewPlayerMode && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                                runSnifferFallback(currentEmbedUrl, getBestRefererForUrl(currentEmbedUrl, null), null);
+                            }
+                        }
+                    }
+                });
+            } else {
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
+            }
 
             MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
 
@@ -1852,63 +1894,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);
             if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-
-            exoPlayer.addListener(new Player.Listener() {
-                @Override
-                public void onIsPlayingChanged(boolean playing) {
-                    isPlaying = playing;
-                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-                    if (isPlaying) resetHideTimer(); else stopHideTimer();
-                }
-
-                @Override
-                public void onPlaybackStateChanged(int playbackState) {
-                    if (playbackState == Player.STATE_BUFFERING) {
-                        if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
-                    } else if (playbackState == Player.STATE_READY) {
-                        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-                        populateTracksFromExoPlayer();
-                    } else if (playbackState == Player.STATE_ENDED) {
-                        isPlaying = false;
-                        btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                        navigateEpisode(true);
-                    }
-                }
-
-                @Override
-                public void onPlayerError(PlaybackException error) {
-                    Log.e("AniLove", "ExoPlayer error (code " + error.errorCode + "): " + error.getMessage(), error);
-                    if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-
-                    boolean isSourceOrNetworkError = (error.getCause() instanceof IOException) ||
-                                                     (error.getCause() instanceof HttpDataSource.HttpDataSourceException) ||
-                                                     (error.getCause() instanceof UnrecognizedInputFormatException) ||
-                                                     (error.errorCode >= 2000 && error.errorCode <= 2008);
-
-                    boolean isDirect = isDirectMediaStream(currentLoadedStreamUrl) || isDirectMediaStream(currentEmbedUrl) || (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains(".mp4"));
-
-                    if (isSourceOrNetworkError && !hasRetriedSniffer) {
-                        hasRetriedSniffer = true;
-
-                        if (isDirect) {
-                            Log.w("AniLove", "Direct media stream error — auto-retrying ExoPlayer directly: " + currentLoadedStreamUrl);
-                            setupExoPlayerOnlineDirect(currentLoadedStreamUrl, getBestRefererForUrl(currentLoadedStreamUrl, null), headers);
-                            return;
-                        }
-
-                        String originalUrl = getIntent().getStringExtra("url");
-                        if (originalUrl == null) originalUrl = getIntent().getStringExtra("videoUrl");
-                        if (originalUrl == null) originalUrl = hlsUrl;
-                        Log.w("AniLove", "Source/Network error — auto-retrying with VideoSniffer for: " + originalUrl);
-                        runSnifferFallback(originalUrl, getBestRefererForUrl(originalUrl, null), headers);
-                    } else if (!isWebViewPlayerMode && !isDirect && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
-                        Toast.makeText(NativePlayerActivity.this, "Source error: Auto-switching to Embedded Web Player...", Toast.LENGTH_LONG).show();
-                        switchPlayerEngine(true);
-                    } else {
-                        Toast.makeText(NativePlayerActivity.this, "Playback issue: Please try refreshing or switching server.", Toast.LENGTH_LONG).show();
-                    }
-                }
-            });
         } catch (Exception e) {
             Log.e("AniLove", "Error setting up Online ExoPlayer", e);
             runSnifferFallback(hlsUrl, referer, headers);
