@@ -685,65 +685,69 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       let activeSubLang = activeStreamSource.subtitleLang || 'English';
       let allSubtitlesJson = '';
 
-      // Check synchronous local subtitle cache first (0ms delay)
-      const cachedSubs = getCachedSubtitles(anime.id, currentEpNum);
-      if (cachedSubs && cachedSubs.length > 0) {
-        const formatted = anonymizeAndSortSubtitleTracks(
-          cachedSubs,
-          settings?.primarySubtitleLang || 'English',
-          settings?.secondarySubtitleLang || 'English 2'
-        );
-        if (formatted && formatted.length > 0) {
-          activeSubUrl = formatted[0].url;
-          activeSubLang = formatted[0].displayLabel;
-          allSubtitlesJson = JSON.stringify(formatted);
+      async function launchNativePlayerWithSubtitles() {
+        try {
+          const rawTracks = await Promise.race([
+            fetchUnifiedSubtitles(anime.id, currentEpNum, 2500),
+            new Promise<any[]>(resolve => setTimeout(() => resolve([]), 2500))
+          ]);
+          if (rawTracks && rawTracks.length > 0) {
+            const formatted = anonymizeAndSortSubtitleTracks(
+              rawTracks,
+              settings?.primarySubtitleLang || 'English',
+              settings?.secondarySubtitleLang || 'English 2'
+            );
+            if (formatted && formatted.length > 0) {
+              activeSubUrl = formatted[0].url;
+              activeSubLang = formatted[0].displayLabel;
+              allSubtitlesJson = JSON.stringify(formatted);
+            }
+          }
+        } catch (e) {
+          console.warn('Error fetching unified subtitles in ProVideoPlayer:', e);
         }
+
+        NativePlayer.play({
+          url: activeStreamSource.url,
+          serverName: activeStreamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
+          sourceName: selectedSource || 'Multi-Lang',
+          availableLanguages: JSON.stringify(activeStreamSource.availableLanguages || []),
+          availableResolutions: JSON.stringify(activeStreamSource.availableResolutions || []),
+          languageQualityMap: JSON.stringify(activeStreamSource.languageQualityMap || {}),
+          targetUrl: activeStreamSource.url,
+          subtitleUrl: activeSubUrl,
+          subtitleLang: activeSubLang,
+          allSubtitles: allSubtitlesJson,
+          title: `${dTitle} - Ep ${currentEpNum}`,
+          hasNext: episodesList.length > currentEpNum,
+          hasPrev: currentEpNum > 1,
+          startFullscreen: false,
+          yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
+          anilistId: anime.id,
+          idMal: anime.idMal || 0,
+          episodeNumber: currentEpNum,
+          audio: audioMode,
+          advancePlayer: settings?.advancePlayerEnabled ?? false,
+          startTime: initialTime || 0,
+        }).then(() => {
+          // Silent background pre-fetch for next episode stream into 20-min cache (0ms instant episode switching)
+          if (episodesList.length > currentEpNum) {
+            setTimeout(() => {
+              resolveEpisodeSource({
+                anime,
+                episodeNumber: currentEpNum + 1,
+                providerId: activeServer,
+                language: audioMode,
+                resolution: quality,
+                serverName: `${selectedSource || 'Multi-Lang'}-Server-1`,
+                sourceName: selectedSource || 'Multi-Lang',
+              }).catch(() => {});
+            }, 2000);
+          }
+        }).catch(() => {});
       }
 
-      // Launch Native Player IMMEDIATELY (0ms delay — never blocked by network calls)
-      NativePlayer.play({
-        url: activeStreamSource.url,
-        serverName: activeStreamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
-        sourceName: selectedSource || 'Multi-Lang',
-        availableLanguages: JSON.stringify(activeStreamSource.availableLanguages || []),
-        availableResolutions: JSON.stringify(activeStreamSource.availableResolutions || []),
-        languageQualityMap: JSON.stringify(activeStreamSource.languageQualityMap || {}),
-        targetUrl: activeStreamSource.url,
-        subtitleUrl: activeSubUrl,
-        subtitleLang: activeSubLang,
-        allSubtitles: allSubtitlesJson,
-        title: `${dTitle} - Ep ${currentEpNum}`,
-        hasNext: episodesList.length > currentEpNum,
-        hasPrev: currentEpNum > 1,
-        startFullscreen: false,
-        yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
-        anilistId: anime.id,
-        idMal: anime.idMal || 0,
-        episodeNumber: currentEpNum,
-        audio: audioMode,
-        advancePlayer: settings?.advancePlayerEnabled ?? false,
-        startTime: initialTime || 0,
-      }).then(() => {
-        // Silent background pre-fetch for next episode stream into 20-min cache (0ms instant episode switching)
-        if (episodesList.length > currentEpNum) {
-          setTimeout(() => {
-            resolveEpisodeSource({
-              anime,
-              episodeNumber: currentEpNum + 1,
-              providerId: activeServer,
-              language: audioMode,
-              resolution: quality,
-              serverName: `${selectedSource || 'Multi-Lang'}-Server-1`,
-              sourceName: selectedSource || 'Multi-Lang',
-            }).catch(() => {});
-          }, 2000);
-        }
-      }).catch(() => {});
-
-      // Asynchronously fetch & cache subtitles for next time if not cached
-      if (!cachedSubs) {
-        fetchUnifiedSubtitles(anime.id, currentEpNum, 3000).catch(() => {});
-      }
+      launchNativePlayerWithSubtitles();
     }
   }, [activeStreamSource?.url, isStreamReady, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
 
