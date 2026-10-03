@@ -415,34 +415,36 @@ public class NativePlayerActivity extends AppCompatActivity {
         @Override
         public void draw(Canvas canvas) {
             Rect bounds = getBounds();
+            float left = bounds.left;
+            float right = bounds.right;
+            float width = bounds.width();
             float centerY = bounds.centerY();
-            float trackHeight = 10f;
+            float trackHeight = 12f;
 
             float top = centerY - (trackHeight / 2f);
             float bottom = centerY + (trackHeight / 2f);
-            float width = bounds.width();
 
             // 1. Base track background
-            canvas.drawRoundRect(0, top, width, bottom, 5f, 5f, bgPaint);
+            canvas.drawRoundRect(left, top, right, bottom, 6f, 6f, bgPaint);
 
             double effDuration = (videoDuration > 0) ? videoDuration : (seekBar != null && seekBar.getMax() > 0 ? seekBar.getMax() : 1440.0);
-            if (effDuration > 0) {
-                // 2. Current progress bar (Drawn BEFORE OP/ED so yellow OP/ED stays on top permanently)
-                float progressRight = (float) ((currentVideoTime / effDuration) * width);
-                canvas.drawRoundRect(0, top, Math.min(width, progressRight), bottom, 5f, 5f, progressPaint);
+            if (effDuration > 0 && width > 0) {
+                // 2. Current progress bar
+                float progressRight = left + (float) ((currentVideoTime / effDuration) * width);
+                canvas.drawRoundRect(left, top, Math.min(right, progressRight), bottom, 6f, 6f, progressPaint);
 
-                // 3. Permanent yellow highlight for Intro (OP)
+                // 3. Permanent vibrant yellow highlight for Intro (OP)
                 if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart) {
-                    float opLeft = (float) ((aniSkipOpStart / effDuration) * width);
-                    float opRight = (float) ((aniSkipOpEnd / effDuration) * width);
-                    canvas.drawRoundRect(opLeft, top, opRight, bottom, 3f, 3f, opEdPaint);
+                    float opLeft = left + (float) ((aniSkipOpStart / effDuration) * width);
+                    float opRight = left + (float) ((aniSkipOpEnd / effDuration) * width);
+                    canvas.drawRoundRect(opLeft, top - 2f, opRight, bottom + 2f, 4f, 4f, opEdPaint);
                 }
 
-                // 4. Permanent yellow highlight for Outro (ED)
+                // 4. Permanent vibrant yellow highlight for Outro (ED)
                 if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart) {
-                    float edLeft = (float) ((aniSkipEdStart / effDuration) * width);
-                    float edRight = (float) ((aniSkipEdEnd / effDuration) * width);
-                    canvas.drawRoundRect(edLeft, top, edRight, bottom, 3f, 3f, opEdPaint);
+                    float edLeft = left + (float) ((aniSkipEdStart / effDuration) * width);
+                    float edRight = left + (float) ((aniSkipEdEnd / effDuration) * width);
+                    canvas.drawRoundRect(edLeft, top - 2f, edRight, bottom + 2f, 4f, 4f, opEdPaint);
                 }
             }
         }
