@@ -207,6 +207,13 @@ export const WatchView: React.FC<WatchViewProps> = ({
     }
   };
 
+  // Automatically tap active source (e.g. Multi-Lang) in background whenever episodeNumber changes
+  useEffect(() => {
+    if (selectedSource) {
+      handleSourceChange(selectedSource);
+    }
+  }, [episodeNumber]);
+
   const handleServerDisplayChange = (serverItem: { displayName: string; internalCode: string }) => {
     setSelectedServerDisplay(serverItem.displayName);
     setSelectedSubServer(serverItem.displayName);
