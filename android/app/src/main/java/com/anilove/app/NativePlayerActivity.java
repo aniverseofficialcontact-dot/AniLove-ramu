@@ -3368,6 +3368,44 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
                 updateNativeSubtitleOverlay(currentMs / 1000.0);
                 checkAutoNextEpisodeTrigger(currentMs, durationMs);
+
+                // Auto-Skip Intro & Outro (AniSkip) in ExoPlayer
+                boolean autoSkip = getIntent().getBooleanExtra("autoSkipIntro", false);
+                if (autoSkip && isPlaying) {
+                    if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
+                        double targetPos = aniSkipOpEnd;
+                        aniSkipOpStart = -1; // Clear trigger to prevent repeat loops
+                        exoPlayer.seekTo((long) (targetPos * 1000L));
+                        Toast.makeText(NativePlayerActivity.this, "Auto-skipped Opening Theme ⏭️", Toast.LENGTH_SHORT).show();
+                    } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
+                        double targetPos = aniSkipEdEnd;
+                        aniSkipEdStart = -1; // Clear trigger to prevent repeat loops
+                        exoPlayer.seekTo((long) (targetPos * 1000L));
+                        Toast.makeText(NativePlayerActivity.this, "Auto-skipped Ending Theme ⏭️", Toast.LENGTH_SHORT).show();
+                    }
+                }
+
+                // Show / Hide Skip Intro Button during OP / ED
+                TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
+                if (btnSkipIntro != null) {
+                    if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
+                        btnSkipIntro.setText("⏭️ Skip Intro");
+                        btnSkipIntro.setVisibility(View.VISIBLE);
+                        btnSkipIntro.setTag(aniSkipOpEnd);
+                    } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
+                        btnSkipIntro.setText("⏭️ Skip Ending");
+                        btnSkipIntro.setVisibility(View.VISIBLE);
+                        btnSkipIntro.setTag(aniSkipEdEnd);
+                    } else {
+                        if (!isControlsVisible) {
+                            btnSkipIntro.setVisibility(View.GONE);
+                        } else {
+                            btnSkipIntro.setText("+85s Skip");
+                            btnSkipIntro.setTag(null);
+                        }
+                    }
+                }
+
                 if (isPlaying && current > 0) {
                     broadcastProgress(current, duration);
                 }
@@ -3496,7 +3534,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (targetMalId <= 0) return;
 
             try {
-                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + targetMalId + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap";
+                String reqUrl = "https://api.aniskip.com/v2/skip-times/" + targetMalId + "/" + episodeNumber + "?types=op&types=ed&types=mixed-op&types=mixed-ed&types=recap&episodeLength=0";
                 URL url = new URL(reqUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -3519,7 +3557,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             for (int i = 0; i < results.length(); i++) {
                                 JSONObject item = results.optJSONObject(i);
                                 if (item == null) continue;
-                                String skipType = item.optString("skipType", "");
+                                String skipType = item.optString("skipType", item.optString("skip_type", item.optString("type", "")));
                                 JSONObject interval = item.optJSONObject("interval");
                                 if (interval != null) {
                                     double start = interval.optDouble("startTime", -1);
