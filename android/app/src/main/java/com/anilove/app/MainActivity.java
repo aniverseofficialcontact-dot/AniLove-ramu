@@ -207,6 +207,14 @@ public class MainActivity extends BridgeActivity {
         forcePortraitOrientation();
         hideSystemBars();
 
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+            if (webView != null) {
+                webView.onResume();
+                webView.resumeTimers();
+            }
+        } catch (Exception ignored) {}
+
         if (pendingBackToDetails) {
             pendingBackToDetails = false;
             dispatchBackToDetails();
@@ -217,6 +225,17 @@ public class MainActivity extends BridgeActivity {
             handleDeepLinkIntent(getIntent());
             getIntent().setData(null); // Clear data so it is only processed once
         }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+            if (webView != null) {
+                webView.onPause();
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

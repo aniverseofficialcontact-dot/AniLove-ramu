@@ -3896,6 +3896,37 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        if (exoPlayer != null && !isInPictureInPictureMode()) {
+            try {
+                if (exoPlayer.getPlaybackState() == Player.STATE_IDLE) {
+                    exoPlayer.prepare();
+                }
+                exoPlayer.setPlayWhenReady(true);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (exoPlayerView != null && exoPlayer != null) {
+            try {
+                exoPlayerView.setPlayer(exoPlayer);
+                if (exoPlayer.getPlaybackState() == Player.STATE_IDLE) {
+                    exoPlayer.prepare();
+                }
+                exoPlayer.setPlayWhenReady(true);
+                isPlaying = true;
+                if (btnPlayPause != null) {
+                    btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         if (exoPlayer != null && !isInPictureInPictureMode()) {
@@ -3914,7 +3945,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             try {
                 exoPlayer.setPlayWhenReady(false);
                 exoPlayer.pause();
-                exoPlayer.stop();
             } catch (Exception ignored) {}
         }
     }
