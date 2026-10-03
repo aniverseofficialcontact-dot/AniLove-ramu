@@ -58,14 +58,14 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
     if (expandedCardIds[key] !== undefined) {
       return expandedCardIds[key];
     }
-    // By default, expand the current anime card; keep others clean & compact
-    return Boolean(isCurrentAnime);
+    // By default, keep all cards collapsed & compact (including current anime)
+    return false;
   };
 
   const toggleCardExpanded = (itemId: number, isCurrentAnime: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpandedCardIds(prev => {
-      const currentlyExpanded = prev[itemId] !== undefined ? prev[itemId] : isCurrentAnime;
+      const currentlyExpanded = prev[itemId] !== undefined ? prev[itemId] : false;
       return {
         ...prev,
         [itemId]: !currentlyExpanded,
@@ -176,15 +176,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
       list = list.filter(item => item.format === 'OVA' || item.format === 'SPECIAL' || item.format === 'ONA');
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(item => 
-        item.title.toLowerCase().includes(q) ||
-        (item.romajiTitle && item.romajiTitle.toLowerCase().includes(q)) ||
-        (item.releaseYear && String(item.releaseYear).includes(q))
-      );
-    }
-
     return list;
   };
 
@@ -206,177 +197,137 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
 
   return (
     <div className="space-y-5 sm:space-y-6 text-left animate-in fade-in duration-200 w-full min-w-0">
-      {/* Header Banner */}
-      <div className="relative rounded-2xl bg-gradient-to-br from-[#12172b] via-[#101424] to-[#0c0f1d] border border-indigo-500/20 p-4 sm:p-6 overflow-hidden shadow-xl w-full min-w-0">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-
-        <div className="relative z-10 space-y-3 sm:space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-            <div className="flex items-start sm:items-center gap-2.5 min-w-0">
-              <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shrink-0 mt-0.5 sm:mt-0">
-                <Compass className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base sm:text-xl font-black text-white tracking-tight">
-                    Franchise Watch Order
-                  </h3>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 whitespace-nowrap">
-                    <Calendar className="w-3 h-3 text-indigo-400" />
-                    Chronological Timeline
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-none">
-                  Official sequential release order with instant episode stream launchers for all seasons and movies
-                </p>
-              </div>
+      {/* Header Info (Borderless Design) */}
+      <div className="space-y-3 sm:space-y-4 w-full min-w-0 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shrink-0 mt-0.5 sm:mt-0">
+              <Compass className="w-5 h-5" />
             </div>
-
-            {/* Quick stats badge */}
-            {orderData && (
-              <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300 shrink-0 self-start sm:self-auto">
-                <div className="flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="font-semibold text-white">{orderData.totalEntries}</span> Releases
-                </div>
-                {orderData.totalEstimatedEpisodes && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-600">•</span>
-                    <Tv className="w-3.5 h-3.5 text-indigo-400" />
-                    <span className="font-semibold text-white">{orderData.totalEstimatedEpisodes}</span> Eps
-                  </div>
-                )}
-                {orderData.totalEstimatedHours && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-600">•</span>
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{orderData.totalEstimatedHours}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Franchise Summary Description */}
-          {orderData?.summary && (
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-4xl break-words">
-              {orderData.summary}
-            </p>
-          )}
-
-          {/* Progress Tracker Bar */}
-          {totalInList > 1 && (
-            <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-medium">Your Franchise Progress</span>
-                <span className="font-bold text-indigo-400">
-                  {completedCount} of {totalInList} watched ({percentComplete}%)
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base sm:text-xl font-black text-white tracking-tight">
+                  Franchise Watch Order
+                </h3>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 whitespace-nowrap">
+                  <Calendar className="w-3 h-3 text-indigo-400" />
+                  Chronological Timeline
                 </span>
               </div>
-              <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
-                  style={{ width: `${percentComplete}%` }}
-                />
+              <p className="text-xs text-slate-400 mt-1 line-clamp-2 sm:line-clamp-none">
+                Official sequential release order with instant episode stream launchers for all seasons and movies
+              </p>
+            </div>
+          </div>
+
+          {/* Quick stats badge */}
+          {orderData && (
+            <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300 shrink-0 self-start sm:self-auto">
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="font-semibold text-white">{orderData.totalEntries}</span> Releases
               </div>
+              {orderData.totalEstimatedEpisodes && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600">•</span>
+                  <Tv className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="font-semibold text-white">{orderData.totalEstimatedEpisodes}</span> Eps
+                </div>
+              )}
+              {orderData.totalEstimatedHours && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600">•</span>
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{orderData.totalEstimatedHours}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* Franchise Summary Description */}
+        {orderData?.summary && (
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-4xl break-words">
+            {orderData.summary}
+          </p>
+        )}
+
+        {/* Progress Tracker Bar */}
+        {totalInList > 1 && (
+          <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Your Franchise Progress</span>
+              <span className="font-bold text-indigo-400">
+                {completedCount} of {totalInList} watched ({percentComplete}%)
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                style={{ width: `${percentComplete}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Control Bar: Filter Chips & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1 w-full min-w-0">
-        {/* Filter chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none w-full sm:flex-1 min-w-0 max-w-full">
-          <button
-            type="button"
-            onClick={() => setFilterType('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-              filterType === 'all'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            All Releases ({rawList.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('series')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-              filterType === 'series'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            Series ({seriesCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('essential')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-              filterType === 'essential'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            Main Story Only
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('movies')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-              filterType === 'movies'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            Movies ({moviesCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterType('ovas')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-              filterType === 'ovas'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            Specials & OVAs ({ovasCount})
-          </button>
-        </div>
-
-        {/* Quick Search & Expand/Collapse All */}
-        <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
-          <div className="relative flex-1 sm:w-60 min-w-0">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search seasons or arcs..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => toggleAllCards(!allExpanded)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition shrink-0 cursor-pointer"
-            title={allExpanded ? 'Collapse all cards to compact view' : 'Expand all cards with full details'}
-          >
-            {allExpanded ? (
-              <>
-                <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden min-[420px]:inline">Collapse All</span>
-              </>
-            ) : (
-              <>
-                <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden min-[420px]:inline">Expand All</span>
-              </>
-            )}
-          </button>
-        </div>
+      {/* Control Bar: Filter Chips */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none w-full min-w-0 pt-1">
+        <button
+          type="button"
+          onClick={() => setFilterType('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+            filterType === 'all'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          All Releases ({rawList.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType('series')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+            filterType === 'series'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          Series ({seriesCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType('essential')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+            filterType === 'essential'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          Main Story Only
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType('movies')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+            filterType === 'movies'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          Movies ({moviesCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterType('ovas')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+            filterType === 'ovas'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          Specials & OVAs ({ovasCount})
+        </button>
       </div>
 
       {/* Loading skeleton */}
