@@ -69,6 +69,14 @@ public class NativePlayerPlugin extends Plugin {
         }
 
         try {
+            // Terminate existing NativePlayerActivity instance to ensure complete deallocation and fresh activity launch
+            if (NativePlayerActivity.currentInstance != null) {
+                try {
+                    NativePlayerActivity.currentInstance.finish();
+                    NativePlayerActivity.currentInstance = null;
+                } catch (Exception ignored) {}
+            }
+
             NativePlayerActivity.navigationListener = new NativePlayerActivity.PlayerNavigationListener() {
                 @Override
                 public void onNavigate(boolean next) {
@@ -127,7 +135,7 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("subtitleLang", call.getString("subtitleLang", "English"));
             intent.putExtra("allSubtitles", call.getString("allSubtitles"));
             intent.putExtra("startTime", call.getInt("startTime", 0));
-            intent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             getActivity().startActivity(intent);
             call.resolve();
         } catch (Exception e) {
