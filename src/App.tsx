@@ -55,6 +55,7 @@ const ReelsView = lazy(() => import('./components/ReelsView').then(m => ({ defau
 const ArcadeView = lazy(() => import('./components/ArcadeView').then(m => ({ default: m.ArcadeView })));
 const ScheduleView = lazy(() => import('./components/ScheduleView').then(m => ({ default: m.ScheduleView })));
 const CardInventoryView = lazy(() => import('./components/CardInventoryView').then(m => ({ default: m.CardInventoryView })));
+const AnimeNewsView = lazy(() => import('./components/AnimeNewsView').then(m => ({ default: m.AnimeNewsView })));
 import { InteractiveAnime3DCardModal } from './components/InteractiveAnime3DCardModal';
 import { PinUnlockModal } from './components/PinUnlockModal';
 import { QuoteOfTheDay } from './components/QuoteOfTheDay';
@@ -1466,6 +1467,17 @@ export function App() {
                 onBack={() => handleSelectTab('home')}
                 onOpenAnimeDetails={handleOpenDetails}
               />
+            )}
+
+            {/* VIEW 9: ANIME NEWS & TRENDS (MAL + ANILIST SYNC) */}
+            {currentTab === 'news' && (
+              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
+                <AnimeNewsView
+                  library={library}
+                  onOpenDetails={handleOpenDetails}
+                  onShowToast={showToast}
+                />
+              </Suspense>
             )}
           </>
         )}

@@ -4,7 +4,17 @@ import { UserSettings, AppNotification, Anime } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { GridMenuModal } from './GridMenuModal';
 
-export type TabType = 'home' | 'discover' | 'reels' | 'arcade' | 'schedule' | 'library' | 'cards' | 'account' | 'downloads';
+export type TabType =
+  | 'home'
+  | 'discover'
+  | 'reels'
+  | 'arcade'
+  | 'schedule'
+  | 'library'
+  | 'cards'
+  | 'account'
+  | 'downloads'
+  | 'news';
 
 interface NavbarProps {
   currentTab: TabType;
@@ -202,7 +212,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right Section: Cloud Sync + Session Lock + Notifications (Downloads and Gacha removed from top bar) */}
+          {/* Right Section: Cloud Sync + Session Lock + Notifications */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Quick Lock Session Button */}
             {isPinConfigured && !isPinLocked && onLockSession && (

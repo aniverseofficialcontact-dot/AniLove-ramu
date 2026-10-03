@@ -14,7 +14,8 @@ import {
   Lock,
   ChevronDown,
   ChevronRight,
-  Bot
+  Bot,
+  Newspaper
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TabType } from './Navbar';
@@ -104,8 +105,13 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
     },
   ];
 
-  // Top-level standalone menu items (other than Home)
+  // Top-level standalone menu items
   const standaloneMenuItems = [
+    {
+      id: 'news' as TabType,
+      label: 'News & Trends',
+      icon: Newspaper,
+    },
     {
       id: 'schedule' as TabType,
       label: 'Schedule',
@@ -166,7 +172,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
 
           {/* Navigation Links List */}
           <div className="px-3 py-4 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
-            {/* 1. Collapsible Home Group (Contains lower navigation bar options, without Account) */}
+            {/* 1. Collapsible Home Group */}
             <div className="rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02]">
               <button
                 onClick={() => setIsHomeExpanded((prev) => !prev)}
@@ -278,7 +284,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
             )}
           </div>
 
-          {/* Bottom Profile Footer (Image 1 status row removed) */}
+          {/* Bottom Profile Footer */}
           <div className="p-4 border-t border-white/5 bg-neutral-900/40">
             <div
               onClick={() => handleNavigate('account')}
@@ -292,7 +298,6 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
                     alt="Profile Avatar"
                     className="w-8 h-8 rounded-full object-cover border border-white/20 shadow-md shrink-0"
                     onError={(e) => {
-                      // If remote image fails to load, replace with initial badge
                       const target = e.currentTarget;
                       target.style.display = 'none';
                       if (target.nextElementSibling) {
