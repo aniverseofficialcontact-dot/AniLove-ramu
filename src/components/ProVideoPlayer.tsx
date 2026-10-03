@@ -433,6 +433,80 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const activeStreamSource = resolvedEp === episodeNumber ? streamSource : null;
   const isStreamReady = resolvedEp === episodeNumber && streamStatus === 'ready';
 
+  const triggerNativePlayerLaunch = (src: StreamSource, targetEp: number) => {
+    if (!Capacitor.isNativePlatform() || !src?.url) return;
+
+    const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+    const currentEpNum = Number(targetEp);
+
+    (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
+    (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
+    (NativePlayer as any).removeAllListeners?.('onQualityChange');
+    (NativePlayer as any).removeAllListeners?.('onLanguageChange');
+
+    NativePlayer.addListener('onEpisodeNavigation', (data) => {
+      if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
+      else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
+    });
+    NativePlayer.addListener('onBackButtonPressed', () => {
+      if (onClosePlayer) onClosePlayer();
+    });
+    NativePlayer.addListener('onQualityChange', (data: any) => {
+      if (data && data.quality) {
+        setQuality(data.quality as StreamResolution);
+      }
+    });
+    NativePlayer.addListener('onLanguageChange', (data: any) => {
+      if (data && data.language) {
+        const l = String(data.language).toLowerCase();
+        if (l.includes('jap') || l.includes('sub')) setAudioMode('SUB');
+        else if (l.includes('eng') || l.includes('dub')) setAudioMode('DUB');
+      }
+    });
+
+    let activeSubUrl = src.subtitleUrl;
+    let activeSubLang = src.subtitleLang || 'English';
+    let allSubtitlesJson = '';
+
+    const cachedSubs = getCachedSubtitles(anime.id, currentEpNum);
+    if (cachedSubs && cachedSubs.length > 0) {
+      const formatted = anonymizeAndSortSubtitleTracks(
+        cachedSubs,
+        settings?.primarySubtitleLang || 'English',
+        settings?.secondarySubtitleLang || 'English 2'
+      );
+      if (formatted && formatted.length > 0) {
+        activeSubUrl = formatted[0].url;
+        activeSubLang = formatted[0].displayLabel;
+        allSubtitlesJson = JSON.stringify(formatted);
+      }
+    }
+
+    NativePlayer.play({
+      url: src.url,
+      serverName: src.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
+      sourceName: selectedSource || 'Multi-Lang',
+      availableLanguages: JSON.stringify(src.availableLanguages || []),
+      availableResolutions: JSON.stringify(src.availableResolutions || []),
+      languageQualityMap: JSON.stringify(src.languageQualityMap || {}),
+      targetUrl: src.url,
+      subtitleUrl: activeSubUrl,
+      subtitleLang: activeSubLang,
+      allSubtitles: allSubtitlesJson,
+      title: `${dTitle} - Ep ${currentEpNum}`,
+      hasNext: episodesList.length > currentEpNum,
+      hasPrev: currentEpNum > 1,
+      startFullscreen: false,
+      yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
+      anilistId: anime.id,
+      idMal: anime.idMal || 0,
+      episodeNumber: currentEpNum,
+      audio: audioMode,
+      advancePlayer: settings?.advancePlayerEnabled ?? false,
+      startTime: initialTime || 0,
+    }).catch(() => {});
+  };
+
   // Main stream resolution effect — with server URL cache for instant server switching
   useEffect(() => {
     let cancelled = false;
@@ -462,6 +536,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       setResolvedEp(episodeNumber);
       setStreamStatus('ready');
       setStreamMessage('');
+      triggerNativePlayerLaunch(cachedSource, episodeNumber);
       return;
     }
 
@@ -498,6 +573,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           setResolvedEp(episodeNumber);
           setStreamStatus('ready');
           setStreamMessage('');
+          triggerNativePlayerLaunch(result.source, episodeNumber);
           return;
         }
 
@@ -638,90 +714,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       document.documentElement.style.overscrollBehavior = prevOverscroll;
     };
   }, [streamStatus]);
-
-  const lastPlayCallUrl = useRef<string | null>(null);
-
-  // Auto-launch Hybrid Native Player for Inline Experience on Android
-  useEffect(() => {
-    if (Capacitor.isNativePlatform() && activeStreamSource?.url && isStreamReady) {
-      const currentEpNum = Number(episodeNumber);
-      if (lastPlayCallUrl.current === activeStreamSource.url) {
-        return;
-      }
-      lastPlayCallUrl.current = activeStreamSource.url;
-
-      const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-
-      (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
-      (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
-      (NativePlayer as any).removeAllListeners?.('onQualityChange');
-      (NativePlayer as any).removeAllListeners?.('onLanguageChange');
-
-      NativePlayer.addListener('onEpisodeNavigation', (data) => {
-        if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
-        else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
-      });
-      NativePlayer.addListener('onBackButtonPressed', () => {
-        if (onClosePlayer) onClosePlayer();
-      });
-      NativePlayer.addListener('onQualityChange', (data: any) => {
-        if (data && data.quality) {
-          setQuality(data.quality as StreamResolution);
-        }
-      });
-      NativePlayer.addListener('onLanguageChange', (data: any) => {
-        if (data && data.language) {
-          const l = String(data.language).toLowerCase();
-          if (l.includes('jap') || l.includes('sub')) setAudioMode('SUB');
-          else if (l.includes('eng') || l.includes('dub')) setAudioMode('DUB');
-        }
-      });
-
-      let activeSubUrl = activeStreamSource.subtitleUrl;
-      let activeSubLang = activeStreamSource.subtitleLang || 'English';
-      let allSubtitlesJson = '';
-
-      // Check synchronous local subtitle cache first (0ms delay)
-      const cachedSubs = getCachedSubtitles(anime.id, currentEpNum);
-      if (cachedSubs && cachedSubs.length > 0) {
-        const formatted = anonymizeAndSortSubtitleTracks(
-          cachedSubs,
-          settings?.primarySubtitleLang || 'English',
-          settings?.secondarySubtitleLang || 'English 2'
-        );
-        if (formatted && formatted.length > 0) {
-          activeSubUrl = formatted[0].url;
-          activeSubLang = formatted[0].displayLabel;
-          allSubtitlesJson = JSON.stringify(formatted);
-        }
-      }
-
-      // Launch Native Player IMMEDIATELY (0ms delay — never blocked by network calls)
-      NativePlayer.play({
-        url: activeStreamSource.url,
-        serverName: activeStreamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
-        sourceName: selectedSource || 'Multi-Lang',
-        availableLanguages: JSON.stringify(activeStreamSource.availableLanguages || []),
-        availableResolutions: JSON.stringify(activeStreamSource.availableResolutions || []),
-        languageQualityMap: JSON.stringify(activeStreamSource.languageQualityMap || {}),
-        targetUrl: activeStreamSource.url,
-        subtitleUrl: activeSubUrl,
-        subtitleLang: activeSubLang,
-        allSubtitles: allSubtitlesJson,
-        title: `${dTitle} - Ep ${currentEpNum}`,
-        hasNext: episodesList.length > currentEpNum,
-        hasPrev: currentEpNum > 1,
-        startFullscreen: false,
-        yOffset: playerContainerRef.current ? Math.round(playerContainerRef.current.getBoundingClientRect().top) : 0,
-        anilistId: anime.id,
-        idMal: anime.idMal || 0,
-        episodeNumber: currentEpNum,
-        audio: audioMode,
-        advancePlayer: settings?.advancePlayerEnabled ?? false,
-        startTime: initialTime || 0,
-      }).catch(() => {});
-    }
-  }, [activeStreamSource?.url, isStreamReady, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
 
   useEffect(() => {
     return () => {
