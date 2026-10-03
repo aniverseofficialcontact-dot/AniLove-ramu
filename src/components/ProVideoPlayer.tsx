@@ -424,31 +424,12 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Synchronously invalidate streamSource during render whenever episode, anime, or server source changes
-  const prevEpRef = useRef(episodeNumber);
-  const prevAnimeRef = useRef(anime.id);
-  const prevSourceRef = useRef(selectedSource);
-  const prevSubServerRef = useRef(selectedSubServerName);
+  // Episode tracking for atomic state sync across async API calls
+  const [resolvedEp, setResolvedEp] = useState<number>(episodeNumber);
 
-  if (
-    prevEpRef.current !== episodeNumber ||
-    prevAnimeRef.current !== anime.id ||
-    prevSourceRef.current !== selectedSource ||
-    prevSubServerRef.current !== selectedSubServerName
-  ) {
-    prevEpRef.current = episodeNumber;
-    prevAnimeRef.current = anime.id;
-    prevSourceRef.current = selectedSource;
-    prevSubServerRef.current = selectedSubServerName;
-
-    setStreamSource(null);
-    setStreamStatus('loading');
-    setStreamMessage(`Connecting to ${selectedSource || 'Multi-Lang'}...`);
-    serverUrlCache.current = {};
-    episodeCacheKey.current = '';
-    baseSourceRef.current = null;
-    lastLaunchedKey.current = null;
-  }
+  // Active stream source is ONLY valid if it matches the current episodeNumber prop
+  const activeStreamSource = resolvedEp === episodeNumber ? streamSource : null;
+  const isStreamReady = resolvedEp === episodeNumber && streamStatus === 'ready';
 
   // Main stream resolution effect — with server URL cache for instant server switching
   useEffect(() => {
@@ -474,13 +455,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         selectedServerName: requestedServer,
       };
       setStreamSource(cachedSource);
+      setResolvedEp(episodeNumber);
       setStreamStatus('ready');
       setStreamMessage('');
       return;
     }
 
     // ── SLOW PATH: First load or source/server/episode changed — call API ───────────
-    setStreamSource(null);
     setStreamStatus('loading');
     setStreamMessage(`Connecting to ${activeSrcName} (${requestedServer})...`);
 
@@ -509,17 +490,21 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           }
           baseSourceRef.current = result.source;
           setStreamSource(result.source);
+          setResolvedEp(episodeNumber);
           setStreamStatus('ready');
           setStreamMessage('');
           return;
         }
 
         setStreamSource(null);
+        setResolvedEp(episodeNumber);
         setStreamStatus('error');
         setStreamMessage(result.message || 'Server connection timed out. Please select another server or language.');
       })
       .catch(() => {
         if (cancelled) return;
+        setStreamSource(null);
+        setResolvedEp(episodeNumber);
         setStreamStatus('error');
         setStreamMessage('Failed to connect to streaming server. Try switching server.');
       });
@@ -653,9 +638,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   // Auto-launch Hybrid Native Player for Inline Experience on Android
   useEffect(() => {
-    if (Capacitor.isNativePlatform() && streamSource?.url && streamStatus === 'ready') {
+    if (Capacitor.isNativePlatform() && activeStreamSource?.url && isStreamReady) {
       const currentEpNum = Number(episodeNumber);
-      const launchKey = `${anime.id}__ep${currentEpNum}__${streamSource.url}__${audioMode}__${activeServer}__${selectedSubServerName || ''}`;
+      const launchKey = `${anime.id}__ep${currentEpNum}__${activeStreamSource.url}__${audioMode}__${activeServer}__${selectedSubServerName || ''}`;
       if (lastLaunchedKey.current === launchKey) return;
       lastLaunchedKey.current = launchKey;
 
@@ -686,8 +671,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         }
       });
 
-      let activeSubUrl = streamSource.subtitleUrl;
-      let activeSubLang = streamSource.subtitleLang || 'English';
+      let activeSubUrl = activeStreamSource.subtitleUrl;
+      let activeSubLang = activeStreamSource.subtitleLang || 'English';
       let allSubtitlesJson = '';
 
       async function launchNativePlayerWithSubtitles() {
@@ -709,17 +694,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           console.warn('Error fetching unified subtitles in ProVideoPlayer:', e);
         }
 
-        // Stale guard check: Ensure user hasn't switched episodes while async subtitles were fetching
-        if (prevEpRef.current !== currentEpNum) return;
-
         NativePlayer.play({
-          url: streamSource.url,
-          serverName: streamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
+          url: activeStreamSource.url,
+          serverName: activeStreamSource.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
           sourceName: selectedSource || 'Multi-Lang',
-          availableLanguages: JSON.stringify(streamSource.availableLanguages || []),
-          availableResolutions: JSON.stringify(streamSource.availableResolutions || []),
-          languageQualityMap: JSON.stringify(streamSource.languageQualityMap || {}),
-          targetUrl: streamSource.url,
+          availableLanguages: JSON.stringify(activeStreamSource.availableLanguages || []),
+          availableResolutions: JSON.stringify(activeStreamSource.availableResolutions || []),
+          languageQualityMap: JSON.stringify(activeStreamSource.languageQualityMap || {}),
+          targetUrl: activeStreamSource.url,
           subtitleUrl: activeSubUrl,
           subtitleLang: activeSubLang,
           allSubtitles: allSubtitlesJson,
@@ -739,7 +721,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
       launchNativePlayerWithSubtitles();
     }
-  }, [streamSource?.url, streamStatus, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
+  }, [activeStreamSource?.url, isStreamReady, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
 
   useEffect(() => {
     return () => {
