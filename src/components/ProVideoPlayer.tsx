@@ -634,15 +634,24 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     };
   }, [streamStatus]);
 
-  const lastLaunchedKey = useRef<string | null>(null);
+  const lastLaunchedEp = useRef<number | null>(null);
+  const lastLaunchedUrl = useRef<string | null>(null);
+
+  // Reset launch locks whenever episode number or anime changes
+  useEffect(() => {
+    lastLaunchedEp.current = null;
+    lastLaunchedUrl.current = null;
+  }, [episodeNumber, anime.id]);
 
   // Auto-launch Hybrid Native Player for Inline Experience on Android
   useEffect(() => {
     if (Capacitor.isNativePlatform() && activeStreamSource?.url && isStreamReady) {
       const currentEpNum = Number(episodeNumber);
-      const launchKey = `${anime.id}__ep${currentEpNum}__${activeStreamSource.url}__${audioMode}__${activeServer}__${selectedSubServerName || ''}`;
-      if (lastLaunchedKey.current === launchKey) return;
-      lastLaunchedKey.current = launchKey;
+      if (lastLaunchedEp.current === currentEpNum && lastLaunchedUrl.current === activeStreamSource.url) {
+        return;
+      }
+      lastLaunchedEp.current = currentEpNum;
+      lastLaunchedUrl.current = activeStreamSource.url;
 
       const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
