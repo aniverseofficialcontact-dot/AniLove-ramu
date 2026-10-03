@@ -432,6 +432,13 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     const requestedServer = selectedSubServerName || 'Server 1';
     const cacheKey = `${activeSrcName}_${anime.id}_${episodeNumber}_${activeServer}_${audioMode}_${requestedServer}`;
 
+    // Purge previous episode caches immediately if cacheKey changes
+    if (episodeCacheKey.current !== cacheKey) {
+      serverUrlCache.current = {};
+      baseSourceRef.current = null;
+      lastLaunchedKey.current = null;
+    }
+
     // ── FAST PATH: URL already cached for this exact source + episode + server ─────
     if (episodeCacheKey.current === cacheKey && serverUrlCache.current[requestedServer] && baseSourceRef.current) {
       const cachedUrl = serverUrlCache.current[requestedServer];

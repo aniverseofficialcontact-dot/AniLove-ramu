@@ -58,11 +58,6 @@ public class NativePlayerPlugin extends Plugin {
         String url = call.getString("url");
         long now = System.currentTimeMillis();
 
-        if (url != null && url.equals(lastPlayUrl) && (now - lastPlayTime < 2000)) {
-            Log.i("NativePlayerPlugin", "Ignoring rapid duplicate play() call for: " + url);
-            call.resolve();
-            return;
-        }
         lastPlayUrl = url;
         lastPlayTime = now;
 

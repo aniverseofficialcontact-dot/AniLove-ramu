@@ -570,6 +570,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
         setIntent(intent);
 
+        StreamCache.clear();
         cleanupPlaybackEngines();
 
         View touchWall = findViewById(R.id.touch_wall);
@@ -1845,6 +1846,8 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayer.setMediaSource(mediaSource);
             if (startTime > 0) {
                 exoPlayer.seekTo(startTime * 1000L);
+            } else {
+                exoPlayer.seekTo(0L);
             }
             exoPlayer.prepare();
             exoPlayer.setPlayWhenReady(true);

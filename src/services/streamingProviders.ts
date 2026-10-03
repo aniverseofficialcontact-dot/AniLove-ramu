@@ -134,11 +134,19 @@ export const isStreamProviderId = (providerId: string): providerId is StreamServ
  * Universal Fetch Helper supporting CapacitorHttp (Native Android) and standard fetch (Web)
  */
 async function fetchWithTimeout(url: string, headers: Record<string, string> = {}, timeoutMs: number = 15000): Promise<any> {
+  const defaultNoCacheHeaders = {
+    Accept: 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    ...headers,
+  };
+
   if (Capacitor.isNativePlatform()) {
     try {
       const httpRes = await CapacitorHttp.get({
         url,
-        headers: { Accept: 'application/json', ...headers },
+        headers: defaultNoCacheHeaders,
       });
       if (httpRes.status >= 200 && httpRes.status < 300 && httpRes.data) {
         return typeof httpRes.data === 'string' ? JSON.parse(httpRes.data) : httpRes.data;
@@ -152,7 +160,7 @@ async function fetchWithTimeout(url: string, headers: Record<string, string> = {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      headers: { Accept: 'application/json', ...headers },
+      headers: defaultNoCacheHeaders,
       signal: controller.signal,
     });
     if (res.ok) {
@@ -215,7 +223,7 @@ async function resolveMultiLangSource(
   }
 
   if (!cachedData) {
-    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}`;
+    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}&_t=${Date.now()}`;
     const res = await fetchWithTimeout(reqUrl, {}, 15000);
 
     if (res && Array.isArray(res.audio_tracks) && res.audio_tracks.length > 0) {

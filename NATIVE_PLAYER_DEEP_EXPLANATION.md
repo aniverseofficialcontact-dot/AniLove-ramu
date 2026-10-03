@@ -69,7 +69,8 @@ AniLove powers video delivery through **4 distinct streaming sources**:
 - **Dynamic Multi-Audio**: Supports `JAP (Sub)`, `ENG (Dub)`, `Hindi`, `Tamil`, `Telugu`, `French`, `Spanish`, `Russian`...
 - **Dynamic Quality Maps**: Returns specific quality options (`1080p`, `720p`, `480p`, `360p`) mapped to each audio language.
 - **Header Injection**: Requires `Referer: https://netfilm.world/` for `hakunaymatata.com` / `netfilm.world` CDN streams.
-- **20-Min Local Cache**: Stores resolved streams under `MultiLang_{cleanTitle}_s1_ep{ep}` for instant audio/resolution switching with **0ms latency**.
+- **100% Fresh Episode Transitions**: Appends `&_t=${Date.now()}` with `Cache-Control: no-cache, no-store` headers to `CapacitorHttp` calls, preventing stale OkHttp response caching on episode switches.
+- **20-Min Local Cache**: Stores resolved streams under `MultiLang_{cleanTitle}_s1_ep{ep}` for instant audio/resolution switching with **0ms latency**. Synchronously cleared on episode change.
 
 ### 2️⃣ AnimeDekho (`AnimeDekho`)
 - **API**: `https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?anilistId={anilistId}&ep={ep}`
