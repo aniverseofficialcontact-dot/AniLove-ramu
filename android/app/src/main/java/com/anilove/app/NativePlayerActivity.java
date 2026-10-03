@@ -3426,13 +3426,37 @@ public class NativePlayerActivity extends AppCompatActivity {
         Executors.newSingleThreadExecutor().execute(() -> {
             int targetMalId = idMal;
 
-            // If MAL ID is 0 but anilistId > 0, resolve MAL ID from AniList GraphQL API first
+            // 1. Resolve MAL ID via AniZip API if idMal <= 0
+            if (targetMalId <= 0 && anilistId > 0) {
+                try {
+                    URL zipUrl = new URL("https://api.ani.zip/mappings?anilist_id=" + anilistId);
+                    HttpURLConnection zipConn = (HttpURLConnection) zipUrl.openConnection();
+                    zipConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+                    zipConn.setConnectTimeout(4000);
+                    zipConn.setReadTimeout(4000);
+                    if (zipConn.getResponseCode() == 200) {
+                        BufferedReader in = new BufferedReader(new InputStreamReader(zipConn.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) sb.append(line);
+                        in.close();
+                        JSONObject obj = new JSONObject(sb.toString());
+                        JSONObject mappings = obj.optJSONObject("mappings");
+                        if (mappings != null) {
+                            targetMalId = mappings.optInt("mal_id", mappings.optInt("mal", 0));
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // 2. Fallback to AniList GraphQL API if MAL ID is still 0
             if (targetMalId <= 0 && anilistId > 0) {
                 try {
                     URL gqlUrl = new URL("https://graphql.anilist.co");
                     HttpURLConnection gqlConn = (HttpURLConnection) gqlUrl.openConnection();
                     gqlConn.setRequestMethod("POST");
                     gqlConn.setRequestProperty("Content-Type", "application/json");
+                    gqlConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
                     gqlConn.setConnectTimeout(5000);
                     gqlConn.setReadTimeout(5000);
                     gqlConn.setDoOutput(true);
@@ -3474,6 +3498,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 URL url = new URL(reqUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+                conn.setRequestProperty("Accept", "application/json");
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(6000);
 
@@ -3510,6 +3536,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             Log.i("AniSkip", "Loaded OP: [" + aniSkipOpStart + "s - " + aniSkipOpEnd + "s] | ED: [" + aniSkipEdStart + "s - " + aniSkipEdEnd + "s]");
                             runOnUiThread(() -> {
                                 if (opEdSeekBarDrawable != null) opEdSeekBarDrawable.invalidateSelf();
+                                if (seekBar != null) seekBar.invalidate();
                             });
                         }
                     }
