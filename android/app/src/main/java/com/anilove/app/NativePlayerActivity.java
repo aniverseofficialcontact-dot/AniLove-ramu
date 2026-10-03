@@ -3911,6 +3911,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (!isFullscreenMode && !isOfflineMode) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+        }
         if (exoPlayerView != null && exoPlayer != null) {
             try {
                 exoPlayerView.setPlayer(exoPlayer);
