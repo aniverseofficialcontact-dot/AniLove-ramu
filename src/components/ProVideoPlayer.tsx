@@ -443,8 +443,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     if (episodeCacheKey.current !== cacheKey) {
       serverUrlCache.current = {};
       baseSourceRef.current = null;
-      lastLaunchedEp.current = null;
-      lastLaunchedUrl.current = null;
+      lastPlayCallUrl.current = null;
     }
 
     // ── FAST PATH: URL already cached for this exact source + episode + server ─────
@@ -455,6 +454,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         url: cachedUrl,
         selectedServerName: requestedServer,
       };
+      lastPlayCallUrl.current = null;
       setStreamSource(cachedSource);
       setResolvedEp(episodeNumber);
       setStreamStatus('ready');
@@ -490,6 +490,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             });
           }
           baseSourceRef.current = result.source;
+          lastPlayCallUrl.current = null;
           setStreamSource(result.source);
           setResolvedEp(episodeNumber);
           setStreamStatus('ready');
@@ -635,24 +636,16 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     };
   }, [streamStatus]);
 
-  const lastLaunchedEp = useRef<number | null>(null);
-  const lastLaunchedUrl = useRef<string | null>(null);
-
-  // Reset launch locks whenever episode number or anime changes
-  useEffect(() => {
-    lastLaunchedEp.current = null;
-    lastLaunchedUrl.current = null;
-  }, [episodeNumber, anime.id]);
+  const lastPlayCallUrl = useRef<string | null>(null);
 
   // Auto-launch Hybrid Native Player for Inline Experience on Android
   useEffect(() => {
     if (Capacitor.isNativePlatform() && activeStreamSource?.url && isStreamReady) {
       const currentEpNum = Number(episodeNumber);
-      if (lastLaunchedEp.current === currentEpNum && lastLaunchedUrl.current === activeStreamSource.url) {
+      if (lastPlayCallUrl.current === activeStreamSource.url) {
         return;
       }
-      lastLaunchedEp.current = currentEpNum;
-      lastLaunchedUrl.current = activeStreamSource.url;
+      lastPlayCallUrl.current = activeStreamSource.url;
 
       const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
@@ -744,8 +737,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   useEffect(() => {
     return () => {
-      lastLaunchedEp.current = null;
-      lastLaunchedUrl.current = null;
+      lastPlayCallUrl.current = null;
       if (Capacitor.isNativePlatform()) {
         try {
           NativePlayer.close().catch(() => {});
