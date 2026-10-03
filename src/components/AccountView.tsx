@@ -40,7 +40,8 @@ import {
   HelpCircle,
   RotateCcw,
   Film,
-  Play
+  Play,
+  LayoutGrid
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserSettings, UserMediaListItem, UserProfile, GachaCard, StreamServerId } from '../types';
