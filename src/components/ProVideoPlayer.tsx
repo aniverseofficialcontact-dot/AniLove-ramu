@@ -72,6 +72,7 @@ interface ProVideoPlayerProps {
   onProgressUpdate?: (anime: Anime, progress: number) => void;
   initialThumbnailStyle?: ThumbnailAppearance;
   settings?: UserSettings;
+  refreshTrigger?: number;
 }
 
 export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
@@ -84,6 +85,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   currentServer,
   selectedSubServer,
   selectedSource,
+  refreshTrigger = 0,
   onServerChange,
   onSubServerChange,
   currentAudioLanguage,
@@ -514,7 +516,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName, selectedSource]);
+  }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName, selectedSource, refreshTrigger]);
 
   // Inline UI Eraser (Destroys old web buttons inside the box)
   useEffect(() => {

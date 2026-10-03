@@ -198,21 +198,26 @@ export const WatchView: React.FC<WatchViewProps> = ({
     }
   };
 
-  const handleSourceChange = (newSource: StreamSourceId) => {
-    setSelectedSource(newSource);
-    setIsSourceMenuOpen(false);
-    const firstServer = SOURCE_CONFIG[newSource]?.servers[0];
+  const [refreshKey, setRefreshKey] = useState<number>(0);
+
+  const handleRefreshPlayer = () => {
+    setRefreshKey(prev => prev + 1);
+    const firstServer = SOURCE_CONFIG[selectedSource]?.servers[0];
     if (firstServer) {
       setSelectedServerDisplay(firstServer.displayName);
       setSelectedSubServer(firstServer.displayName);
     }
   };
 
-  // Automatically tap active source (e.g. Multi-Lang) in background whenever episodeNumber changes
+  const handleSourceChange = (newSource: StreamSourceId) => {
+    setSelectedSource(newSource);
+    setIsSourceMenuOpen(false);
+    handleRefreshPlayer();
+  };
+
+  // Automatically trigger handleRefreshPlayer whenever episodeNumber changes
   useEffect(() => {
-    if (selectedSource) {
-      handleSourceChange(selectedSource);
-    }
+    handleRefreshPlayer();
   }, [episodeNumber]);
 
   const handleServerDisplayChange = (serverItem: { displayName: string; internalCode: string }) => {
@@ -525,6 +530,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
               currentServer={selectedServer}
               selectedSource={selectedSource}
               selectedSubServer={selectedSubServer}
+              refreshTrigger={refreshKey}
               onServerChange={setSelectedServer}
               onSubServerChange={setSelectedSubServer}
               currentAudioLanguage={selectedAudio}
@@ -551,7 +557,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => handleSourceChange(selectedSource)}
+              onClick={() => handleRefreshPlayer()}
               title="Refresh Stream Player"
               className="bg-neutral-900/90 border border-neutral-800 hover:border-emerald-500/50 hover:bg-emerald-500/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 group"
             >
