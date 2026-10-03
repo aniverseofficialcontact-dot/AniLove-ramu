@@ -677,7 +677,10 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
       async function launchNativePlayerWithSubtitles() {
         try {
-          const rawTracks = await fetchUnifiedSubtitles(anime.id, currentEpNum);
+          const rawTracks = await Promise.race([
+            fetchUnifiedSubtitles(anime.id, currentEpNum, 2500),
+            new Promise<any[]>(resolve => setTimeout(() => resolve([]), 2500))
+          ]);
           if (rawTracks && rawTracks.length > 0) {
             const formatted = anonymizeAndSortSubtitleTracks(
               rawTracks,

@@ -85,9 +85,9 @@ export function evictSubtitleCache(anilistId: number, epNum: number): void {
 }
 
 /**
- * Fetches subtitles from https://subtitles-l8cm.onrender.com/subtitles.php with 3-day caching
+ * Fetches subtitles from https://subtitles-l8cm.onrender.com/subtitles.php with 3-day caching and 3s max timeout
  */
-export async function fetchUnifiedSubtitles(anilistId: number, epNum: number): Promise<RawSubtitleTrack[]> {
+export async function fetchUnifiedSubtitles(anilistId: number, epNum: number, timeoutMs: number = 3000): Promise<RawSubtitleTrack[]> {
   if (!anilistId || !epNum) return [];
 
   // Check 3-day local cache first
@@ -96,9 +96,12 @@ export async function fetchUnifiedSubtitles(anilistId: number, epNum: number): P
     return cached;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const apiUrl = `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=${anilistId}&ep=${epNum}`;
-    const res = await fetch(apiUrl);
+    const res = await fetch(apiUrl, { signal: controller.signal });
     if (!res.ok) throw new Error(`Subtitle API HTTP ${res.status}`);
     const data: SubtitleApiResponse = await res.json();
 
@@ -107,7 +110,9 @@ export async function fetchUnifiedSubtitles(anilistId: number, epNum: number): P
       return data.subtitles;
     }
   } catch (err) {
-    console.warn(`[SubtitleService] Failed to fetch subtitles for AniList ${anilistId} Ep ${epNum}:`, err);
+    console.warn(`[SubtitleService] Subtitle fetch timeout/error for AniList ${anilistId} Ep ${epNum}:`, err);
+  } finally {
+    clearTimeout(timer);
   }
   return [];
 }

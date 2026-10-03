@@ -128,8 +128,9 @@ In Account Settings (`AccountView.tsx`), users select:
 
 ### 🎯 Subtitle Sources & Priority
 1. **Dedicated Subtitle API**: Calls `https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=...&ep=...`.
-2. **Protected Track Locking**: When a subtitle track from the dedicated Subtitle API is loaded, `VideoSniffer` is explicitly prevented from overwriting `subtitleUrl`.
-3. **VTT Subtitle Engine**:
+2. **Non-Blocking Execution**: `fetchUnifiedSubtitles` executes with a strict 3s AbortController timeout (2.5s Promise.race fallback in `ProVideoPlayer`), guaranteeing video stream playback launches instantly without waiting for subtitle server cold-starts.
+3. **Protected Track Locking**: When a subtitle track from the dedicated Subtitle API is loaded, `VideoSniffer` is explicitly prevented from overwriting `subtitleUrl`.
+4. **VTT Subtitle Engine**:
    - Downloads and parses `.vtt` WebVTT subtitle files into timestamped cues.
    - Renders subtitles on a custom native subtitle overlay synced with ExoPlayer playback position in milliseconds.
 
