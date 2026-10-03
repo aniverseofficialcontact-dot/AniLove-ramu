@@ -313,7 +313,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
     };
   }, [anime.id, details]);
 
-  // Main Story only watch order (strictly excluding movies and non-story specials)
+  // Franchise watch order (includes TV seasons, Movies, OVAs & ONAs in chronological release order)
   const mainStoryWatchOrder = useMemo(() => {
     if (!watchOrderData) return [];
     const rawList = watchOrderData.releaseOrder?.length
@@ -322,12 +322,10 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
     const filtered = rawList.filter(item => {
       const format = (item.format || '').toUpperCase();
-      if (format === 'MOVIE') return false;
-      if (format === 'SPECIAL' || format === 'MUSIC') return false;
-      return format === 'TV' || format === 'TV_SHORT' || item.importance === 'essential';
+      return format !== 'MUSIC';
     });
 
-    return filtered;
+    return filtered.length > 0 ? filtered : rawList;
   }, [watchOrderData]);
 
   // Memoize cleaned synopsis once to avoid 1000+ regex sanitizations on every render
