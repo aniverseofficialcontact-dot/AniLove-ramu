@@ -112,9 +112,12 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
   const handleSelectTab = (tabId: DetailTab) => {
     setActiveTab(tabId);
-    if (modalScrollRef.current) {
+    const tabNavElem = document.getElementById('modal-tab-nav');
+    if (tabNavElem) {
+      tabNavElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (modalScrollRef.current) {
       modalScrollRef.current.scrollTo({
-        top: 280,
+        top: 480,
         behavior: 'smooth',
       });
     }

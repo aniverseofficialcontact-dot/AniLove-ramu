@@ -151,11 +151,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
   const totalInList = currentList.length;
   const completedCount = currentList.filter(item => completedSteps[item.title] || (item.id && completedSteps[String(item.id)])).length;
   const percentComplete = totalInList > 0 ? Math.round((completedCount / totalInList) * 100) : 0;
-  const allExpanded =
-    currentList.length > 0 &&
-    currentList.every((item, index) =>
-      isCardExpanded(item.id || (index + 1), item.id === currentAnime.id)
-    );
 
   const currentTitle =
     currentAnime.title?.english ||
@@ -357,7 +352,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
             if (isMovie && parsedEpisodeCount <= 0) parsedEpisodeCount = 1;
 
             const cardId = item.id || (index + 1);
-            const cardExpanded = isCardExpanded(cardId, isCurrent);
             const isEpisodesExpanded = Boolean(item.id && expandedEpisodeItems[item.id]);
 
             return (
