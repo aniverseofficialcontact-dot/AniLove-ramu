@@ -23,6 +23,7 @@ import {
   Download,
   Server,
   Globe,
+  RotateCw,
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
@@ -541,8 +542,24 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         )}
 
-        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: SOURCES & SERVERS */}
+        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: SOURCES, SERVERS & REFRESH */}
         <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
+          {/* REFRESH PLAYER Button */}
+          <div className="relative flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+              REFRESH
+            </span>
+            <button
+              type="button"
+              onClick={() => handleSourceChange(selectedSource)}
+              title="Refresh Stream Player"
+              className="bg-neutral-900/90 border border-neutral-800 hover:border-emerald-500/50 hover:bg-emerald-500/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 group"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-180 transition-transform duration-500" />
+              <span className="text-emerald-300">Refresh</span>
+            </button>
+          </div>
+
           {/* SOURCES Dropdown */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
@@ -847,6 +864,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     onClick={() => {
                       onEpisodeChange(ep.number);
                       onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
+                      handleSourceChange(selectedSource);
                     }}
                     className={`group relative overflow-hidden rounded-2xl text-left transition-all duration-300 border cursor-pointer ${
                       isCurrent
@@ -918,6 +936,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
                     onClick={() => {
                       onEpisodeChange(ep.number);
                       onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
+                      handleSourceChange(selectedSource);
                     }}
                     className={`group flex items-start gap-3.5 sm:gap-4 p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none ${
                       isCurrent
