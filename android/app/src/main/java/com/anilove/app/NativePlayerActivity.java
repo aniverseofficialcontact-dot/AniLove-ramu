@@ -674,6 +674,9 @@ public class NativePlayerActivity extends AppCompatActivity {
         if ((idMal > 0 || anilistId > 0) && epNum > 0) {
             fetchAniSkipIntervals(idMal, anilistId, epNum);
         }
+        if (anilistId > 0 && epNum > 0) {
+            fetchUnifiedSubtitlesJava(anilistId, epNum);
+        }
         startTime = intent.getIntExtra("startTime", 0);
         subtitleUrl = intent.getStringExtra("subtitleUrl");
         subtitleLang = intent.getStringExtra("subtitleLang");

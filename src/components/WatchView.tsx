@@ -166,7 +166,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
   useEffect(() => {
     setSelectedSource(effectiveDefaultSource);
-  }, [effectiveDefaultSource]);
+  }, [anime.id]);
 
   const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState<boolean>(false);
