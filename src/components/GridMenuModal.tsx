@@ -12,7 +12,6 @@ import {
   Download,
   Settings,
   Lock,
-  RefreshCw,
   ChevronDown,
   ChevronRight,
   Bot
@@ -47,6 +46,16 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
   const isTwoWayConnected = Boolean(settings.twoWaySyncEnabled && settings.anilistToken);
   const isPinConfigured = Boolean(settings.profilePinEnabled && settings.profilePin);
 
+  // Determine current active profile and chosen avatar (pfp)
+  const profiles = settings.profiles && settings.profiles.length > 0 ? settings.profiles : [];
+  const currentProfile = profiles.find((p) => p.id === settings.currentProfileId) || profiles[0];
+  const currentAvatarUrl =
+    currentProfile?.avatar ||
+    settings.customAvatar ||
+    settings.anilistUser?.avatar?.large ||
+    settings.anilistUser?.avatar?.medium;
+  const currentUserName = currentProfile?.name || settings.anilistUser?.name || 'Account & Settings';
+
   // Close on Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,7 +74,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
     onClose();
   };
 
-  // Sub-items that belong to the lower navigation bar, shown when Home is expanded
+  // Sub-items under Home (Account removed since it is accessible from the bottom profile footer)
   const lowerNavSubItems = [
     {
       id: 'home' as TabType,
@@ -92,11 +101,6 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
       label: isPinConfigured && isPinLocked ? 'Library (Locked)' : 'Library',
       icon: isPinConfigured && isPinLocked ? Lock : Bookmark,
       badge: libraryCount > 0 && !isPinLocked ? `${libraryCount}` : null,
-    },
-    {
-      id: 'account' as TabType,
-      label: 'Account & Settings',
-      icon: User,
     },
   ];
 
@@ -162,7 +166,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
 
           {/* Navigation Links List */}
           <div className="px-3 py-4 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
-            {/* 1. Collapsible Home Group (Contains all lower navigation bar options) */}
+            {/* 1. Collapsible Home Group (Contains lower navigation bar options, without Account) */}
             <div className="rounded-2xl overflow-hidden border border-white/5 bg-white/[0.02]">
               <button
                 onClick={() => setIsHomeExpanded((prev) => !prev)}
@@ -274,37 +278,48 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
             )}
           </div>
 
-          {/* Bottom Profile / Sync Footer */}
-          <div className="p-4 border-t border-white/5 bg-neutral-900/40 space-y-3">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 font-medium">
-              <span className="flex items-center gap-1.5">
-                <RefreshCw className={`w-3 h-3 ${isTwoWayConnected ? 'text-emerald-400' : 'text-slate-500'}`} />
-                {isTwoWayConnected ? 'AniList Synced' : 'Offline'}
-              </span>
-              <span>v2.5.0</span>
-            </div>
-
+          {/* Bottom Profile Footer (Image 1 status row removed) */}
+          <div className="p-4 border-t border-white/5 bg-neutral-900/40">
             <div
               onClick={() => handleNavigate('account')}
               className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition cursor-pointer"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white text-xs font-black shadow-md">
-                  {settings.anilistUser?.name
-                    ? settings.anilistUser.name.charAt(0).toUpperCase()
-                    : 'U'}
+              <div className="flex items-center gap-3 overflow-hidden">
+                {/* Chosen Profile Avatar (PFP) */}
+                {currentAvatarUrl ? (
+                  <img
+                    src={currentAvatarUrl}
+                    alt="Profile Avatar"
+                    className="w-8 h-8 rounded-full object-cover border border-white/20 shadow-md shrink-0"
+                    onError={(e) => {
+                      // If remote image fails to load, replace with initial badge
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      if (target.nextElementSibling) {
+                        (target.nextElementSibling as HTMLElement).style.display = 'flex';
+                      }
+                    }}
+                  />
+                ) : null}
+
+                <div
+                  style={{ display: currentAvatarUrl ? 'none' : 'flex' }}
+                  className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 items-center justify-center text-white text-xs font-black shadow-md shrink-0"
+                >
+                  {currentUserName.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white leading-none">
-                    {settings.anilistUser?.name || 'Account & Settings'}
+
+                <div className="truncate">
+                  <h4 className="text-xs font-bold text-white leading-none truncate">
+                    {currentUserName}
                   </h4>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {isTwoWayConnected ? 'Cloud Linked' : 'Manage Profile'}
+                    {isTwoWayConnected ? 'AniList Synced' : 'Account & Settings'}
                   </p>
                 </div>
               </div>
 
-              <Settings className="w-4 h-4 text-slate-400 hover:text-white" />
+              <Settings className="w-4 h-4 text-slate-400 hover:text-white shrink-0 ml-2" />
             </div>
           </div>
         </motion.div>
