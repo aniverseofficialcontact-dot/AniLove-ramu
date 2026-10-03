@@ -85,14 +85,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
     });
   };
 
-  const toggleExpandEpisodes = (itemId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExpandedEpisodeItems(prev => ({
-      ...prev,
-      [itemId]: !prev[itemId],
-    }));
-  };
-
   const handlePlayEpisodeDirectly = (targetAnime: Anime, epNum: number) => {
     if (onPlayStream) {
       onPlayStream(targetAnime, epNum);
@@ -352,7 +344,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
             if (isMovie && parsedEpisodeCount <= 0) parsedEpisodeCount = 1;
 
             const cardId = item.id || (index + 1);
-            const isEpisodesExpanded = Boolean(item.id && expandedEpisodeItems[item.id]);
 
             return (
               <div
@@ -608,26 +599,6 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
 
                         {/* Secondary Actions Row */}
                         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5 w-full min-w-0">
-                          {/* Expandable Episodes Accordion Button */}
-                          {item.id && parsedEpisodeCount > 1 && (
-                            <button
-                              type="button"
-                              onClick={e => toggleExpandEpisodes(item.id!, e)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer shrink-0 ${
-                                isEpisodesExpanded
-                                  ? 'bg-indigo-950/80 border-indigo-500/50 text-indigo-300 shadow-sm'
-                                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
-                              }`}
-                            >
-                              <List className="w-3.5 h-3.5 text-indigo-400" />
-                              <span>Episodes ({parsedEpisodeCount})</span>
-                              {isEpisodesExpanded ? (
-                                <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                              )}
-                            </button>
-                          )}
 
                           {/* Browse All Episodes in Full Modal Tab */}
                           {item.animeObj && (
