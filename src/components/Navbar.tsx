@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Search, Calendar, Bookmark, User, RefreshCw, Dices, Rotate3d, Lock, Film, Download, Menu, Sparkles } from 'lucide-react';
+import { Home, Search, Calendar, Bookmark, User, RefreshCw, Rotate3d, Lock, Film } from 'lucide-react';
 import { UserSettings, AppNotification, Anime } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { GridMenuModal } from './GridMenuModal';
@@ -35,7 +35,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onClearAll,
   onOpenDetails,
   onPlayStream,
-  onOpenGacha,
   onOpenAiSensei,
   isPlaying = false,
   isPinLocked = false,
@@ -60,47 +59,41 @@ export const Navbar: React.FC<NavbarProps> = ({
         id="main-app-header"
         className={`relative lg:sticky top-0 z-50 w-full transition-all duration-300 ${
           isScrolled
-            ? 'bg-slate-950/90 lg:backdrop-blur-xl border-b border-white/15 shadow-xl shadow-black/60 py-1'
+            ? 'bg-slate-950/90 lg:backdrop-blur-xl border-b border-white/10 shadow-xl shadow-black/60 py-1'
             : 'bg-transparent border-b border-transparent shadow-none py-1'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          {/* Top-Left: Three-Line Grid Menu Option Button (Replacing Logo Entirely) */}
+          {/* Top-Left: Three-Line Menu Trigger Button */}
           <div className="flex items-center gap-3">
             <button
               id="nav-grid-menu-btn"
               onClick={() => setIsGridMenuOpen(true)}
-              className="group relative flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-indigo-500/20 hover:from-pink-500/30 hover:to-purple-500/30 text-white border border-white/20 hover:border-pink-400/50 shadow-lg shadow-pink-500/10 backdrop-blur-md transition-all active:scale-95 cursor-pointer"
-              title="Open Grid Menu (Home sub-parts, Arcade, Schedule & Tools)"
-              aria-label="Open Grid Menu"
+              className="group relative flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 transition-all active:scale-95 cursor-pointer"
+              title="Open Navigation Menu"
+              aria-label="Open Navigation Menu"
             >
-              {/* Three-line Glowing Icon */}
-              <div className="relative flex flex-col justify-center gap-1 w-5 h-4">
-                <span className="w-5 h-0.5 bg-gradient-to-r from-pink-400 to-rose-400 rounded-full group-hover:w-4 transition-all duration-300" />
-                <span className="w-4 h-0.5 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full group-hover:w-5 transition-all duration-300" />
-                <span className="w-5 h-0.5 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full group-hover:w-3 transition-all duration-300" />
+              {/* Minimal Three Horizontal Lines Icon */}
+              <div className="relative flex flex-col justify-center gap-1 w-4.5 h-3.5">
+                <span className="w-4.5 h-0.5 bg-white/90 rounded-full group-hover:bg-pink-400 transition-colors" />
+                <span className="w-4.5 h-0.5 bg-white/90 rounded-full group-hover:bg-purple-400 transition-colors" />
+                <span className="w-3.5 h-0.5 bg-white/90 rounded-full group-hover:w-4.5 group-hover:bg-indigo-400 transition-all" />
               </div>
 
-              <span className="font-extrabold text-xs tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white via-pink-200 to-purple-200">
+              <span className="font-bold text-xs tracking-tight text-slate-200 group-hover:text-white">
                 Menu
-              </span>
-
-              {/* Pulsing Sparkle Indicator Pip */}
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-pink-500" />
               </span>
             </button>
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 p-1 rounded-2xl bg-black/20 hover:bg-black/30 backdrop-blur-md border border-white/15 transition">
+          <nav className="hidden lg:flex items-center gap-1 p-1 rounded-2xl bg-black/30 backdrop-blur-md border border-white/10 transition">
             <button
               id="nav-tab-home"
               onClick={() => onSelectTab('home')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 currentTab === 'home'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -113,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('discover')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 currentTab === 'discover'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -127,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('reels')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 currentTab === 'reels'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -140,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('schedule')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 currentTab === 'schedule'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -153,7 +146,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('library')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
                 currentTab === 'library'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -180,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('cards')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer relative ${
                 currentTab === 'cards'
-                  ? 'bg-gradient-to-r from-pink-500/30 via-purple-500/30 to-indigo-500/30 text-white border border-pink-500/40 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -197,7 +190,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('account')}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 currentTab === 'account'
-                  ? 'bg-white/20 text-white border border-white/25 shadow-md backdrop-blur-sm'
+                  ? 'bg-white/15 text-white border border-white/20 shadow-md backdrop-blur-sm'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
@@ -209,14 +202,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right Section: Downloads + Gacha + Cloud Sync + Session Lock + Notifications */}
+          {/* Right Section: Cloud Sync + Session Lock + Notifications (Downloads and Gacha removed from top bar) */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Quick Lock Session Button */}
             {isPinConfigured && !isPinLocked && onLockSession && (
               <button
                 id="nav-lock-session-btn"
                 onClick={onLockSession}
-                className="hidden md:flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-white/10 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 text-xs font-bold border border-white/15 hover:border-rose-500/30 backdrop-blur-md transition active:scale-95 cursor-pointer"
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 text-xs font-bold border border-white/10 hover:border-rose-500/30 backdrop-blur-md transition active:scale-95 cursor-pointer"
                 title="Lock Library & Cards with PIN Now"
               >
                 <Lock className="w-3.5 h-3.5 text-pink-400" />
@@ -224,38 +217,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Anime Gacha Button */}
-            {onOpenGacha && (
-              <button
-                id="nav-gacha-btn"
-                onClick={onOpenGacha}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-amber-300 text-xs font-bold border border-white/15 backdrop-blur-md shadow-sm transition active:scale-95 cursor-pointer"
-                title="Spin Anime Gacha / Randomizer"
-              >
-                <Dices className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Gacha</span>
-              </button>
-            )}
-
-            {/* Offline Downloads Button */}
-            <button
-              id="nav-downloads-btn"
-              onClick={() => onSelectTab('downloads')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer backdrop-blur-md ${
-                currentTab === 'downloads'
-                  ? 'bg-violet-600 text-white border border-violet-400 shadow-md shadow-violet-600/30'
-                  : 'bg-white/10 hover:bg-white/20 text-violet-300 hover:text-white border border-white/15'
-              }`}
-              title="View downloaded offline episodes"
-            >
-              <Download className="w-3.5 h-3.5 text-violet-400" />
-              <span className="hidden sm:inline">Downloads</span>
-            </button>
-
             {/* Cloud Sync State Chip */}
             <div
               onClick={() => onSelectTab('account')}
-              className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md cursor-pointer text-xs transition"
+              className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-md cursor-pointer text-xs transition"
               title={
                 isTwoWayConnected
                   ? `AniList 2-Way Sync Active (${settings.anilistUser?.name || 'Connected'})`
@@ -290,7 +255,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Grid Navigation Modal */}
+      {/* Modern Sleek Navigation Drawer Modal */}
       <GridMenuModal
         isOpen={isGridMenuOpen}
         onClose={() => setIsGridMenuOpen(false)}
@@ -299,7 +264,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         settings={settings}
         libraryCount={libraryCount}
         isPinLocked={isPinLocked}
-        onOpenGacha={onOpenGacha}
         onOpenAiSensei={onOpenAiSensei}
       />
     </>
