@@ -1333,7 +1333,7 @@ export function App() {
                 onPlayStream={handlePlayStream}
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateProgress={handleUpdateProgress}
-                onInspect3DCard={handleOpen3DCard}
+                onInspect3DCard={handleInspect3DCard}
               />
             )}
 
