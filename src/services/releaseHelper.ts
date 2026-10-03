@@ -115,3 +115,53 @@ export function getAnimeReleaseStatus(anime?: Anime | null, details?: any): Rele
     isUpcoming: false,
   };
 }
+
+/**
+ * Strict 7-Day Airing Check: Check if an episode aired within the last 7 days (X -> X + 7)
+ */
+export function isFreshAiredEpisodeWithin7Days(
+  anime?: Anime | null,
+  details?: any,
+  episodeNumber: number = 1
+): boolean {
+  if (!anime && !details) return false;
+
+  const target = details || anime;
+  const nextAiring = target?.nextAiringEpisode || anime?.nextAiringEpisode;
+
+  let episodeAirTimeMs: number | null = null;
+
+  if (nextAiring && typeof nextAiring.episode === 'number' && nextAiring.airingAt) {
+    const nextEpNum = nextAiring.episode;
+    const nextEpAiringMs = nextAiring.airingAt * 1000;
+
+    if (episodeNumber >= nextEpNum) {
+      return false;
+    }
+
+    if (episodeNumber < nextEpNum) {
+      const diffEps = nextEpNum - episodeNumber;
+      episodeAirTimeMs = nextEpAiringMs - diffEps * 7 * 24 * 60 * 60 * 1000;
+    }
+  }
+
+  // Fallback to startDate if episode 1 and no nextAiring
+  if (!episodeAirTimeMs && episodeNumber === 1) {
+    const startDate = target?.startDate || anime?.startDate;
+    if (startDate?.year && startDate?.month && startDate?.day) {
+      episodeAirTimeMs = new Date(
+        startDate.year,
+        startDate.month - 1,
+        startDate.day
+      ).getTime();
+    }
+  }
+
+  if (!episodeAirTimeMs) return false;
+
+  const nowMs = Date.now();
+  const diffMs = nowMs - episodeAirTimeMs;
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+  return diffMs >= 0 && diffMs <= sevenDaysMs;
+}

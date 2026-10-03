@@ -30,7 +30,7 @@ import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, Stre
 import { NativePlayer, launchNativePlayer } from '../services/nativePlayer';
 import { ProVideoPlayer } from './ProVideoPlayer';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
-import { getAnimeReleaseStatus } from '../services/releaseHelper';
+import { getAnimeReleaseStatus, isFreshAiredEpisodeWithin7Days } from '../services/releaseHelper';
 import { fetchFranchiseWatchOrder } from '../services/watchOrderService';
 import {
   fetchExtendedEpisodesFromJikanOrKitsu,
@@ -154,7 +154,20 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
   type StreamSourceId = 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt';
 
-  const [selectedSource, setSelectedSource] = useState<StreamSourceId>('Multi-Lang');
+  // Strict 7-Day Airing Check for HiAnime Auto-Priority
+  const isFreshEpisode = useMemo(() => {
+    return isFreshAiredEpisodeWithin7Days(anime, details, episodeNumber);
+  }, [anime, details, episodeNumber]);
+
+  const configuredDefaultSource = (settings?.preferredSource || 'Multi-Lang') as StreamSourceId;
+  const effectiveDefaultSource: StreamSourceId = isFreshEpisode ? 'HiAnime' : configuredDefaultSource;
+
+  const [selectedSource, setSelectedSource] = useState<StreamSourceId>(effectiveDefaultSource);
+
+  useEffect(() => {
+    setSelectedSource(effectiveDefaultSource);
+  }, [effectiveDefaultSource]);
+
   const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState<boolean>(false);
   const [isServerMenuOpen, setIsServerMenuOpen] = useState<boolean>(false);
@@ -200,16 +213,19 @@ export const WatchView: React.FC<WatchViewProps> = ({
     setIsServerMenuOpen(false);
   };
 
-  // Derive initial audio preference (English DUB or Japanese SUB by default)
+  // Derive initial audio preference from Primary / Secondary settings hierarchy
   const initialAudio: StreamLanguage = useMemo(() => {
+    if (settings?.preferredPrimaryLanguage) {
+      return settings.preferredPrimaryLanguage;
+    }
     if (settings?.preferredLanguages && settings.preferredLanguages.length > 0) {
       const topLang = String(settings.preferredLanguages[0]).toUpperCase();
       if (topLang === 'SUB') return 'SUB';
       if (topLang === 'DUB') return 'DUB';
+      if (topLang === 'HIN') return 'HIN';
     }
-    if (String(settings?.preferredAudio).toLowerCase() === 'sub') return 'SUB';
     return 'DUB'; // Default English Dub
-  }, [settings?.preferredAudio, settings?.preferredLanguages]);
+  }, [settings?.preferredPrimaryLanguage, settings?.preferredLanguages]);
 
   const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
 

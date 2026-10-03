@@ -378,6 +378,9 @@ export interface UserSettings {
   // Player & App Preferences
   preferredAudio: 'sub' | 'dub';
   preferredLanguages: AudioLanguagePreference[]; // e.g. ['SUB', 'DUB'] (Rank 1, Rank 2)
+  preferredPrimaryLanguage?: StreamLanguage; // Priority 1 (Default: DUB)
+  preferredSecondaryLanguage?: StreamLanguage; // Priority 2 (Default: SUB)
+  preferredSource?: 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt'; // Default: Multi-Lang
   primarySubtitleLang?: string; // Default: 'English'
   secondarySubtitleLang?: string; // Default: 'English 2'
   preferredServers: StreamServerId[]; // ordered legal/official streaming providers

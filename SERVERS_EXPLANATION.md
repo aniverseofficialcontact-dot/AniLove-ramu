@@ -10,9 +10,9 @@ AniLove supports **4 distinct streaming sources**, each with its own specialized
 
 | Source Name | Frontend Label | Servers Available | Primary Protocol / Endpoint |
 | :--- | :--- | :--- | :--- |
-| **`Multi-Lang`** | **Multi-Lang** (Source 1) | `Server 1` | `stream-all-languages` API returning multi-audio tracks (`Original Audio / JAP`, `English`, `Hindi`, `Tamil`, `Telugu`, `French`, `Spanish`, `Russian`...) with multi-quality MP4 links (`1080p`, `720p`, `480p`, `360p`). |
-| **`AnimeDekho`** | **AnimeDekho** (Source 2) | `Server 1` – `Server 5` (Dynamic) | Custom `stream.php` API with dynamic priority target extraction (`rubystm`, `piratexplay`, `blakiteapi`, `vidmoly`, `abyssplayer`). |
-| **`HiAnime`** | **HiAnime** (Source 3) | `Server 1` – `Server 3` | Deterministic URL patterns (`vidnest.fun`, `tryembed.us.cc`, `vidnest.fun/animepahe`) supporting dynamic `/sub` (Japanese) & `/dub` (English) language switching. |
+| **`Multi-Lang`** | **Multi-Lang** (Default 1st Source) | `Server 1` | `stream-all-languages` API returning multi-audio tracks (`Original Audio / JAP`, `English`, `Hindi`, `Tamil`, `Telugu`, `French`, `Spanish`, `Russian`...) with multi-quality MP4 links (`1080p`, `720p`, `480p`, `360p`). |
+| **`AnimeDekho`** | **AnimeDekho** (Source 2) | `Server 1` – `Server 5` (Dynamic) | Custom `stream.php` API with dynamic priority target extraction (`piratexplay`, `rubystm`, `blakiteapi`, `vidmoly`, `abyssplayer`). |
+| **`HiAnime`** | **HiAnime** (Source 3) | `Server 1` – `Server 3` | Deterministic URL patterns (`vidnest.fun`, `tryembed.us.cc`, `vidnest.fun/animepahe`) supporting dynamic `/sub` (Japanese) & `/dub` (English) language switching. **7-Day Fresh Release Priority Source**. |
 | **`AnimeSalt`** | **AnimeSalt** (Source 4) | `Server 1` | AnimeSalt Vercel API returning `data.embedUrl` with `Referer: https://animesalt.me/`. |
 
 ---
@@ -36,11 +36,11 @@ AniLove supports **4 distinct streaming sources**, each with its own specialized
 ### 📌 API Endpoint
 `https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?anilistId={anilistId}&ep={episodeNumber}`
 
-### 🎯 Server Selection & Priority Target Ordering
+### 🎯 Server Selection & Priority Target Ordering (Swapped)
 The API response returns an array of raw server links (`stream.servers`). The engine evaluates and extracts servers strictly in the following priority order:
 
-1. **`Server 1`** -> **First `rubystm` link** (Triggers `https://rubystm.com/e/...`).
-2. **`Server 2`** -> **First `piratexplay` link** (Triggers `https://piratexplay.cc/...`).
+1. **`Server 1`** -> **First `piratexplay` link** (Triggers `https://piratexplay.cc/...`).
+2. **`Server 2`** -> **First `rubystm` link** (Triggers `https://rubystm.com/e/...`).
 3. **`Server 3`** -> **First `blakiteapi` link** (Triggers `https://blakiteapi.xyz/...`).
 4. **`Server 4`** -> **First `vidmoly` link** (Triggers `https://vidmoly.biz/...`).
 5. **`Server 5`** -> **First `abyssplayer` link** (Triggers `https://abyssplayer.com/...` — automatically unpacks `short.icu/` links into `abyssplayer.com/`).
@@ -57,6 +57,10 @@ If an anime episode lacks one or more server targets (e.g. `blakiteapi` is not p
 ---
 
 ## 🌸 3. Source 3: HiAnime (`HiAnime`)
+
+### 📌 7-Day Fresh Episode Auto-Priority Rule (Strict Rule)
+If an episode aired within the last 7 days ($X \rightarrow X + 7$ days from `airingAt` timestamp):
+- Whenever the user opens that episode, **`HiAnime` MUST automatically be set as the 1st / default source** for it with no exceptions!
 
 ### 📌 Deterministic URL Pattern
 - **Server 1 (Vidnest)**: `https://vidnest.fun/anime/{anilistId}/{episodeNumber}/{sub|dub}`
@@ -81,7 +85,20 @@ If an anime episode lacks one or more server targets (e.g. `blakiteapi` is not p
 
 ---
 
-## 🛡️ 5. Domain-Specific Referer Headers Reference
+## ⚙️ 5. Primary & Secondary Preferred Language Hierarchy
+
+In Account Settings, users configure:
+- **Primary Preferred Language** (Default: `English Dub`)
+- **Secondary Preferred Language** (Default: `Japanese Sub`)
+
+### 🔀 Resolution Algorithm:
+1. When loading an episode stream, check if **Primary Preferred Language** is available. If yes, load Primary Language.
+2. If Primary Language is not available, check if **Secondary Preferred Language** is available. If yes, load Secondary Language.
+3. If neither Primary nor Secondary Language is available, fallback to any available language.
+
+---
+
+## 🛡️ 6. Domain-Specific Referer Headers Reference
 
 | Stream Domain | Required Referer Header |
 | :--- | :--- |
@@ -95,7 +112,7 @@ If an anime episode lacks one or more server targets (e.g. `blakiteapi` is not p
 
 ---
 
-## 🧪 6. Testing & Build Protocol
+## 🧪 7. Testing & Build Protocol
 
 Whenever modifying server APIs or resolver logic:
 1. Re-build frontend web assets and sync Capacitor:

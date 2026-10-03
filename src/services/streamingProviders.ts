@@ -368,17 +368,17 @@ async function resolveAnimeDekhoSource(
     }
   }
 
-  // Target Priorities
-  const rubyMatch = rawServers.find(s => s.url && s.url.toLowerCase().includes('rubystm'));
+  // Target Priorities (Server 1 = piratexplay, Server 2 = rubystm)
   const pirateMatch = rawServers.find(s => s.url && s.url.toLowerCase().includes('piratexplay'));
+  const rubyMatch = rawServers.find(s => s.url && s.url.toLowerCase().includes('rubystm'));
   const blakiteMatch = rawServers.find(s => s.url && (s.url.toLowerCase().includes('blakiteapi') || s.url.toLowerCase().includes('blaketapi') || s.url.toLowerCase().includes('animedekho.piratexplay.com')));
   const vidmolyMatch = rawServers.find(s => s.url && (s.url.toLowerCase().includes('vidmoly.biz') || s.url.toLowerCase().includes('vidmoly.net') || s.url.toLowerCase().includes('vidmoly')));
   const abyssMatch = rawServers.find(s => s.url && (s.url.toLowerCase().includes('abyssplayer.com') || s.url.toLowerCase().includes('short.icu') || s.url.toLowerCase().includes('abyss')));
 
   // Filter existing candidates in priority order
   const candidates: Array<{ codeKey: string; url: string }> = [];
-  if (rubyMatch) candidates.push({ codeKey: 'rubystm', url: rubyMatch.url });
   if (pirateMatch) candidates.push({ codeKey: 'piratexplay', url: pirateMatch.url });
+  if (rubyMatch) candidates.push({ codeKey: 'rubystm', url: rubyMatch.url });
   if (blakiteMatch) candidates.push({ codeKey: 'blakiteapi', url: blakiteMatch.url });
   if (vidmolyMatch) candidates.push({ codeKey: 'vidmoly', url: vidmolyMatch.url });
   if (abyssMatch) {

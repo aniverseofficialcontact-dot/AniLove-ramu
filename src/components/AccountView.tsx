@@ -932,34 +932,96 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 </div>
               </div>
 
-              {/* Audio Language (Default: English Dub) */}
+              {/* Primary Preferred Audio Language */}
               <div className="py-3.5 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-white/5 text-pink-300">
                     <Volume2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-white">Default Audio Language</p>
-                    <p className="text-xs text-slate-400">Preferred voiceover format (Default: English Voice Dub)</p>
+                    <p className="text-sm font-bold text-white">Primary Preferred Language (Priority 1)</p>
+                    <p className="text-xs text-slate-400">First audio preference for streams (Default: English Voice Dub)</p>
                   </div>
                 </div>
                 <select
-                  value={String(settings.preferredLanguages?.[0] || settings.preferredAudio || 'DUB').toUpperCase()}
+                  value={String(settings.preferredPrimaryLanguage || 'DUB').toUpperCase()}
                   onChange={e => {
-                    const first = e.target.value as any;
-                    const second = String(settings.preferredLanguages?.[1] || (first === 'DUB' ? 'SUB' : 'DUB')).toUpperCase();
+                    const primary = e.target.value as any;
                     onSaveSettings({
                       ...settings,
-                      preferredAudio: (first === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
-                      preferredLanguages: [first, second],
+                      preferredPrimaryLanguage: primary,
+                      preferredAudio: (primary === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
                     });
-                    onShowToast('success', `Default audio set to ${first.toUpperCase()}.`, 'Audio Updated');
+                    onShowToast('success', `Primary audio set to ${primary}.`, 'Audio Updated');
                   }}
                   className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
                 >
                   <option value="DUB">🇺🇸 English Dub (Default)</option>
                   <option value="SUB">🇯🇵 Japanese Subtitles</option>
                   <option value="HIN">🇮🇳 Hindi Dub</option>
+                  <option value="TAM">🇮🇳 Tamil Dub</option>
+                  <option value="TEL">🇮🇳 Telugu Dub</option>
+                </select>
+              </div>
+
+              {/* Secondary Preferred Audio Language */}
+              <div className="py-3.5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
+                    <Volume2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Secondary Preferred Language (Priority 2)</p>
+                    <p className="text-xs text-slate-400">Fallback audio if primary language is unavailable (Default: Japanese Sub)</p>
+                  </div>
+                </div>
+                <select
+                  value={String(settings.preferredSecondaryLanguage || 'SUB').toUpperCase()}
+                  onChange={e => {
+                    const secondary = e.target.value as any;
+                    onSaveSettings({
+                      ...settings,
+                      preferredSecondaryLanguage: secondary,
+                    });
+                    onShowToast('success', `Secondary audio set to ${secondary}.`, 'Audio Updated');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
+                >
+                  <option value="SUB">🇯🇵 Japanese Subtitles (Default)</option>
+                  <option value="DUB">🇺🇸 English Dub</option>
+                  <option value="HIN">🇮🇳 Hindi Dub</option>
+                  <option value="TAM">🇮🇳 Tamil Dub</option>
+                  <option value="TEL">🇮🇳 Telugu Dub</option>
+                </select>
+              </div>
+
+              {/* Preferred Default Streaming Source */}
+              <div className="py-3.5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Preferred Default Streaming Source</p>
+                    <p className="text-xs text-slate-400">Default provider source (Default: Multi-Lang)</p>
+                  </div>
+                </div>
+                <select
+                  value={settings.preferredSource || 'Multi-Lang'}
+                  onChange={e => {
+                    const src = e.target.value as any;
+                    onSaveSettings({
+                      ...settings,
+                      preferredSource: src,
+                    });
+                    onShowToast('success', `Default source set to ${src}.`, 'Source Updated');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
+                >
+                  <option value="Multi-Lang">🌐 Multi-Lang (Default)</option>
+                  <option value="AnimeDekho">⚡ AnimeDekho</option>
+                  <option value="HiAnime">🌸 HiAnime</option>
+                  <option value="AnimeSalt">🧂 AnimeSalt</option>
                 </select>
               </div>
 
