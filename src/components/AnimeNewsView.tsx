@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Newspaper,
   Search,
@@ -11,11 +11,17 @@ import {
   ArrowRight,
   Flame,
   X,
-  Tv
+  Tv,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime } from '../types';
-import { fetchGlobalAnimeNews, fetchUserWatchlistNews, NewsItem } from '../services/animeNews';
+import {
+  fetchGlobalAnimeNews,
+  fetchUserWatchlistNews,
+  getSafeNewsThumbnail,
+  NewsItem
+} from '../services/animeNews';
 
 interface AnimeNewsViewProps {
   library: Anime[];
@@ -33,47 +39,108 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<'all' | 'watchlist' | 'announcements'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
 
-  // Load news on mount
+  // Load initial news on mount or library update
   useEffect(() => {
-    loadNews();
+    loadInitialNews();
   }, [library]);
 
-  const loadNews = async () => {
+  const loadInitialNews = async () => {
     setIsLoading(true);
+    setPage(1);
     try {
       const [globalNews, userNews] = await Promise.all([
-        fetchGlobalAnimeNews(),
+        fetchGlobalAnimeNews(1),
         fetchUserWatchlistNews(library),
       ]);
       setNewsList(globalNews);
       setWatchlistNews(userNews);
     } catch (err) {
-      console.error('Error loading anime news:', err);
+      console.error('Error loading initial anime news:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Combine and filter articles
-  let displayedNews = [...watchlistNews, ...newsList];
+  // Load next page of news for infinite scroll
+  const loadMoreNews = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const moreNews = await fetchGlobalAnimeNews(nextPage);
+      if (moreNews.length === 0) {
+        setHasMore(false);
+      } else {
+        setNewsList((prev) => {
+          const merged = [...prev, ...moreNews];
+          const uniqueMap = new Map<string, NewsItem>();
+          merged.forEach((item) => uniqueMap.set(item.title, item));
+          return Array.from(uniqueMap.values());
+        });
+        setPage(nextPage);
+      }
+    } catch (err) {
+      console.error('Error loading more news:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [page, isLoadingMore, hasMore]);
 
-  // Deduplicate by title
+  // Infinite Scroll Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
+        !isLoadingMore &&
+        !isLoading &&
+        hasMore
+      ) {
+        loadMoreNews();
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadMoreNews, isLoadingMore, isLoading, hasMore]);
+
+  // Combine and deduplicate news
+  let displayedNews = [...watchlistNews, ...newsList];
   const uniqueMap = new Map<string, NewsItem>();
   displayedNews.forEach((item) => uniqueMap.set(item.title, item));
   displayedNews = Array.from(uniqueMap.values());
 
+  // Filter by category
   if (activeCategory === 'watchlist') {
-    displayedNews = displayedNews.filter(
-      (item) => item.category === 'Watchlist' || (item.animeId && library.some((a) => a.id === item.animeId))
-    );
+    displayedNews = displayedNews.filter((item) => {
+      if (item.category === 'Watchlist' || item.source === 'Watchlist News') return true;
+      if (item.animeId && library.some((a) => a.id === item.animeId)) return true;
+      // Match title with library items
+      if (library.length > 0) {
+        return library.some((a) => {
+          const t1 = a.title?.userPreferred?.toLowerCase() || '';
+          const t2 = a.title?.english?.toLowerCase() || '';
+          const it = item.title.toLowerCase();
+          return (t1 && it.includes(t1)) || (t2 && it.includes(t2));
+        });
+      }
+      return false;
+    });
+
+    // Fallback if watchlist items exist in library but filter yielded 0 items
+    if (displayedNews.length === 0 && library.length > 0) {
+      displayedNews = watchlistNews;
+    }
   } else if (activeCategory === 'announcements') {
     displayedNews = displayedNews.filter(
       (item) => item.category === 'Announcement' || item.source === 'Official Announcement'
     );
   }
 
+  // Filter by search query
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase().trim();
     displayedNews = displayedNews.filter(
@@ -93,7 +160,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
       if (matchedAnime) {
         onOpenDetails(matchedAnime);
       } else {
-        // Build minimal anime object
         onOpenDetails({
           id: newsItem.animeId,
           title: { userPreferred: newsItem.animeTitle || newsItem.title },
@@ -110,7 +176,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
-      {/* Sleek Minimal Top Header Row (Box removed as requested) */}
+      {/* Minimal Top Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -141,7 +207,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           </div>
 
           <button
-            onClick={loadNews}
+            onClick={loadInitialNews}
             disabled={isLoading}
             className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
             title="Refresh News Feed"
@@ -151,7 +217,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
+      {/* Category Filter Tabs (Total number removed from All News button as requested) */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-scrollbar">
         <button
           onClick={() => setActiveCategory('all')}
@@ -162,7 +228,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           }`}
         >
           <Newspaper className="w-4 h-4" />
-          <span>All News ({displayedNews.length})</span>
+          <span>All News</span>
         </button>
 
         <button
@@ -205,7 +271,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
       ) : displayedNews.length === 0 ? (
         <div className="p-12 text-center rounded-3xl bg-white/5 border border-white/10 max-w-lg mx-auto space-y-3">
           <Newspaper className="w-12 h-12 text-slate-500 mx-auto" />
-          <h3 className="text-lg font-bold text-white">No News Found</h3>
+          <h3 className="text-lg font-bold text-white">No Articles Found</h3>
           <p className="text-xs text-slate-400">
             No articles match your current search or filter. Try clearing filters or refreshing.
           </p>
@@ -231,6 +297,9 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 <img
                   src={featuredArticle.imageUrl}
                   alt={featuredArticle.title}
+                  onError={(e) => {
+                    e.currentTarget.src = getSafeNewsThumbnail('', 0);
+                  }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 filter brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
@@ -279,8 +348,13 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
           {/* MAIN NEWS CARDS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(searchQuery ? displayedNews : remainingArticles).map((article) => {
-              const isWatchlist = library.some((a) => a.id === article.animeId);
+            {(searchQuery ? displayedNews : remainingArticles).map((article, idx) => {
+              const isWatchlist = library.some(
+                (a) =>
+                  a.id === article.animeId ||
+                  (a.title?.userPreferred &&
+                    article.title.toLowerCase().includes(a.title.userPreferred.toLowerCase()))
+              );
 
               return (
                 <div
@@ -294,6 +368,9 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                       <img
                         src={article.imageUrl}
                         alt={article.title}
+                        onError={(e) => {
+                          e.currentTarget.src = getSafeNewsThumbnail('', idx + 1);
+                        }}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
@@ -353,89 +430,129 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
               );
             })}
           </div>
+
+          {/* INFINITE SCROLL / LOAD MORE BUTTON */}
+          <div className="pt-6 flex flex-col items-center justify-center gap-3">
+            {hasMore ? (
+              <button
+                onClick={loadMoreNews}
+                disabled={isLoadingMore}
+                className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs shadow-lg flex items-center gap-2 transition active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-pink-400" />
+                    <span>Fetching More Articles...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Load More News Articles</span>
+                    <ChevronDown className="w-4 h-4 text-pink-400" />
+                  </>
+                )}
+              </button>
+            ) : (
+              <p className="text-xs text-slate-500 font-medium">You have reached the end of the news feed.</p>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ARTICLE READER MODAL */}
+      {/* ARTICLE READER MODAL (Refactored for flawless mobile & desktop viewing) */}
       <AnimatePresence>
         {selectedArticle && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 overflow-y-auto">
-            {/* Backdrop */}
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
+            {/* Dark Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedArticle(null)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-xl"
+              className="fixed inset-0 bg-black/85 backdrop-blur-xl"
             />
 
-            {/* Modal Body */}
+            {/* Modal Container */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.94, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-slate-900 border border-white/15 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto flex flex-col max-h-[90vh]"
+              exit={{ opacity: 0, scale: 0.94, y: 20 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className="relative w-full max-w-2xl bg-slate-950 border border-white/20 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto flex flex-col max-h-[88vh]"
             >
-              {/* Cover Banner Image */}
-              <div className="h-56 sm:h-72 w-full relative shrink-0">
+              {/* Top Banner Image with Close Button Header */}
+              <div className="h-52 sm:h-64 w-full relative shrink-0 bg-slate-900">
                 <img
                   src={selectedArticle.imageUrl}
                   alt={selectedArticle.title}
+                  onError={(e) => {
+                    e.currentTarget.src = getSafeNewsThumbnail('', 0);
+                  }}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
+                {/* Prominent Close Button */}
                 <button
                   onClick={() => setSelectedArticle(null)}
-                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 hover:bg-rose-500 text-white flex items-center justify-center border border-white/20 transition cursor-pointer"
+                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/80 hover:bg-rose-500 text-white flex items-center justify-center border border-white/20 shadow-lg transition active:scale-95 cursor-pointer z-20"
+                  title="Close Article (Esc)"
                 >
                   <X className="w-5 h-5" />
                 </button>
 
-                <div className="absolute bottom-4 left-6 right-6">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-500 text-white shadow-md">
+                {/* Title Overlay */}
+                <div className="absolute bottom-4 left-5 right-5 space-y-1">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-pink-500 text-white shadow-md inline-block">
                     {selectedArticle.source}
                   </span>
-                  <h2 className="text-lg sm:text-xl font-extrabold text-white mt-1.5 leading-tight">
+                  <h2 className="text-base sm:text-xl font-black text-white leading-tight line-clamp-2">
                     {selectedArticle.title}
                   </h2>
                 </div>
               </div>
 
-              {/* Scrollable Reader Text */}
-              <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-slate-300 text-sm leading-relaxed">
+              {/* Scrollable Main Body */}
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-slate-200 text-xs sm:text-sm leading-relaxed">
                 <div className="flex items-center justify-between text-xs text-slate-400 border-b border-white/10 pb-3 font-semibold">
-                  <span>Author: {selectedArticle.author}</span>
-                  <span>Published: {selectedArticle.date}</span>
+                  <span className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-pink-400" />
+                    {selectedArticle.author}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    {selectedArticle.date}
+                  </span>
                 </div>
 
-                <p className="text-slate-200 leading-relaxed font-medium">
-                  {selectedArticle.summary}
-                </p>
+                <div className="space-y-3">
+                  <p className="text-slate-200 leading-relaxed font-normal sm:text-base">
+                    {selectedArticle.summary}
+                  </p>
+                </div>
 
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5 mt-4">
                   <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
                     <Sparkles className="w-4 h-4" />
                     <span>Official Coverage Story</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    This article contains verified industry updates and production announcements.
+                    This article contains verified anime industry updates and broadcast announcements.
                   </p>
                 </div>
               </div>
 
               {/* Action Modal Footer */}
-              <div className="p-4 border-t border-white/10 bg-black/40 flex items-center justify-between gap-3">
+              <div className="p-4 border-t border-white/10 bg-black/60 flex flex-wrap items-center justify-between gap-3 shrink-0">
                 {selectedArticle.animeId ? (
                   <button
                     onClick={() => {
                       handleOpenAnimeFromNews(selectedArticle);
                       setSelectedArticle(null);
                     }}
-                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white text-xs font-bold shadow-md flex items-center gap-2 transition cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white text-xs font-bold shadow-md flex items-center gap-2 transition active:scale-95 cursor-pointer"
                   >
                     <Tv className="w-4 h-4" />
-                    <span>View Anime Page</span>
+                    <span>View Anime Details</span>
                   </button>
                 ) : <div />}
 
@@ -444,9 +561,9 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                     href={selectedArticle.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center gap-2 transition cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center gap-2 transition active:scale-95 cursor-pointer"
                   >
-                    <span>Open Source Article</span>
+                    <span>Open Web Source</span>
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
