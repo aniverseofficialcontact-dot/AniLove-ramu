@@ -520,7 +520,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       episodeCacheKey.current = '';
       serverUrlCache.current = {};
       baseSourceRef.current = null;
-      lastPlayCallUrl.current = null;
     }
 
     // ── FAST PATH: URL already cached for this exact source + episode + server ─────
@@ -531,7 +530,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         url: cachedUrl,
         selectedServerName: requestedServer,
       };
-      lastPlayCallUrl.current = null;
       setStreamSource(cachedSource);
       setResolvedEp(episodeNumber);
       setStreamStatus('ready');
@@ -568,7 +566,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             });
           }
           baseSourceRef.current = result.source;
-          lastPlayCallUrl.current = null;
           setStreamSource(result.source);
           setResolvedEp(episodeNumber);
           setStreamStatus('ready');
@@ -717,7 +714,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   useEffect(() => {
     return () => {
-      lastPlayCallUrl.current = null;
       if (Capacitor.isNativePlatform()) {
         try {
           NativePlayer.close().catch(() => {});
