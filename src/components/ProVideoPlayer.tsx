@@ -443,6 +443,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
     // Purge previous episode caches immediately if cacheKey changes
     if (episodeCacheKey.current !== cacheKey) {
+      episodeCacheKey.current = '';
       serverUrlCache.current = {};
       baseSourceRef.current = null;
       lastPlayCallUrl.current = null;
@@ -718,21 +719,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
         audio: audioMode,
         advancePlayer: settings?.advancePlayerEnabled ?? false,
         startTime: initialTime || 0,
-      }).then(() => {
-        // Silent background pre-fetch for next episode stream into 20-min cache (0ms instant episode switching)
-        if (episodesList.length > currentEpNum) {
-          setTimeout(() => {
-            resolveEpisodeSource({
-              anime,
-              episodeNumber: currentEpNum + 1,
-              providerId: activeServer,
-              language: audioMode,
-              resolution: quality,
-              serverName: `${selectedSource || 'Multi-Lang'}-Server-1`,
-              sourceName: selectedSource || 'Multi-Lang',
-            }).catch(() => {});
-          }, 2000);
-        }
       }).catch(() => {});
     }
   }, [activeStreamSource?.url, isStreamReady, episodeNumber, audioMode, anime.id, settings, selectedSubServerName, onClosePlayer, onEpisodeChange, episodesList.length, initialTime]);
