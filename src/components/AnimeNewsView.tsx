@@ -6,15 +6,12 @@ import {
   ExternalLink,
   Sparkles,
   Bookmark,
-  Share2,
   Calendar,
   User,
-  MessageSquare,
   ArrowRight,
   Flame,
   X,
-  Tv,
-  Check
+  Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime } from '../types';
@@ -62,9 +59,9 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   // Combine and filter articles
   let displayedNews = [...watchlistNews, ...newsList];
 
-  // Filter out duplicates by ID
+  // Deduplicate by title
   const uniqueMap = new Map<string, NewsItem>();
-  displayedNews.forEach((item) => uniqueMap.set(item.id, item));
+  displayedNews.forEach((item) => uniqueMap.set(item.title, item));
   displayedNews = Array.from(uniqueMap.values());
 
   if (activeCategory === 'watchlist') {
@@ -73,7 +70,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     );
   } else if (activeCategory === 'announcements') {
     displayedNews = displayedNews.filter(
-      (item) => item.category === 'Announcement' || item.source === 'AniList'
+      (item) => item.category === 'Announcement' || item.source === 'Official Announcement'
     );
   }
 
@@ -96,7 +93,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
       if (matchedAnime) {
         onOpenDetails(matchedAnime);
       } else {
-        // Build minimal anime object to pass to details
+        // Build minimal anime object
         onOpenDetails({
           id: newsItem.animeId,
           title: { userPreferred: newsItem.animeTitle || newsItem.title },
@@ -112,33 +109,27 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 select-none">
-      {/* Top Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-purple-950/60 to-slate-900 border border-white/10 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 via-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/20 border border-white/20 shrink-0">
-            <Newspaper className="w-6 h-6" />
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
+      {/* Sleek Minimal Top Header Row (Box removed as requested) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Newspaper className="w-6 h-6 text-pink-500" />
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              Anime <span className="text-pink-400">News & Trends</span>
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-500/20 text-pink-300 border border-pink-500/30">
+              LIVE UPDATES
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-white tracking-tight">
-                Anime <span className="text-pink-400">News & Trends</span>
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-pink-500/20 text-pink-300 border border-pink-500/30">
-                MAL & ANILIST SYNC
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Live industry updates, official announcements & updates on your watchlist
-            </p>
-          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Industry announcements, trailers, & updates on your watchlist
+          </p>
         </div>
 
-        {/* Action Controls: Refresh & Search */}
-        <div className="flex items-center gap-3 relative z-10 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
+        {/* Action Controls: Search & Refresh */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -152,7 +143,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           <button
             onClick={loadNews}
             disabled={isLoading}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition active:scale-95 cursor-pointer disabled:opacity-50"
+            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
             title="Refresh News Feed"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -216,7 +207,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           <Newspaper className="w-12 h-12 text-slate-500 mx-auto" />
           <h3 className="text-lg font-bold text-white">No News Found</h3>
           <p className="text-xs text-slate-400">
-            No articles match your search or filter. Try clearing the search bar or refreshing.
+            No articles match your current search or filter. Try clearing filters or refreshing.
           </p>
           <button
             onClick={() => {
@@ -230,7 +221,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         </div>
       ) : (
         <div className="space-y-8">
-          {/* FEATURED HEADLINE BANNER (First Article) */}
+          {/* FEATURED HEADLINE BANNER */}
           {featuredArticle && !searchQuery && (
             <div
               onClick={() => setSelectedArticle(featuredArticle)}
@@ -246,13 +237,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
                 {/* Top Badges */}
                 <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-black tracking-wider shadow-lg ${
-                      featuredArticle.source === 'MyAnimeList'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-sky-500 text-white'
-                    }`}
-                  >
+                  <span className="px-3 py-1 rounded-full text-xs font-black tracking-wider bg-pink-500 text-white shadow-lg">
                     {featuredArticle.source}
                   </span>
 
@@ -314,13 +299,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
 
                       {/* Source Badge */}
-                      <span
-                        className={`absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider ${
-                          article.source === 'MyAnimeList'
-                            ? 'bg-blue-600/90 text-white'
-                            : 'bg-sky-500/90 text-white'
-                        }`}
-                      >
+                      <span className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-purple-600/90 text-white shadow-md">
                         {article.source}
                       </span>
 
@@ -437,10 +416,10 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
                     <Sparkles className="w-4 h-4" />
-                    <span>Official Coverage Source</span>
+                    <span>Official Coverage Story</span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    This story is verified and sourced from {selectedArticle.source}. Tap below to view full details on the official site.
+                    This article contains verified industry updates and production announcements.
                   </p>
                 </div>
               </div>
@@ -460,15 +439,17 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   </button>
                 ) : <div />}
 
-                <a
-                  href={selectedArticle.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center gap-2 transition cursor-pointer"
-                >
-                  <span>Open Full Web Article</span>
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                {selectedArticle.url && selectedArticle.url !== '#' && (
+                  <a
+                    href={selectedArticle.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <span>Open Source Article</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
               </div>
             </motion.div>
           </div>
