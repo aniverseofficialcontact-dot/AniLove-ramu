@@ -1863,7 +1863,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                 exoPlayer.clearMediaItems();
             }
 
-            MediaItem.Builder mediaBuilder = new MediaItem.Builder().setUri(Uri.parse(hlsUrl));
+            MediaItem.Builder mediaBuilder = new MediaItem.Builder()
+                    .setUri(Uri.parse(hlsUrl))
+                    .setMediaId(hlsUrl + "_" + System.currentTimeMillis());
 
             if (subtitleUrl != null && !subtitleUrl.isEmpty()) {
                 MediaItem.SubtitleConfiguration subtitle = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
@@ -1885,7 +1887,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 mediaSource = new DefaultMediaSourceFactory(httpDataSourceFactory).createMediaSource(mediaBuilder.build());
             }
 
-            exoPlayer.setMediaSource(mediaSource);
+            exoPlayer.setMediaSource(mediaSource, true);
             if (startTime > 0) {
                 exoPlayer.seekTo(startTime * 1000L);
             } else {
