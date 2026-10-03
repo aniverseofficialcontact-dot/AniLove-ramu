@@ -443,7 +443,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     if (episodeCacheKey.current !== cacheKey) {
       serverUrlCache.current = {};
       baseSourceRef.current = null;
-      lastLaunchedKey.current = null;
+      lastLaunchedEp.current = null;
+      lastLaunchedUrl.current = null;
     }
 
     // ── FAST PATH: URL already cached for this exact source + episode + server ─────
@@ -737,7 +738,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
   useEffect(() => {
     return () => {
-      lastLaunchedKey.current = null;
+      lastLaunchedEp.current = null;
+      lastLaunchedUrl.current = null;
       if (Capacitor.isNativePlatform()) {
         try {
           NativePlayer.close().catch(() => {});
