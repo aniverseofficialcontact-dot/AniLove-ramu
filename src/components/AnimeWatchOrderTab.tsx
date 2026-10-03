@@ -569,73 +569,12 @@ export const AnimeWatchOrderTab: React.FC<AnimeWatchOrderTabProps> = ({
                       )}
                     </div>
 
-                    {/* Details Section */}
-                    <div className="space-y-2.5 pt-1.5 w-full min-w-0">
-                      {/* Romaji Title */}
-                      {item.romajiTitle && item.romajiTitle !== item.title && (
-                        <p className="text-[11px] text-slate-400 italic truncate">
-                          {item.romajiTitle}
-                        </p>
-                      )}
-
-                      {/* Order Guide Box */}
-                      {item.orderGuide && (
-                        <div className="flex items-start gap-1.5 sm:gap-2 p-2 sm:p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 text-[11px] sm:text-xs text-slate-300 min-w-0 break-words">
-                          <Compass className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
-                          <div className="min-w-0 flex-1">
-                            <strong className="text-indigo-300 font-semibold">Where to watch: </strong>
-                            <span className="break-words">{item.orderGuide}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Note Description */}
-                      {item.note && (
-                        <p className="text-xs text-slate-400 leading-relaxed line-clamp-3 break-words">
-                          {item.note}
-                        </p>
-                      )}
-
-                      {/* Secondary Actions Row */}
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5 w-full min-w-0">
-                        {/* Browse All Episodes in Full Modal Tab */}
-                        {item.animeObj && (
-                          <button
-                            type="button"
-                            onClick={() => handleBrowseEpisodes(item.animeObj!)}
-                            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer shrink-0"
-                            title="Open full Episodes browser"
-                          >
-                            <Video className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="hidden min-[380px]:inline">Browse Episodes</span>
-                            <span className="min-[380px]:hidden">Episodes Tab</span>
-                          </button>
-                        )}
-
-                        {/* Desktop-only Mark Completed Step Button */}
-                        <button
-                          type="button"
-                          onClick={e => toggleCompleted(stepKey, e)}
-                          className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition border cursor-pointer shrink-0 ${
-                            isCompleted
-                              ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300 hover:bg-emerald-950'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Completed</span>
-                            </>
-                          ) : (
-                            <>
-                              <Circle className="w-3.5 h-3.5 text-slate-500" />
-                              <span>Mark Completed</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
+                    {/* Romaji Subtitle */}
+                    {item.romajiTitle && item.romajiTitle !== item.title && (
+                      <p className="text-[11px] text-slate-400 italic truncate pt-0.5">
+                        {item.romajiTitle}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

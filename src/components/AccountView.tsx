@@ -996,7 +996,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </div>
 
               {/* Preferred Default Streaming Source */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
+              <div className="py-3.5 flex items-center justify-between gap-4 border-b border-white/10">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-white/5 text-pink-300">
                     <Globe className="w-4 h-4" />
@@ -1022,6 +1022,35 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   <option value="AnimeDekho">⚡ AnimeDekho</option>
                   <option value="HiAnime">🌸 HiAnime</option>
                   <option value="AnimeSalt">🧂 AnimeSalt</option>
+                </select>
+              </div>
+
+              {/* Default Episodes Grid/Layout Option */}
+              <div className="py-3.5 flex items-center justify-between gap-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
+                    <LayoutGrid className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Default Episodes Grid/Layout</p>
+                    <p className="text-xs text-slate-400">Default layout format for episode list in watch page</p>
+                  </div>
+                </div>
+                <select
+                  value={settings.preferredEpisodeLayout || 'grid'}
+                  onChange={e => {
+                    const layout = e.target.value as any;
+                    onSaveSettings({
+                      ...settings,
+                      preferredEpisodeLayout: layout,
+                    });
+                    onShowToast('success', `Default episode layout set to ${layout === 'grid' ? 'Card Grid' : layout === 'list' ? 'List View' : 'Compact Number Tiles'}.`, 'Layout Updated');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
+                >
+                  <option value="grid">🖼️ Card Grid (Thumbnails)</option>
+                  <option value="list">📄 List View (Detailed)</option>
+                  <option value="compact">🔢 Compact Number Tiles</option>
                 </select>
               </div>
 

@@ -788,6 +788,10 @@ export function App() {
     setCurrentTab('discover');
   }, []);
 
+  const handleSelectStudio = useCallback((_studio: string) => {
+    setCurrentTab('discover');
+  }, []);
+
   // Profile PIN Protected Tab Interceptor
   const handleSelectTab = (tab: TabType) => {
     setActiveWatchEpisode(null);

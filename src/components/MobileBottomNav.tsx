@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Search, Calendar, Bookmark, User, Rotate3d, Lock, Film } from 'lucide-react';
+import { Home, Search, Download, Bookmark, User, Rotate3d, Lock, Film } from 'lucide-react';
 import { UserSettings } from '../types';
 import { TabType } from './Navbar';
 
@@ -66,16 +66,17 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         <span className="text-[10px]">Reels</span>
       </button>
 
+      {/* Downloads Tab (Replacing Schedule in Bottom Navigation Bar) */}
       <button
-        onClick={() => onSelectTab('schedule')}
+        onClick={() => onSelectTab('downloads')}
         className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl relative transition cursor-pointer ${
-          currentTab === 'schedule'
-            ? 'text-pink-400 font-bold bg-white/10'
+          currentTab === 'downloads'
+            ? 'text-violet-400 font-bold bg-white/10'
             : 'text-slate-400 hover:text-slate-200'
         }`}
       >
-        <Calendar className="w-4 h-4" />
-        <span className="text-[10px]">Schedule</span>
+        <Download className="w-4 h-4" />
+        <span className="text-[10px]">Downloads</span>
       </button>
 
       <button
@@ -137,4 +138,3 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     </div>
   );
 };
-
