@@ -67,10 +67,17 @@ public class DownloadPlugin extends Plugin {
             intent.setAction(EpisodeDownloadService.ACTION_START);
             intent.putExtra("itemJson", item.toString());
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                getContext().startForegroundService(intent);
-            } else {
-                getContext().startService(intent);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    getContext().startForegroundService(intent);
+                } else {
+                    getContext().startService(intent);
+                }
+            } catch (Exception fgErr) {
+                Log.w(TAG, "Foreground service start failed, trying startService: " + fgErr.getMessage());
+                try {
+                    getContext().startService(intent);
+                } catch (Exception ignored) {}
             }
 
             call.resolve();
@@ -87,10 +94,18 @@ public class DownloadPlugin extends Plugin {
             call.reject("Missing downloadId");
             return;
         }
-        Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
-        intent.setAction(EpisodeDownloadService.ACTION_PAUSE);
-        intent.putExtra("downloadId", downloadId);
-        getContext().startService(intent);
+        try {
+            Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
+            intent.setAction(EpisodeDownloadService.ACTION_PAUSE);
+            intent.putExtra("downloadId", downloadId);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(intent);
+            } else {
+                getContext().startService(intent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in pauseDownload service start", e);
+        }
         call.resolve();
     }
 
@@ -101,10 +116,18 @@ public class DownloadPlugin extends Plugin {
             call.reject("Missing downloadId");
             return;
         }
-        Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
-        intent.setAction(EpisodeDownloadService.ACTION_RESUME);
-        intent.putExtra("downloadId", downloadId);
-        getContext().startService(intent);
+        try {
+            Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
+            intent.setAction(EpisodeDownloadService.ACTION_RESUME);
+            intent.putExtra("downloadId", downloadId);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(intent);
+            } else {
+                getContext().startService(intent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in resumeDownload service start", e);
+        }
         call.resolve();
     }
 
@@ -115,10 +138,18 @@ public class DownloadPlugin extends Plugin {
             call.reject("Missing downloadId");
             return;
         }
-        Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
-        intent.setAction(EpisodeDownloadService.ACTION_CANCEL);
-        intent.putExtra("downloadId", downloadId);
-        getContext().startService(intent);
+        try {
+            Intent intent = new Intent(getContext(), EpisodeDownloadService.class);
+            intent.setAction(EpisodeDownloadService.ACTION_CANCEL);
+            intent.putExtra("downloadId", downloadId);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getContext().startForegroundService(intent);
+            } else {
+                getContext().startService(intent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in cancelDownload service start", e);
+        }
         call.resolve();
     }
 
