@@ -2874,30 +2874,17 @@ public class NativePlayerActivity extends AppCompatActivity {
                     playerWebView.bringToFront();
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
                     if (targetUrl != null && !targetUrl.trim().isEmpty()) {
-                        if (targetUrl.contains("hentaiocean")) {
-                            Log.i("AniLove_Engine", "Directly loading HentaiOcean embed URL in WebView: " + targetUrl);
-                            playerWebView.loadUrl(targetUrl);
+                        Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
+                        if (isDirectMediaStream(targetUrl) || targetUrl.toLowerCase().contains(".mp4")) {
+                            String videoHtml = "<!DOCTYPE html>" +
+                                    "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                                    "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}video{width:100%;height:100vh;object-fit:contain;}</style>" +
+                                    "</head><body>" +
+                                    "<video src='" + targetUrl.replace("'", "\\'") + "' controls autoplay playsinline style='width:100%;height:100vh;'></video>" +
+                                    "</body></html>";
+                            playerWebView.loadDataWithBaseURL(targetUrl, videoHtml, "text/html", "UTF-8", null);
                         } else {
-                            String iframeHtml;
-                            boolean isDirectMp4OrMedia = isDirectMediaStream(targetUrl) || targetUrl.toLowerCase().contains(".mp4");
-                            if (isDirectMp4OrMedia) {
-                                iframeHtml = "<!DOCTYPE html>" +
-                                        "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
-                                        "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}video{width:100%;height:100vh;object-fit:contain;}</style>" +
-                                        "</head><body>" +
-                                        "<video src='" + targetUrl.replace("'", "\\'") + "' controls autoplay playsinline style='width:100%;height:100vh;'></video>" +
-                                        "</body></html>";
-                            } else {
-                                iframeHtml = "<!DOCTYPE html>" +
-                                        "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
-                                        "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}iframe{width:100%;height:100vh;border:none;}</style>" +
-                                        "</head><body>" +
-                                        "<iframe src='" + targetUrl.replace("'", "\\'") + "' style='width:100%;height:100vh;border:none;' allow='autoplay; fullscreen; encrypted-media' allowfullscreen></iframe>" +
-                                        "</body></html>";
-                            }
-                            String baseUrl = getBestRefererForUrl(targetUrl, targetUrl);
-                            Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
-                            playerWebView.loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null);
+                            playerWebView.loadUrl(targetUrl);
                         }
                     }
                 }
