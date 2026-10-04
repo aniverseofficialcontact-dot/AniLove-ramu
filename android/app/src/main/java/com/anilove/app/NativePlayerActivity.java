@@ -188,22 +188,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
         String script =
             "(function() {" +
-            "  var cssRules = '#overlay, #playback, .jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
+            "  var cssRules = '.jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
             "                 '.jw-icon-fullscreen, .jw-btn-fullscreen, .art-icon-fullscreen, .art-control-fullscreen, .plyr__controls__item[data-plyr=\"fullscreen\"], ' +" +
-            "                 '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, button[data-plyr=\"fullscreen\"], ' +" +
-            "                 'button[title*=\"Fullscreen\" i], button[title*=\"Full Screen\" i], button[aria-label*=\"Fullscreen\" i], button[aria-label*=\"Full Screen\" i], ' +" +
-            "                 '[data-tooltip*=\"Fullscreen\" i], [data-tooltip*=\"Full Screen\" i], ' +" +
-            "                 '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, .plyr__controls__item[data-plyr=\"settings\"], ' +" +
-            "                 'button[data-plyr=\"settings\"], .vjs-setting-menu-button, .vjs-quality-selector, button[title*=\"Setting\" i], button[title*=\"Quality\" i], ' +" +
-            "                 'button[aria-label*=\"Setting\" i], button[aria-label*=\"Quality\" i], [data-tooltip*=\"Setting\" i], [data-tooltip*=\"Quality\" i], ' +" +
+            "                 '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, ' +" +
+            "                 '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, ' +" +
             "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], .btn-download, ' +" +
             "                 '.jw-icon-hd, .jw-settings-content, .v-quality, ' +" +
             "                 '.jw-icon-cc, .art-icon-subtitle, .v-cc, ' +" +
             "                 '.art-icon-pip, .jw-icon-pip, .v-pip, ' +" +
-            "                 '.jw-slider-time, .jw-rail, .jw-progress, .jw-buffer, .jw-knob, .jw-slider-horizontal, .art-control-progress, .art-progress, .plyr__progress, .vjs-progress-control, .vjs-progress-holder, .vjs-play-progress, .vjs-slider, div[class*=\"seekbar\" i], div[class*=\"seek-bar\" i], input[type=\"range\"], .v-seekbar, ' +" +
-            "                 '.art-control-play, .art-control-pause, .art-icon-play, .art-icon-pause, .jw-icon-playback, .jw-btn-play, .jw-btn-pause, button[data-plyr=\"play\"], button[data-plyr=\"pause\"], .vjs-play-control, ' +" +
-            "                 '.art-control-volume, .art-icon-volume, .art-volume, .jw-icon-volume, .jw-btn-volume, button[data-plyr=\"mute\"], .plyr__volume, .vjs-volume-panel, .vjs-mute-control, ' +" +
-            "                 '.jw-text-elapsed, .jw-text-duration, .jw-text-countdown, .jw-time-tip, .art-control-time, .art-time, .plyr__time, .vjs-current-time, .vjs-duration, .vjs-remaining-time, ' +" +
             "                 '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
             "                 '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
             "  function applyAdEraserToWindow(win) {" +
@@ -223,6 +215,19 @@ public class NativePlayerActivity extends AppCompatActivity {
             "        style.appendChild(win.document.createTextNode(cssRules));" +
             "        (win.document.head || win.document.documentElement).appendChild(style);" +
             "      }" +
+            "      try {" +
+            "        if (win.location && (win.location.href.indexOf('hentaiocean') !== -1 || win.location.href.indexOf('play?') !== -1)) {" +
+            "          var vids = win.document.querySelectorAll('video');" +
+            "          for (var vIdx = 0; vIdx < vids.length; vIdx++) {" +
+            "            vids[vIdx].muted = false;" +
+            "            vids[vIdx].play().catch(function(){});" +
+            "          }" +
+            "          var playBtns = win.document.querySelectorAll('button, .play-btn, #playback, .jw-display-icon');" +
+            "          for (var bIdx = 0; bIdx < playBtns.length; bIdx++) {" +
+            "            try { playBtns[bIdx].click(); } catch(e) {}" +
+            "          }" +
+            "        }" +
+            "      } catch(e) {}" +
             "      var v = win.document.querySelector('video');" +
             "      if (v && !v.dataset.aniskipBound) {" +
             "        v.dataset.aniskipBound = 'true';" +
