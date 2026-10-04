@@ -23,6 +23,7 @@ import {
   Download,
   Server,
   Globe,
+  Home,
   RotateCw,
   Hash,
 } from 'lucide-react';
@@ -593,8 +594,31 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         )}
 
-        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: ENGINE, REFRESH, SOURCES, SERVERS */}
+        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: HOME (18+ only), ENGINE, REFRESH, SOURCES, SERVERS */}
         <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
+          {/* HOME BUTTON (ONLY IN 18+ PROFILE) */}
+          {is18PlusActive && (
+            <div className="relative flex flex-col items-end">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+                HOME
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (Capacitor.isNativePlatform()) {
+                    NativePlayer.close().catch(() => {});
+                  }
+                  onBack();
+                }}
+                title="Go to Home Page"
+                className="bg-rose-950/80 border border-rose-500/50 hover:bg-rose-900/80 text-rose-300 rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
+              >
+                <Home className="w-3.5 h-3.5 text-rose-400" />
+                <span>Home</span>
+              </button>
+            </div>
+          )}
+
           {/* PLAYER ENGINE SWITCHER Button */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">

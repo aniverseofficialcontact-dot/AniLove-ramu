@@ -520,7 +520,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
   return (
     <div className="w-full pb-10 space-y-6">
       {/* PROFILE HEADER CARD - BOUNDARYLESS */}
-      <div className="relative overflow-hidden pt-12 pb-12 px-6 sm:px-12 bg-gradient-to-b from-pink-950/60 via-slate-900/95 to-slate-900 border-b border-white/10 shadow-2xl">
+      <div className="relative overflow-hidden pt-4 pb-8 px-6 sm:px-12 bg-gradient-to-b from-pink-950/60 via-slate-900/95 to-slate-900 border-b border-white/10 shadow-2xl">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 bg-pink-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-80 h-80 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
 

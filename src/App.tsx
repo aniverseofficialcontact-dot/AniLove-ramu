@@ -1149,7 +1149,7 @@ export function App() {
       </div>
 
       {/* Main View Container */}
-      <main className={`flex-1 relative z-10 ${currentTab === 'home' || activeWatchEpisode || isReelsActive ? '' : 'pt-16'}`}>
+      <main className="flex-1 relative z-10 pt-1 sm:pt-2">
         {/* VIEW 0: DEDICATED FULL-PAGE WATCH VIEW */}
         {activeWatchEpisode ? (
           <WatchView

@@ -176,7 +176,7 @@ export const CardInventoryView: React.FC<CardInventoryViewProps> = ({
   }, [vaultCards, searchQuery, characterLevelFilter, selectedAnimeCharacterFilter]);
 
   return (
-    <div id="card-inventory-view" className="space-y-6 pb-24">
+    <div id="card-inventory-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5 pb-24 select-none">
       {/* Top Banner Header */}
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/70 border border-white/15 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-pink-600/20 rounded-full blur-3xl pointer-events-none" />

@@ -172,7 +172,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   };
 
   return (
-    <div id="schedule-view-container" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div id="schedule-view-container" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5">
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>

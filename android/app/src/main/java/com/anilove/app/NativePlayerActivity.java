@@ -956,12 +956,10 @@ public class NativePlayerActivity extends AppCompatActivity {
             playerWebView.setWebViewClient(new WebViewClient() {
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                    if (is18PlusActive()) {
-                        return super.shouldInterceptRequest(view, request);
-                    }
                     if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString();
+                        String url = request.getUrl().toString().toLowerCase();
                         if (isAdUrl(url)) {
+                            Log.i("AniLove_AdBlock", "Blocked ad request: " + url);
                             return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
                         }
                     }
@@ -971,56 +969,45 @@ public class NativePlayerActivity extends AppCompatActivity {
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString().toLowerCase();
+                        String url = request.getUrl().toString();
+                        String lower = url.toLowerCase();
                         String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
 
-                        if (is18PlusActive()) {
-                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("whatsapp://") || url.startsWith("tg://")) {
-                                return true;
-                            }
-                            return false;
+                        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+                            Log.i("AniLove_AdBlock", "Blocked non-http url: " + url);
+                            return true;
                         }
 
-                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
-                            url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://") ||
-                            url.startsWith("whatsapp://") || url.startsWith("tg://") || isAdUrl(url)) {
+                        if (isAdUrl(lower) || host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg")) {
+                            Log.i("AniLove_AdBlock", "Blocked ad redirect: " + url);
                             return true;
+                        }
+
+                        if (request.isForMainFrame()) {
+                            if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                                try {
+                                    String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
+                                    if (!host.contains("hentaiocean") && !host.equals(originalHost) && !originalHost.contains(host)) {
+                                        Log.i("AniLove_AdBlock", "Blocked top-level ad redirect: " + host);
+                                        return true;
+                                    }
+                                } catch (Exception ignored) {}
+                            }
                         }
                     }
                     return false;
                 }
 
                 @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                    injectAdEraserScript(view);
+                }
+
+                @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    if (view != null) {
-                        String autoClickScript =
-                            "(function() {" +
-                            "  function autoTrigger(win) {" +
-                            "    try {" +
-                            "      if (!win.document) return;" +
-                            "      var vids = win.document.querySelectorAll('video');" +
-                            "      for (var i = 0; i < vids.length; i++) {" +
-                            "        vids[i].muted = false;" +
-                            "        vids[i].play().catch(function(){});" +
-                            "      }" +
-                            "      var btns = win.document.querySelectorAll('button, .play-btn, .play, #playback, .jw-display-icon, div[class*=\"play\"]');" +
-                            "      for (var j = 0; j < btns.length; j++) {" +
-                            "        try { btns[j].click(); } catch(e){}" +
-                            "      }" +
-                            "    } catch(e) {}" +
-                            "    try {" +
-                            "      for (var k = 0; k < win.frames.length; k++) {" +
-                            "        autoTrigger(win.frames[k]);" +
-                            "      }" +
-                            "    } catch(e) {}" +
-                            "  }" +
-                            "  autoTrigger(window);" +
-                            "  setTimeout(function(){ autoTrigger(window); }, 500);" +
-                            "  setTimeout(function(){ autoTrigger(window); }, 1200);" +
-                            "})();";
-                        view.evaluateJavascript(autoClickScript, null);
-                    }
+                    injectAdEraserScript(view);
                 }
             });
 
@@ -2588,6 +2575,43 @@ public class NativePlayerActivity extends AppCompatActivity {
         });
     }
 
+    private void injectAdEraserScript(WebView view) {
+        if (view == null) return;
+        String js =
+            "(function() {" +
+            "  try {" +
+            "    window.open = function() { console.log('Blocked popup window.open'); return null; };" +
+            "    var bads = document.querySelectorAll('a[target=\"_blank\"], a[href*=\"pemsrv\"], a[href*=\"exoclick\"], a[href*=\"pop\"], div[style*=\"z-index: 2147483647\"], iframe[src*=\"ad\"]');" +
+            "    for (var i = 0; i < bads.length; i++) { bads[i].remove(); }" +
+            "  } catch(e) {}" +
+            "  function autoTrigger(win) {" +
+            "    try {" +
+            "      if (!win.document) return;" +
+            "      var vids = win.document.querySelectorAll('video');" +
+            "      for (var i = 0; i < vids.length; i++) {" +
+            "        vids[i].muted = false;" +
+            "        vids[i].autoplay = true;" +
+            "        vids[i].play().catch(function(){});" +
+            "      }" +
+            "      var btns = win.document.querySelectorAll('button, .play-btn, .play, #playback, .vjs-big-play-button, .jw-display-icon, div[class*=\"play\"]');" +
+            "      for (var j = 0; j < btns.length; j++) {" +
+            "        try { btns[j].click(); } catch(e){}" +
+            "      }" +
+            "    } catch(e) {}" +
+            "    try {" +
+            "      for (var k = 0; k < win.frames.length; k++) {" +
+            "        autoTrigger(win.frames[k]);" +
+            "      }" +
+            "    } catch(e) {}" +
+            "  }" +
+            "  autoTrigger(window);" +
+            "  setTimeout(function(){ autoTrigger(window); }, 300);" +
+            "  setTimeout(function(){ autoTrigger(window); }, 800);" +
+            "  setTimeout(function(){ autoTrigger(window); }, 1500);" +
+            "})();";
+        view.evaluateJavascript(js, null);
+    }
+
     private void showCaptionMenu() {
         BottomSheetDialog dialog = new BottomSheetDialog(this);
         View view = getLayoutInflater().inflate(R.layout.layout_caption_customization, findViewById(android.R.id.content), false);
@@ -3466,13 +3490,14 @@ public class NativePlayerActivity extends AppCompatActivity {
         // Specific ad networks and popunder domains ONLY
         return lower.contains("adsterra") || lower.contains("monetag") || lower.contains("highperformancegate") ||
                lower.contains("morphify.net") || lower.contains("popads") || lower.contains("popcash") ||
-               lower.contains("exosrv") || lower.contains("clocid") || lower.contains("decafeligiblyhad") ||
-               lower.contains("probationthimbledespite") || lower.contains("alwingulla") || lower.contains("cpmgate") ||
-               lower.contains("trafficjunky") || lower.contains("exoclick") || lower.contains("juicyads") ||
-               lower.contains("propellerads") || lower.contains("bet365") || lower.contains("1xbet") ||
-               lower.contains("stake") || lower.contains("doubleclick") || lower.contains("googlesyndication") ||
-               lower.contains("adservice") || lower.contains("popunder") || lower.contains("onclick") ||
-               lower.contains("outbrain") || lower.contains("taboola");
+               lower.contains("exosrv") || lower.contains("clocid") || lower.contains("pemsrv") ||
+               lower.contains("ad-provider") || lower.contains("clickadu") || lower.contains("hilltopads") ||
+               lower.contains("highrevenuegate") || lower.contains("probationthimbledespite") || lower.contains("alwingulla") ||
+               lower.contains("cpmgate") || lower.contains("trafficjunky") || lower.contains("exoclick") ||
+               lower.contains("juicyads") || lower.contains("propellerads") || lower.contains("bet365") ||
+               lower.contains("1xbet") || lower.contains("stake") || lower.contains("doubleclick") ||
+               lower.contains("googlesyndication") || lower.contains("adservice") || lower.contains("popunder") ||
+               lower.contains("onclick") || lower.contains("outbrain") || lower.contains("taboola");
     }
 
     @UnstableApi

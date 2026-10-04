@@ -3,6 +3,7 @@ import {
   RefreshCw,
   AlertCircle,
   Globe,
+  Home,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';
@@ -897,8 +898,25 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Engine Switcher & Refresh Buttons */}
+          {/* Right: Home (18+ only), Engine Switcher & Refresh Buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            {is18PlusActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (Capacitor.isNativePlatform()) {
+                    NativePlayer.close().catch(() => {});
+                  }
+                  if (onClosePlayer) onClosePlayer();
+                }}
+                className="px-3 py-2 rounded-xl border border-rose-500/50 bg-rose-950/80 hover:bg-rose-900 text-rose-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
+                title="Go to Home Page"
+              >
+                <Home className="w-3.5 h-3.5 text-rose-400" />
+                <span>Home</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleToggleEngine}

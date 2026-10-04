@@ -187,7 +187,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort, is18PlusMode]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5">
       {/* Search Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1 text-left">
