@@ -64,6 +64,21 @@ export const WallpapersView: React.FC<WallpapersViewProps> = ({ settings, onShow
     loadInitialWallpapers();
   }, [allowNsfw, aspectFilter]);
 
+  // Seamless Infinite Scroll Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoading || isLoadingMore || !hasMore) return;
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const threshold = document.documentElement.offsetHeight - 800; // Trigger 800px before bottom
+      if (scrollPosition >= threshold) {
+        loadMoreWallpapers();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLoading, isLoadingMore, hasMore, page, searchQuery, allowNsfw, aspectFilter]);
+
   const loadMoreWallpapers = async () => {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
@@ -93,10 +108,25 @@ export const WallpapersView: React.FC<WallpapersViewProps> = ({ settings, onShow
     loadInitialWallpapers(searchQuery, aspectFilter);
   };
 
-  const handleDownload = (wp: WallpaperPost) => {
-    if (wp.file_url) {
+  const handleDownload = async (wp: WallpaperPost) => {
+    if (!wp.file_url) return;
+    if (onShowToast) onShowToast('Downloading 4K wallpaper...');
+
+    try {
+      const response = await fetch(wp.file_url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `wallpaper_${wp.id || Date.now()}.${wp.file_url.split('.').pop()?.split('?')[0] || 'jpg'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      if (onShowToast) onShowToast('Wallpaper downloaded successfully!');
+    } catch (e) {
+      // Fallback
       window.open(wp.file_url, '_blank');
-      if (onShowToast) onShowToast('Opening high-res wallpaper download link...');
     }
   };
 

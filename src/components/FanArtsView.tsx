@@ -64,6 +64,21 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
     loadInitialFanArts();
   }, [allowNsfw]);
 
+  // Seamless Infinite Scroll Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoading || isLoadingMore || !hasMore) return;
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const threshold = document.documentElement.offsetHeight - 800; // Trigger 800px before bottom
+      if (scrollPosition >= threshold) {
+        loadMoreFanArts();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isLoading, isLoadingMore, hasMore, page, searchQuery, allowNsfw]);
+
   const loadMoreFanArts = async () => {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
@@ -98,11 +113,25 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
     loadInitialFanArts(tag);
   };
 
-  const handleDownload = (post: DanbooruPost) => {
+  const handleDownload = async (post: DanbooruPost) => {
     const url = post.large_file_url || post.file_url;
-    if (url) {
+    if (!url) return;
+    if (onShowToast) onShowToast('Downloading Fan Art...');
+
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `fanart_${post.id || Date.now()}.${url.split('.').pop()?.split('?')[0] || 'jpg'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      if (onShowToast) onShowToast('Fan Art downloaded successfully!');
+    } catch (e) {
       window.open(url, '_blank');
-      if (onShowToast) onShowToast('Opening high-res image download link...');
     }
   };
 
