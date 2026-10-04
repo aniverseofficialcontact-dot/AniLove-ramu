@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Newspaper,
   Search,
@@ -11,8 +11,7 @@ import {
   ArrowRight,
   Flame,
   X,
-  Tv,
-  ChevronDown
+  Tv
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime } from '../types';
@@ -44,7 +43,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   const [hasMore, setHasMore] = useState(true);
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
 
-  // Load initial news on mount or library update
+  // Load initial news on mount or library change
   useEffect(() => {
     loadInitialNews();
   }, [library]);
@@ -52,6 +51,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   const loadInitialNews = async () => {
     setIsLoading(true);
     setPage(1);
+    setHasMore(true);
     try {
       const [globalNews, userNews] = await Promise.all([
         fetchGlobalAnimeNews(1),
@@ -66,7 +66,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     }
   };
 
-  // Load next page of news for infinite scroll
+  // Silent background pre-fetching when user approaches end of list (< 6 cards left)
   const loadMoreNews = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
@@ -91,11 +91,12 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     }
   }, [page, isLoadingMore, hasMore]);
 
-  // Infinite Scroll Listener
+  // Pre-fetching scroll listener (Triggers when < 6 cards remaining before bottom)
   useEffect(() => {
     const handleScroll = () => {
+      const threshold = 1200; // Trigger well before hitting bottom (< 6 cards)
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - threshold &&
         !isLoadingMore &&
         !isLoading &&
         hasMore
@@ -113,12 +114,11 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
   displayedNews.forEach((item) => uniqueMap.set(item.title, item));
   displayedNews = Array.from(uniqueMap.values());
 
-  // Filter by category
+  // Filter by active category
   if (activeCategory === 'watchlist') {
     displayedNews = displayedNews.filter((item) => {
       if (item.category === 'Watchlist' || item.source === 'Watchlist News') return true;
       if (item.animeId && library.some((a) => a.id === item.animeId)) return true;
-      // Match title with library items
       if (library.length > 0) {
         return library.some((a) => {
           const t1 = a.title?.userPreferred?.toLowerCase() || '';
@@ -130,8 +130,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
       return false;
     });
 
-    // Fallback if watchlist items exist in library but filter yielded 0 items
-    if (displayedNews.length === 0 && library.length > 0) {
+    if (displayedNews.length === 0 && watchlistNews.length > 0) {
       displayedNews = watchlistNews;
     }
   } else if (activeCategory === 'announcements') {
@@ -140,7 +139,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     );
   }
 
-  // Filter by search query
+  // Search query filter
   if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase().trim();
     displayedNews = displayedNews.filter(
@@ -176,7 +175,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
-      {/* Minimal Top Header Row */}
+      {/* Sleek Minimal Top Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -217,7 +216,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         </div>
       </div>
 
-      {/* Category Filter Tabs (Total number removed from All News button as requested) */}
+      {/* Category Filter Tabs */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-scrollbar">
         <button
           onClick={() => setActiveCategory('all')}
@@ -298,7 +297,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   src={featuredArticle.imageUrl}
                   alt={featuredArticle.title}
                   onError={(e) => {
-                    e.currentTarget.src = getSafeNewsThumbnail('', 0);
+                    e.currentTarget.src = getSafeNewsThumbnail('', featuredArticle.title, 0);
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 filter brightness-90"
                 />
@@ -363,13 +362,13 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   className="group relative rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-pink-500/40 shadow-lg overflow-hidden flex flex-col justify-between transition-all duration-300 cursor-pointer"
                 >
                   <div>
-                    {/* Article Thumbnail */}
+                    {/* Article Thumbnail (Real Anime Cover Artwork) */}
                     <div className="h-44 w-full relative overflow-hidden bg-slate-900">
                       <img
                         src={article.imageUrl}
                         alt={article.title}
                         onError={(e) => {
-                          e.currentTarget.src = getSafeNewsThumbnail('', idx + 1);
+                          e.currentTarget.src = getSafeNewsThumbnail('', article.title, idx + 1);
                         }}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
@@ -430,35 +429,10 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
               );
             })}
           </div>
-
-          {/* INFINITE SCROLL / LOAD MORE BUTTON */}
-          <div className="pt-6 flex flex-col items-center justify-center gap-3">
-            {hasMore ? (
-              <button
-                onClick={loadMoreNews}
-                disabled={isLoadingMore}
-                className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs shadow-lg flex items-center gap-2 transition active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {isLoadingMore ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-pink-400" />
-                    <span>Fetching More Articles...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Load More News Articles</span>
-                    <ChevronDown className="w-4 h-4 text-pink-400" />
-                  </>
-                )}
-              </button>
-            ) : (
-              <p className="text-xs text-slate-500 font-medium">You have reached the end of the news feed.</p>
-            )}
-          </div>
         </div>
       )}
 
-      {/* ARTICLE READER MODAL (Refactored for flawless mobile & desktop viewing) */}
+      {/* ARTICLE READER MODAL */}
       <AnimatePresence>
         {selectedArticle && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
@@ -485,7 +459,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   src={selectedArticle.imageUrl}
                   alt={selectedArticle.title}
                   onError={(e) => {
-                    e.currentTarget.src = getSafeNewsThumbnail('', 0);
+                    e.currentTarget.src = getSafeNewsThumbnail('', selectedArticle.title, 0);
                   }}
                   className="w-full h-full object-cover"
                 />
@@ -511,7 +485,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 </div>
               </div>
 
-              {/* Scrollable Main Body */}
+              {/* Scrollable Main Article Body */}
               <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1 text-slate-200 text-xs sm:text-sm leading-relaxed">
                 <div className="flex items-center justify-between text-xs text-slate-400 border-b border-white/10 pb-3 font-semibold">
                   <span className="flex items-center gap-1.5">
@@ -524,10 +498,9 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   </span>
                 </div>
 
-                <div className="space-y-3">
-                  <p className="text-slate-200 leading-relaxed font-normal sm:text-base">
-                    {selectedArticle.summary}
-                  </p>
+                {/* Full Readable Article Content */}
+                <div className="space-y-3 whitespace-pre-line text-slate-200 leading-relaxed font-normal text-xs sm:text-sm">
+                  {selectedArticle.fullContent || selectedArticle.summary}
                 </div>
 
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5 mt-4">
