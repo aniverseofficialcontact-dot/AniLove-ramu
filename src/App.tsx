@@ -67,6 +67,7 @@ import AmbientParticles from './components/AmbientParticles';
 import { soundEffects } from './services/soundEffects';
 import { mapMediaListStatusToMAL } from './services/myanimelist';
 import { prewarmInitialReelsOnAppStart } from './services/reelsService';
+import { prewarmAnimeNewsOnAppStart } from './services/animeNews';
 import { Sparkles, Keyboard, Lock, Unlock, ShieldAlert } from 'lucide-react';
 
 // Synchronously parses URL for tab and reel query parameters to avoid blank or random-feed mount flashes
@@ -402,6 +403,8 @@ export function App() {
   useEffect(() => {
     // Proactively pre-buffer initial reels into client memory on site entry
     prewarmInitialReelsOnAppStart();
+    // Pre-fetch anime news in background on app start if cache is empty/expired
+    prewarmAnimeNewsOnAppStart(library);
 
     const handlePopState = () => {
       const nav = parseInitialReelNavigation();

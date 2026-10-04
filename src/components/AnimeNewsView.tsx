@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Newspaper,
   Search,
-  RefreshCw,
   ExternalLink,
   Sparkles,
   Bookmark,
@@ -18,7 +17,9 @@ import { Anime } from '../types';
 import {
   fetchGlobalAnimeNews,
   fetchUserWatchlistNews,
+  getCachedNews,
   getSafeNewsThumbnail,
+  hasValidThumbnail,
   NewsItem
 } from '../services/animeNews';
 
@@ -52,13 +53,31 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     setIsLoading(true);
     setPage(1);
     setHasMore(true);
+
+    // 1. Check persistent 6-hour cache first
+    const cached = getCachedNews();
+    if (cached && cached.length > 0) {
+      setNewsList(cached);
+      setIsLoading(false);
+
+      // Asynchronously load watchlist news
+      try {
+        const userNews = await fetchUserWatchlistNews(library);
+        setWatchlistNews(userNews.filter(hasValidThumbnail));
+      } catch (e) {
+        // Silently handle
+      }
+      return;
+    }
+
+    // 2. Fetch fresh news if cache is expired or clean
     try {
       const [globalNews, userNews] = await Promise.all([
         fetchGlobalAnimeNews(1),
         fetchUserWatchlistNews(library),
       ]);
-      setNewsList(globalNews);
-      setWatchlistNews(userNews);
+      setNewsList(globalNews.filter(hasValidThumbnail));
+      setWatchlistNews(userNews.filter(hasValidThumbnail));
     } catch (err) {
       console.error('Error loading initial anime news:', err);
     } finally {
@@ -73,11 +92,12 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     const nextPage = page + 1;
     try {
       const moreNews = await fetchGlobalAnimeNews(nextPage);
-      if (moreNews.length === 0) {
+      const validMore = moreNews.filter(hasValidThumbnail);
+      if (validMore.length === 0) {
         setHasMore(false);
       } else {
         setNewsList((prev) => {
-          const merged = [...prev, ...moreNews];
+          const merged = [...prev, ...validMore];
           const uniqueMap = new Map<string, NewsItem>();
           merged.forEach((item) => uniqueMap.set(item.title, item));
           return Array.from(uniqueMap.values());
@@ -91,10 +111,10 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     }
   }, [page, isLoadingMore, hasMore]);
 
-  // Pre-fetching scroll listener (Triggers when < 6 cards remaining before bottom)
+  // Pre-fetching scroll listener (Triggers silently when < 6 cards remaining before bottom)
   useEffect(() => {
     const handleScroll = () => {
-      const threshold = 1200; // Trigger well before hitting bottom (< 6 cards)
+      const threshold = 1400; // Triggers early before reaching bottom (< 6 cards left)
       if (
         window.innerHeight + window.scrollY >= document.body.offsetHeight - threshold &&
         !isLoadingMore &&
@@ -108,8 +128,8 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loadMoreNews, isLoadingMore, isLoading, hasMore]);
 
-  // Combine and deduplicate news
-  let displayedNews = [...watchlistNews, ...newsList];
+  // Combine, filter invalid thumbnails & deduplicate news
+  let displayedNews = [...watchlistNews, ...newsList].filter(hasValidThumbnail);
   const uniqueMap = new Map<string, NewsItem>();
   displayedNews.forEach((item) => uniqueMap.set(item.title, item));
   displayedNews = Array.from(uniqueMap.values());
@@ -131,7 +151,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     });
 
     if (displayedNews.length === 0 && watchlistNews.length > 0) {
-      displayedNews = watchlistNews;
+      displayedNews = watchlistNews.filter(hasValidThumbnail);
     }
   } else if (activeCategory === 'announcements') {
     displayedNews = displayedNews.filter(
@@ -175,7 +195,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
-      {/* Sleek Minimal Top Header Row */}
+      {/* Sleek Minimal Top Header Row (Refresh button removed) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -192,27 +212,24 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           </p>
         </div>
 
-        {/* Action Controls: Search & Refresh */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search news..."
-              className="w-full pl-9 pr-4 py-2 bg-black/40 border border-white/15 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 transition"
-            />
-          </div>
-
-          <button
-            onClick={loadInitialNews}
-            disabled={isLoading}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border border-white/15 transition active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
-            title="Refresh News Feed"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+        {/* Action Controls: Search Input */}
+        <div className="relative flex-1 sm:w-72 sm:flex-initial">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search news..."
+            className="w-full pl-9 pr-4 py-2 bg-black/40 border border-white/15 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-pink-500 transition"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -272,7 +289,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
           <Newspaper className="w-12 h-12 text-slate-500 mx-auto" />
           <h3 className="text-lg font-bold text-white">No Articles Found</h3>
           <p className="text-xs text-slate-400">
-            No articles match your current search or filter. Try clearing filters or refreshing.
+            No articles match your current search or filter. Try clearing filters.
           </p>
           <button
             onClick={() => {
@@ -362,7 +379,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                   className="group relative rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-pink-500/40 shadow-lg overflow-hidden flex flex-col justify-between transition-all duration-300 cursor-pointer"
                 >
                   <div>
-                    {/* Article Thumbnail (Real Anime Cover Artwork) */}
+                    {/* Article Thumbnail */}
                     <div className="h-44 w-full relative overflow-hidden bg-slate-900">
                       <img
                         src={article.imageUrl}

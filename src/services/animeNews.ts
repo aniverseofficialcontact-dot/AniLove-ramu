@@ -16,6 +16,10 @@ export interface NewsItem {
   category?: 'General' | 'Watchlist' | 'Announcement' | 'Trailer';
 }
 
+const NEWS_CACHE_KEY = 'anilove_news_feed_v3';
+const NEWS_CACHE_TIME_KEY = 'anilove_news_feed_time_v3';
+const CACHE_6_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours
+
 // Pool of real, high-resolution anime artwork wallpapers & character covers
 const ANIME_THUMBNAIL_POOL = [
   'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
@@ -25,7 +29,6 @@ const ANIME_THUMBNAIL_POOL = [
   'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
 ];
 
-// Direct mapping of popular anime titles to high quality character/anime images
 const SPECIFIC_ANIME_IMAGES: Record<string, string> = {
   'solo leveling': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
   'jujutsu kaisen': 'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
@@ -35,11 +38,22 @@ const SPECIFIC_ANIME_IMAGES: Record<string, string> = {
 };
 
 /**
+ * Strict thumbnail validity checker: Drops any news article without a valid thumbnail
+ */
+export function hasValidThumbnail(item: NewsItem): boolean {
+  if (!item || !item.imageUrl || typeof item.imageUrl !== 'string') return false;
+  const url = item.imageUrl.trim();
+  if (url.length < 10) return false;
+  if (url.includes('undefined') || url.includes('null') || url.includes('placeholder')) return false;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+  return true;
+}
+
+/**
  * Get a valid high-resolution anime thumbnail
  */
 export function getSafeNewsThumbnail(url?: string, title = '', index = 0): string {
   if (url && typeof url === 'string' && url.length > 10 && !url.includes('undefined') && !url.includes('null')) {
-    // If url is abstract or low-res, check title matches
     const lowerTitle = title.toLowerCase();
     for (const [key, img] of Object.entries(SPECIFIC_ANIME_IMAGES)) {
       if (lowerTitle.includes(key)) return img;
@@ -47,13 +61,65 @@ export function getSafeNewsThumbnail(url?: string, title = '', index = 0): strin
     return url;
   }
 
-  // Match title if possible
   const lowerTitle = title.toLowerCase();
   for (const [key, img] of Object.entries(SPECIFIC_ANIME_IMAGES)) {
     if (lowerTitle.includes(key)) return img;
   }
 
   return ANIME_THUMBNAIL_POOL[index % ANIME_THUMBNAIL_POOL.length];
+}
+
+/**
+ * Read cached news from persistent localStorage if less than 6 hours old
+ */
+export function getCachedNews(): NewsItem[] | null {
+  try {
+    const rawTime = localStorage.getItem(NEWS_CACHE_TIME_KEY);
+    const rawData = localStorage.getItem(NEWS_CACHE_KEY);
+
+    if (rawTime && rawData) {
+      const cacheTime = parseInt(rawTime, 10);
+      if (!isNaN(cacheTime) && Date.now() - cacheTime < CACHE_6_HOURS_MS) {
+        const parsed = JSON.parse(rawData);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Ensure strict thumbnail rule on cached items as well
+          return parsed.filter(hasValidThumbnail);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading persistent news cache:', e);
+  }
+  return null;
+}
+
+/**
+ * Save news items to persistent localStorage
+ */
+export function saveCachedNews(items: NewsItem[]): void {
+  try {
+    const validItems = items.filter(hasValidThumbnail);
+    localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify(validItems));
+    localStorage.setItem(NEWS_CACHE_TIME_KEY, Date.now().toString());
+  } catch (e) {
+    console.warn('Error saving persistent news cache:', e);
+  }
+}
+
+/**
+ * Retry helper: If request fails, waits 2 seconds and retries up to 3 times
+ */
+async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 2000): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      console.warn(`News fetch attempt ${attempt} failed, retrying in 2 seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error('All news fetch retry attempts failed');
 }
 
 /**
@@ -70,59 +136,59 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
     const animeName = anime.title?.userPreferred || anime.title?.english || anime.title?.romaji || 'Anime';
     const coverArt = anime.bannerImage || anime.coverImage;
 
-    // Fetch Jikan news for specific MAL/AniList ID
     let fetchedForThisAnime = false;
     const malId = anime.idMal || anime.id;
 
     if (malId && typeof malId === 'number' && malId < 100000) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const fetchFn = async () => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/news`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (!res.ok) throw new Error(`Jikan news error ${res.status}`);
+          return await res.json();
+        };
 
-        const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}/news`, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+        const json = await fetchWithRetry(fetchFn, 2, 2000);
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-            const items = json.data.slice(0, 2).map((item: any, idx: number) => {
-              const bodyExcerpt = item.excerpt || item.intro || '';
-              const fullStory = `${bodyExcerpt}\n\nProduction & Broadcast Details:\nOfficial updates for ${animeName} have been released. The production team and voice cast have shared insights regarding key visual designs, sound design, and broadcast timing for upcoming episodes.\n\nFans can look forward to expanded character arcs, high-octane animation sequences, and special broadcast events. Stay tuned to AniLove2 for live episode streaming and community discussions.`;
+        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+          const items = json.data.slice(0, 2).map((item: any, idx: number) => {
+            const bodyExcerpt = item.excerpt || item.intro || '';
+            const fullStory = `${bodyExcerpt}\n\nProduction & Broadcast Details:\nOfficial updates for ${animeName} have been released. The production team and voice cast have shared insights regarding key visual designs, sound design, and broadcast timing for upcoming episodes.\n\nFans can look forward to expanded character arcs, high-octane animation sequences, and special broadcast events. Stay tuned to AniLove2 for live episode streaming and community discussions.`;
 
-              return {
-                id: `watchlist-news-${anime.id}-${idx}-${item.mal_id || Date.now()}`,
-                title: item.title || `${animeName} • Official Broadcast & Production Update`,
-                summary: bodyExcerpt || `New official updates and community commentary regarding ${animeName}.`,
-                fullContent: fullStory,
-                imageUrl: getSafeNewsThumbnail(item.images?.jpg?.image_url || coverArt, animeName, i + idx),
-                date: item.date
-                  ? new Date(item.date).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })
-                  : 'Recent Update',
-                source: 'Watchlist News',
-                url: item.url || '#',
-                author: item.author_username || 'Production Desk',
-                commentsCount: item.comments || 12,
-                animeId: anime.id,
-                animeTitle: animeName,
-                category: 'Watchlist' as const,
-              };
-            });
-            newsResults.push(...items);
-            fetchedForThisAnime = true;
-          }
+            return {
+              id: `watchlist-news-${anime.id}-${idx}-${item.mal_id || Date.now()}`,
+              title: item.title || `${animeName} • Official Broadcast & Production Update`,
+              summary: bodyExcerpt || `New official updates and community commentary regarding ${animeName}.`,
+              fullContent: fullStory,
+              imageUrl: getSafeNewsThumbnail(item.images?.jpg?.image_url || coverArt, animeName, i + idx),
+              date: item.date
+                ? new Date(item.date).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : 'Recent Update',
+              source: 'Watchlist News',
+              url: item.url || '#',
+              author: item.author_username || 'Production Desk',
+              commentsCount: item.comments || 12,
+              animeId: anime.id,
+              animeTitle: animeName,
+              category: 'Watchlist' as const,
+            };
+          });
+          newsResults.push(...items);
+          fetchedForThisAnime = true;
         }
       } catch (e) {
-        // Ignore single timeout
+        // Fallback handles gracefully
       }
     }
 
-    // Fallback watchlist news item if API call returned no specific articles
     if (!fetchedForThisAnime) {
       newsResults.push({
         id: `watchlist-fallback-${anime.id}`,
@@ -142,153 +208,168 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
     }
   }
 
-  return newsResults;
+  // Filter out any articles without a valid thumbnail
+  return newsResults.filter(hasValidThumbnail);
 }
 
 /**
- * Fetch Top Global Anime News cleanly with page support and real cover images
+ * Fetch Top Global Anime News cleanly with 6-hour caching & automatic 2-second retries
  */
 export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
+  // Page 1 can return cached news if available
+  if (page === 1) {
+    const cached = getCachedNews();
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+  }
+
   const allNews: NewsItem[] = [];
 
-  // 1. Query AniList GraphQL for trending media announcements with high-res cover artwork
+  // 1. Query AniList GraphQL with retry
   try {
-    const query = `
-      query ($page: Int) {
-        Page(page: $page, perPage: 12) {
-          media(type: ANIME, sort: TRENDING_DESC) {
-            id
-            title {
-              userPreferred
-              english
-            }
-            coverImage {
-              extraLarge
-              large
-            }
-            bannerImage
-            description(asHtml: false)
-            startDate {
-              year
-              month
-              day
-            }
-            siteUrl
-            studios(isMain: true) {
-              nodes {
-                name
+    const fetchAniList = async () => {
+      const query = `
+        query ($page: Int) {
+          Page(page: $page, perPage: 12) {
+            media(type: ANIME, sort: TRENDING_DESC) {
+              id
+              title {
+                userPreferred
+                english
+              }
+              coverImage {
+                extraLarge
+                large
+              }
+              bannerImage
+              description(asHtml: false)
+              startDate {
+                year
+                month
+                day
+              }
+              siteUrl
+              studios(isMain: true) {
+                nodes {
+                  name
+                }
               }
             }
           }
         }
-      }
-    `;
+      `;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-    const res = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ query, variables: { page } }),
-      signal: controller.signal,
+      const res = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ query, variables: { page } }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) throw new Error(`AniList error ${res.status}`);
+      return await res.json();
+    };
+
+    const json = await fetchWithRetry(fetchAniList, 3, 2000);
+    const mediaList = json.data?.Page?.media || [];
+    const trendNews: NewsItem[] = mediaList.map((m: any, idx: number) => {
+      const studioName = m.studios?.nodes?.[0]?.name || 'Official Studio';
+      const rawDesc = m.description || '';
+      const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
+      const shortSummary = cleanDesc.slice(0, 180) + '...';
+      const animeName = m.title.userPreferred || m.title.english || 'Anime Series';
+      const coverArt = m.bannerImage || m.coverImage?.extraLarge || m.coverImage?.large;
+
+      const fullStory = `Official Production Update for ${animeName}:\n\n${cleanDesc}\n\nProduction & Broadcast Details:\nProduced by ${studioName}, this title continues to garner immense global popularity. The creative staff has emphasized high-fidelity animation, dynamic battle sequences, and immersive soundscapes.\n\nCatch full episode streams, character breakdowns, and episode countdowns directly on AniLove2!`;
+
+      return {
+        id: `trend-news-${m.id}-p${page}`,
+        title: `${animeName} • Official Production & Broadcast Announcement`,
+        summary: shortSummary,
+        fullContent: fullStory,
+        imageUrl: getSafeNewsThumbnail(coverArt, animeName, idx),
+        date: m.startDate?.year ? `${m.startDate.year}` : 'Current Season',
+        source: 'Official Announcement',
+        url: m.siteUrl || '#',
+        author: studioName,
+        commentsCount: 35,
+        animeId: m.id,
+        animeTitle: animeName,
+        category: 'Announcement' as const,
+      };
     });
-    clearTimeout(timeoutId);
 
-    if (res.ok) {
-      const json = await res.json();
-      const mediaList = json.data?.Page?.media || [];
-      const trendNews: NewsItem[] = mediaList.map((m: any, idx: number) => {
-        const studioName = m.studios?.nodes?.[0]?.name || 'Official Studio';
-        const rawDesc = m.description || '';
+    allNews.push(...trendNews);
+  } catch (err) {
+    console.warn('AniList news fetch retry failed:', err);
+  }
+
+  // 2. Fetch live RSS news via public RSS2JSON API with retry
+  try {
+    const fetchRSS = async () => {
+      const rssUrl = encodeURIComponent('https://www.animenewsnetwork.com/news/rss.xml?s=all');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) throw new Error(`RSS error ${res.status}`);
+      return await res.json();
+    };
+
+    const json = await fetchWithRetry(fetchRSS, 3, 2000);
+    if (json.status === 'ok' && Array.isArray(json.items)) {
+      const parsedItems: NewsItem[] = json.items.map((item: any, idx: number) => {
+        let img = item.thumbnail || item.enclosure?.link;
+        if (!img && item.description) {
+          const imgMatch = item.description.match(/<img[^>]+src="([^">]+)"/);
+          if (imgMatch && imgMatch[1]) {
+            img = imgMatch[1];
+          }
+        }
+
+        const rawDesc = item.description || item.content || '';
         const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
         const shortSummary = cleanDesc.slice(0, 180) + '...';
-        const animeName = m.title.userPreferred || m.title.english || 'Anime Series';
-        const coverArt = m.bannerImage || m.coverImage?.extraLarge || m.coverImage?.large;
 
-        const fullStory = `Official Production Update for ${animeName}:\n\n${cleanDesc}\n\nProduction & Broadcast Details:\nProduced by ${studioName}, this title continues to garner immense global popularity. The creative staff has emphasized high-fidelity animation, dynamic battle sequences, and immersive soundscapes.\n\nCatch full episode streams, character breakdowns, and episode countdowns directly on AniLove2!`;
+        const fullStory = `${cleanDesc}\n\nIndustry Context & Commentary:\nThis news update represents key developments across the anime and light novel adaptation landscape. Creators and voice cast members have shared optimistic outlooks for the upcoming broadcast window.\n\nFor more updates, trailers, and episode tracking, check back regularly on AniLove2.`;
 
         return {
-          id: `trend-news-${m.id}-p${page}`,
-          title: `${animeName} • Official Production & Broadcast Announcement`,
+          id: `rss-p${page}-${idx}-${Date.now()}`,
+          title: item.title,
           summary: shortSummary,
           fullContent: fullStory,
-          imageUrl: getSafeNewsThumbnail(coverArt, animeName, idx),
-          date: m.startDate?.year ? `${m.startDate.year}` : 'Active Season',
-          source: 'Official Announcement',
-          url: m.siteUrl || '#',
-          author: studioName,
-          commentsCount: 35,
-          animeId: m.id,
-          animeTitle: animeName,
-          category: 'Announcement' as const,
+          imageUrl: getSafeNewsThumbnail(img, item.title, idx),
+          date: item.pubDate
+            ? new Date(item.pubDate).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : 'Latest Update',
+          source: 'Industry News',
+          url: item.link || '#',
+          author: item.author || 'Editorial Desk',
+          commentsCount: 22,
+          category: 'General' as const,
         };
       });
 
-      allNews.push(...trendNews);
+      allNews.push(...parsedItems);
     }
   } catch (err) {
-    console.warn('AniList announcements query skipped:', err);
-  }
-
-  // 2. Fetch live RSS news via public RSS2JSON API
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-    const rssUrl = encodeURIComponent('https://www.animenewsnetwork.com/news/rss.xml?s=all');
-    const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json.status === 'ok' && Array.isArray(json.items)) {
-        const parsedItems: NewsItem[] = json.items.map((item: any, idx: number) => {
-          let img = item.thumbnail || item.enclosure?.link;
-          if (!img && item.description) {
-            const imgMatch = item.description.match(/<img[^>]+src="([^">]+)"/);
-            if (imgMatch && imgMatch[1]) {
-              img = imgMatch[1];
-            }
-          }
-
-          const rawDesc = item.description || item.content || '';
-          const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
-          const shortSummary = cleanDesc.slice(0, 180) + '...';
-
-          const fullStory = `${cleanDesc}\n\nIndustry Context & Commentary:\nThis news update represents key developments across the anime and light novel adaptation landscape. Creators and voice cast members have shared optimistic outlooks for the upcoming broadcast window.\n\nFor more updates, trailers, and episode tracking, check back regularly on AniLove2.`;
-
-          return {
-            id: `rss-p${page}-${idx}-${Date.now()}`,
-            title: item.title,
-            summary: shortSummary,
-            fullContent: fullStory,
-            imageUrl: getSafeNewsThumbnail(img, item.title, idx),
-            date: item.pubDate
-              ? new Date(item.pubDate).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : 'Latest Update',
-            source: 'Industry News',
-            url: item.link || '#',
-            author: item.author || 'Editorial Desk',
-            commentsCount: 22,
-            category: 'General' as const,
-          };
-        });
-
-        allNews.push(...parsedItems);
-      }
-    }
-  } catch (err) {
-    console.warn('RSS news fetch skipped:', err);
+    console.warn('RSS news fetch retry failed:', err);
   }
 
   // Ensure rich fallback news if network requests yield few items
@@ -296,14 +377,46 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
     allNews.push(...getCuratedFallbackNews());
   }
 
+  // Strict thumbnail rule: Filter out any items without a valid thumbnail!
+  const validNews = allNews.filter(hasValidThumbnail);
+
   // Deduplicate by title
-  const uniqueNews = Array.from(new Map(allNews.map((item) => [item.title, item])).values());
+  const uniqueNews = Array.from(new Map(validNews.map((item) => [item.title, item])).values());
+
+  // Save to persistent cache if page 1
+  if (page === 1 && uniqueNews.length > 0) {
+    saveCachedNews(uniqueNews);
+  }
 
   return uniqueNews;
 }
 
 /**
- * Rich fallback anime news with detailed full content
+ * Background pre-warming function called immediately on app start.
+ * If cache is expired or clean, fetches news immediately in background so it's ready when user opens News!
+ */
+export async function prewarmAnimeNewsOnAppStart(library: Anime[] = []): Promise<void> {
+  const cached = getCachedNews();
+  if (cached && cached.length > 0) {
+    return; // Valid 6-hour cache exists!
+  }
+
+  // Cache is missing or expired -> Fetch in background immediately!
+  try {
+    const [globalNews] = await Promise.all([
+      fetchGlobalAnimeNews(1),
+      fetchUserWatchlistNews(library),
+    ]);
+    if (globalNews && globalNews.length > 0) {
+      saveCachedNews(globalNews);
+    }
+  } catch (err) {
+    console.warn('Background news prewarm error:', err);
+  }
+}
+
+/**
+ * Rich fallback anime news with valid thumbnails
  */
 function getCuratedFallbackNews(): NewsItem[] {
   return [
