@@ -23,7 +23,7 @@ export interface HentaiApiResponse {
   genres: HentaiGenre[];
 }
 
-// Popular starter slugs catalog for fast initial load & search seed
+// 52 Popular HentaiOcean Slugs Catalog for rich discovery
 export const POPULAR_HENTAI_SLUGS = [
   'my-mother-1',
   'resort-boin',
@@ -43,6 +43,40 @@ export const POPULAR_HENTAI_SLUGS = [
   'sweet-home',
   'succubus-stayed',
   'bitch-kanojo',
+  'euphoria',
+  'fencer-of-minerva',
+  'seikatsu-shuukan',
+  'marshmallow-ecchi',
+  'tsugumomo',
+  'harem-camp',
+  'fujirou',
+  'show-time',
+  'shoujo-ramune',
+  'spiral-curse',
+  'velvet',
+  'kanojo-x-kanojo',
+  'tiny-evil',
+  'kakushi-dere',
+  'sister-breed',
+  'torakiss',
+  'docchi-ni-suru',
+  'dokidoki-little-oops',
+  'kaifuku-jushin',
+  'redo-of-healer',
+  'isekai-harem',
+  'seishun-buta',
+  'onichan-wa-oshimai',
+  'jk-to-ero-konbini',
+  'ero-manga-sensei',
+  'oppai-academy',
+  'fukai-ni-nemuru',
+  'bikini-warriors',
+  'koikishi-purely',
+  'brand-new-school',
+  'angel-blade',
+  'bible-black',
+  'vampire-hunter',
+  'yosuga-no-sora',
 ];
 
 // Memory cache for HentaiOcean items
@@ -134,7 +168,7 @@ export function mapHentaiToAnime(info: HentaiInfo, genres: HentaiGenre[] = []): 
     },
     bannerImage: thumbUrl,
     format: '18+ ONA',
-    episodes: 12, // Enable episode switching (Ep 1, Ep 2, Ep 3...)
+    episodes: 12, // Enable multi-episode switching (Ep 1, Ep 2, Ep 3...)
     duration: 28,
     status: 'FINISHED',
     seasonYear: info.releasedate ? parseInt(info.releasedate.slice(0, 4), 10) : 2023,
@@ -243,7 +277,7 @@ export async function fetchHentaiRssFeed(): Promise<string[]> {
 }
 
 /**
- * Fetches catalog feed for 18+ Home Screen (Trending, Recent, Categories)
+ * Fetches catalog feed for 18+ Home Screen with zero repeated titles across categories
  */
 export async function getHentaiOceanHomeFeed(): Promise<{
   trending: Anime[];
@@ -254,46 +288,64 @@ export async function getHentaiOceanHomeFeed(): Promise<{
   const rssSlugs = await fetchHentaiRssFeed();
   const allSlugs = Array.from(new Set([...rssSlugs, ...POPULAR_HENTAI_SLUGS]));
 
-  // Fetch details in batch parallel (chunks of 6 to avoid hammering)
+  // Fetch up to 32 unique titles in parallel chunks
   const results: Anime[] = [];
-  const chunkSize = 6;
-  for (let i = 0; i < Math.min(allSlugs.length, 18); i += chunkSize) {
+  const seenTitles = new Set<string>();
+  const chunkSize = 8;
+
+  for (let i = 0; i < Math.min(allSlugs.length, 36); i += chunkSize) {
     const chunk = allSlugs.slice(i, i + chunkSize);
     const chunkPromises = chunk.map(slug => fetchHentaiDetailsBySlug(slug));
     const chunkResults = await Promise.all(chunkPromises);
     chunkResults.forEach(a => {
-      if (a) results.push(a);
+      if (a) {
+        const key = a.title.userPreferred?.toLowerCase() || (a as any).slug;
+        if (!seenTitles.has(key)) {
+          seenTitles.add(key);
+          results.push(a);
+        }
+      }
     });
   }
 
-  const trending = results.slice(0, 6);
-  const recent = results.slice(6, 12).length > 0 ? results.slice(6, 12) : results.slice(0, 6);
-  const topRated = [...results].sort((a, b) => b.id - a.id).slice(0, 6);
-  const uncensored = results.filter(a => a.genres.some(g => g.toLowerCase().includes('uncensored')));
+  // Partition into strictly non-overlapping subsets
+  const trending = results.slice(0, 8);
+  const recent = results.slice(8, 16);
+  const uncensored = results.slice(16, 24);
+  const topRated = results.slice(24, 32);
 
   return {
-    trending,
-    recent,
-    topRated,
+    trending: trending.length > 0 ? trending : results.slice(0, 6),
+    recent: recent.length > 0 ? recent : results.slice(0, 6),
+    topRated: topRated.length > 0 ? topRated : results.slice(0, 6),
     uncensored: uncensored.length > 0 ? uncensored : results.slice(0, 6),
   };
 }
 
 /**
- * Search HentaiOcean catalog by keyword query
+ * Search HentaiOcean catalog by keyword query and genre filters
  */
-export async function searchHentaiOcean(query: string): Promise<Anime[]> {
+export async function searchHentaiOcean(query: string = '', genres: string[] = []): Promise<Anime[]> {
   const q = query.toLowerCase().trim();
-  if (!q) return [];
-
   const rssSlugs = await fetchHentaiRssFeed();
   const allSlugs = Array.from(new Set([...rssSlugs, ...POPULAR_HENTAI_SLUGS]));
 
-  // Filter matching slugs first
-  const matchingSlugs = allSlugs.filter(slug => slug.toLowerCase().includes(q) || q.includes(slug));
+  let matchingSlugs = allSlugs;
 
-  const slugsToFetch = matchingSlugs.length > 0 ? matchingSlugs.slice(0, 10) : allSlugs.slice(0, 8);
+  if (q && q !== 'all') {
+    matchingSlugs = allSlugs.filter(slug => slug.toLowerCase().includes(q) || q.includes(slug));
+  }
 
+  const slugsToFetch = matchingSlugs.slice(0, 16);
   const animeList = await Promise.all(slugsToFetch.map(slug => fetchHentaiDetailsBySlug(slug)));
-  return animeList.filter((a): a is Anime => a !== null);
+  const cleanList = animeList.filter((a): a is Anime => a !== null);
+
+  if (genres && genres.length > 0) {
+    const genreLower = genres.map(g => g.toLowerCase());
+    return cleanList.filter(a =>
+      a.genres.some(g => genreLower.includes(g.toLowerCase()))
+    );
+  }
+
+  return cleanList;
 }

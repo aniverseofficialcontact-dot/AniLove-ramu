@@ -121,41 +121,61 @@ export const WatchView: React.FC<WatchViewProps> = ({
     };
   }, [anime?.id, anime?.idMal, episodeNumber, selectedEpisodeRange]);
 
-  // Dual Dropdown Sources & Servers Configuration
-  const SOURCE_CONFIG = useMemo(() => ({
-    'Multi-Lang': {
-      label: 'Multi-Lang',
-      servers: [
-        { displayName: 'Server 1', internalCode: 'Multi-Lang-Server-1' },
-      ],
-    },
-    AnimeDekho: {
-      label: 'AnimeDekho',
-      servers: [
-        { displayName: 'Server 1', internalCode: 'AnimeDekho-Server-1' },
-        { displayName: 'Server 2', internalCode: 'AnimeDekho-Server-2' },
-        { displayName: 'Server 3', internalCode: 'AnimeDekho-Server-3' },
-        { displayName: 'Server 4', internalCode: 'AnimeDekho-Server-4' },
-        { displayName: 'Server 5', internalCode: 'AnimeDekho-Server-5' },
-      ],
-    },
-    HiAnime: {
-      label: 'HiAnime',
-      servers: [
-        { displayName: 'Server 1', internalCode: 'HiAnime-Server-1' },
-        { displayName: 'Server 2', internalCode: 'HiAnime-Server-2' },
-        { displayName: 'Server 3', internalCode: 'HiAnime-Server-3' },
-      ],
-    },
-    AnimeSalt: {
-      label: 'AnimeSalt',
-      servers: [
-        { displayName: 'Server 1', internalCode: 'AnimeSalt-Server-1' },
-      ],
-    },
-  }), []);
+  const is18PlusActive = useMemo(() => {
+    return Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
+  }, [settings?.is18PlusMode, anime]);
 
-  type StreamSourceId = 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt';
+  // Dual Dropdown Sources & Servers Configuration
+  const SOURCE_CONFIG = useMemo(() => {
+    if (is18PlusActive) {
+      return {
+        HentaiOcean: {
+          label: 'HentaiOcean Engine',
+          servers: [
+            { displayName: 'HentaiOcean Engine', internalCode: 'HentaiOcean-Server-1' },
+          ],
+        },
+      };
+    }
+    return {
+      'Multi-Lang': {
+        label: 'Multi-Lang',
+        servers: [
+          { displayName: 'Server 1', internalCode: 'Multi-Lang-Server-1' },
+        ],
+      },
+      AnimeDekho: {
+        label: 'AnimeDekho',
+        servers: [
+          { displayName: 'Server 1', internalCode: 'AnimeDekho-Server-1' },
+          { displayName: 'Server 2', internalCode: 'AnimeDekho-Server-2' },
+          { displayName: 'Server 3', internalCode: 'AnimeDekho-Server-3' },
+          { displayName: 'Server 4', internalCode: 'AnimeDekho-Server-4' },
+          { displayName: 'Server 5', internalCode: 'AnimeDekho-Server-5' },
+        ],
+      },
+      HiAnime: {
+        label: 'HiAnime',
+        servers: [
+          { displayName: 'Server 1', internalCode: 'HiAnime-Server-1' },
+          { displayName: 'Server 2', internalCode: 'HiAnime-Server-2' },
+          { displayName: 'Server 3', internalCode: 'HiAnime-Server-3' },
+        ],
+      },
+      AnimeSalt: {
+        label: 'AnimeSalt',
+        servers: [
+          { displayName: 'Server 1', internalCode: 'AnimeSalt-Server-1' },
+        ],
+      },
+    };
+  }, [is18PlusActive]);
+
+  type StreamSourceId = 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt' | 'HentaiOcean';
+
+  const availableSources = useMemo<StreamSourceId[]>(() => {
+    return is18PlusActive ? ['HentaiOcean'] : ['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'];
+  }, [is18PlusActive]);
 
   // Strict 7-Day Airing Check for HiAnime Auto-Priority
   const isFreshEpisode = useMemo(() => {
@@ -163,13 +183,18 @@ export const WatchView: React.FC<WatchViewProps> = ({
   }, [anime, details, episodeNumber]);
 
   const configuredDefaultSource = (settings?.preferredSource || 'Multi-Lang') as StreamSourceId;
-  const effectiveDefaultSource: StreamSourceId = isFreshEpisode ? 'HiAnime' : configuredDefaultSource;
+  const effectiveDefaultSource: StreamSourceId = is18PlusActive
+    ? 'HentaiOcean'
+    : isFreshEpisode
+    ? 'HiAnime'
+    : configuredDefaultSource;
 
   const [selectedSource, setSelectedSource] = useState<StreamSourceId>(effectiveDefaultSource);
 
   useEffect(() => {
     setSelectedSource(effectiveDefaultSource);
-  }, [anime.id]);
+    setSelectedServerDisplay(is18PlusActive ? 'HentaiOcean Engine' : 'Server 1');
+  }, [anime.id, effectiveDefaultSource, is18PlusActive]);
 
   const [selectedServerDisplay, setSelectedServerDisplay] = useState<string>('Server 1');
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState<boolean>(false);
@@ -586,7 +611,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
               {isSourceMenuOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[#121218]/95 border border-neutral-800 shadow-2xl backdrop-blur-xl z-50 py-1 divide-y divide-neutral-800/50 animate-in fade-in zoom-in-95 duration-150">
-                  {(['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'] as StreamSourceId[]).map((src) => {
+                  {availableSources.map((src) => {
                     const isSelected = selectedSource === src;
                     return (
                       <button

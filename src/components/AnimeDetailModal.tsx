@@ -163,6 +163,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     setSelectedEpisodeRange('all');
     setShowFullSynopsis(false);
 
+    const is18PlusTitle = Boolean((anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult || settings?.is18PlusMode);
+
+    if (is18PlusTitle) {
+      setDetails(anime as any);
+      setLoading(false);
+      setActiveTab('episodes');
+      return;
+    }
+
     fetchAnimeDetails(anime.id)
       .then(data => {
         if (isMounted) {

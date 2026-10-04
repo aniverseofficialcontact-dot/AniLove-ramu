@@ -482,10 +482,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       }
     }
 
+    const is18PlusActive = Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
+    const defaultSrc = is18PlusActive ? 'HentaiOcean' : 'Multi-Lang';
+    const defaultSrv = is18PlusActive ? 'HentaiOcean Engine' : 'Multi-Lang-Server-1';
+
     NativePlayer.play({
       url: src.url,
-      serverName: src.selectedServerName || selectedSubServerName || 'Multi-Lang-Server-1',
-      sourceName: selectedSource || 'Multi-Lang',
+      serverName: src.selectedServerName || selectedSubServerName || defaultSrv,
+      sourceName: selectedSource || defaultSrc,
       availableLanguages: JSON.stringify(src.availableLanguages || []),
       availableResolutions: JSON.stringify(src.availableResolutions || []),
       languageQualityMap: JSON.stringify(src.languageQualityMap || {}),
@@ -512,8 +516,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     let cancelled = false;
 
-    const activeSrcName = selectedSource || 'AnimeDekho';
-    const requestedServer = selectedSubServerName || 'Server 1';
+    const is18PlusActive = Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
+    const activeSrcName = selectedSource || (is18PlusActive ? 'HentaiOcean' : 'AnimeDekho');
+    const requestedServer = selectedSubServerName || (is18PlusActive ? 'HentaiOcean Engine' : 'Server 1');
     const cacheKey = `${activeSrcName}_${anime.id}_${episodeNumber}_${activeServer}_${audioMode}_${requestedServer}`;
 
     // Purge previous episode caches immediately if cacheKey changes

@@ -36,6 +36,23 @@ const ALL_GENRES = [
   'Thriller',
 ];
 
+const HENTAI_GENRES = [
+  'Uncensored',
+  'Milf',
+  'Ahegao',
+  'Harem',
+  '3D / CGI',
+  'Fantasy',
+  'Romance',
+  'School',
+  'Public',
+  'Teacher',
+  'Nurse',
+  'Maid',
+  'Incest',
+  'Mind Control',
+];
+
 const FORMAT_OPTIONS = [
   { label: 'All Formats', value: '' },
   { label: 'TV Series', value: 'TV' },
@@ -133,13 +150,15 @@ export const SearchView: React.FC<SearchViewProps> = ({
     }
   };
 
+  const activeGenreList = useMemo(() => (is18PlusMode ? HENTAI_GENRES : ALL_GENRES), [is18PlusMode]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       const executeSearch = async () => {
         setIsLoading(true);
         try {
           if (is18PlusMode) {
-            const searchData = await searchHentaiOcean(searchQuery.trim() || 'all');
+            const searchData = await searchHentaiOcean(searchQuery.trim() || 'all', selectedGenres);
             setResults(searchData);
           } else {
             const searchData = await searchAnimeAdvanced({
@@ -307,9 +326,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
             {/* Genres Tag Cloud */}
             <div>
-              <span className="text-xs font-bold text-slate-300 block mb-2">Genres</span>
+              <span className="text-xs font-bold text-slate-300 block mb-2">Genres & Categories</span>
               <div className="flex flex-wrap gap-1.5">
-                {ALL_GENRES.map(genre => {
+                {activeGenreList.map(genre => {
                   const isSelected = selectedGenres.includes(genre);
                   return (
                     <button
