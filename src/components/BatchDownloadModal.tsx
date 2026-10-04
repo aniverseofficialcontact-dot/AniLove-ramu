@@ -78,6 +78,11 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const isHiAnimeLocked = selectedAudio === 'DUB' || selectedAudio === 'SUB';
   const isHindiSelected = selectedAudio === 'HIN';
 
+  const filteredLanguages = useMemo(() => {
+    if (!availableLanguages || availableLanguages.length === 0) return SUPPORTED_LANGUAGES;
+    return SUPPORTED_LANGUAGES.filter(lang => availableLanguages.includes(lang.code));
+  }, [availableLanguages]);
+
   useEffect(() => {
     if (isHiAnimeLocked) {
       if (!selectedServer.startsWith('Server')) {
