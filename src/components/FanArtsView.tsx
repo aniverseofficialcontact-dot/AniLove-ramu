@@ -1,21 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Palette,
   Search,
   Download,
   Share2,
   X,
-  ExternalLink,
-  Sparkles,
-  ShieldAlert,
-  ChevronDown,
-  RefreshCw,
-  Heart
+  Heart,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Capacitor } from '@capacitor/core';
 import { fetchDanbooruFanArts, cleanTagTitle, DanbooruPost } from '../services/danbooruService';
-import { DownloadPlugin } from '../services/downloadManager';
+import { downloadFanArtImage } from '../services/downloadManager';
 import { UserSettings } from '../types';
 
 interface FanArtsViewProps {
@@ -31,7 +28,9 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [selectedPost, setSelectedPost] = useState<DanbooruPost | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
+  const observerTarget = useRef<HTMLDivElement | null>(null);
   const allowNsfw = Boolean(settings.allowNsfwContent);
 
   const popularTags = [
@@ -66,19 +65,25 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
     loadInitialFanArts();
   }, [allowNsfw]);
 
-  // Seamless Infinite Scroll Listener
+  // Throttled Infinite Scroll via IntersectionObserver
   useEffect(() => {
-    const handleScroll = () => {
-      if (isLoading || isLoadingMore || !hasMore) return;
-      const scrollPosition = window.innerHeight + window.scrollY;
-      const threshold = document.documentElement.offsetHeight - 800; // Trigger 800px before bottom
-      if (scrollPosition >= threshold) {
-        loadMoreFanArts();
-      }
-    };
+    if (!observerTarget.current) return;
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading && !isLoadingMore && hasMore) {
+          loadMoreFanArts();
+        }
+      },
+      { threshold: 0.1, rootMargin: '400px' }
+    );
+
+    const currentTarget = observerTarget.current;
+    observer.observe(currentTarget);
+
+    return () => {
+      if (currentTarget) observer.unobserve(currentTarget);
+    };
   }, [isLoading, isLoadingMore, hasMore, page, searchQuery, allowNsfw]);
 
   const loadMoreFanArts = async () => {
@@ -119,47 +124,22 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
     const url = post.large_file_url || post.file_url || post.preview_file_url;
     if (!url) return;
 
-    if (onShowToast) onShowToast('Downloading Fan Art to Gallery...');
+    if (onShowToast) onShowToast('Saving Fan Art to Gallery...');
 
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
-        await DownloadPlugin.startDownload({
-          item: {
-            id: `fanart_${post.id}`,
-            anilistId: 0,
-            animeTitle: 'AniLove FanArt',
-            episodeNumber: 0,
-            streamUrl: url,
-            pageUrl: url,
-            subtitleUrl: '',
-            audio: 'SFW',
-            serverName: 'FanArt',
-            quality: 'HD',
-            thumbnail: url,
-          }
-        });
-        if (onShowToast) onShowToast('Downloading image to /Pictures/AniLove/ in Gallery!');
-        return;
-      } catch (e) {
-        console.warn('Native download plugin fallback:', e);
-      }
-    }
+    const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+    const fileName = `AniLove_FanArt_${post.id || Date.now()}.${ext}`;
 
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `AniLove_FanArt_${post.id || Date.now()}.${url.split('.').pop()?.split('?')[0] || 'jpg'}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      if (onShowToast) onShowToast('Fan Art saved successfully!');
-    } catch (e) {
+      const result = await downloadFanArtImage(url, fileName);
+      if (result && result.success) {
+        if (onShowToast) onShowToast('Fan Art saved to /Pictures/AniLove/ in Gallery!');
+      } else {
+        if (onShowToast) onShowToast('Fan Art download failed');
+      }
+    } catch (e: any) {
+      console.warn('Native download plugin fallback:', e);
       window.open(url, '_blank');
+      if (onShowToast) onShowToast('Opened image in new tab to save');
     }
   };
 
@@ -245,7 +225,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
           <Palette className="w-12 h-12 text-slate-500 mx-auto" />
           <h3 className="text-lg font-bold text-white">No Fan Arts Found</h3>
           <p className="text-xs text-slate-400">
-            No artwork matched your search tag. Try another character or anime name.
+            No artwork matched your search query. Try another character or anime name.
           </p>
           <button
             onClick={() => {
@@ -268,7 +248,10 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               return (
                 <div
                   key={post.id}
-                  onClick={() => setSelectedPost(post)}
+                  onClick={() => {
+                    setSelectedPost(post);
+                    setZoomScale(1);
+                  }}
                   className="group relative rounded-2xl bg-slate-900 border border-white/10 hover:border-pink-500/50 overflow-hidden shadow-lg transition-all duration-300 cursor-pointer flex flex-col justify-between"
                 >
                   <div className="h-56 sm:h-64 w-full relative overflow-hidden bg-black/40">
@@ -288,6 +271,18 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-70" />
 
+                    {/* Quick Download Overlay Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(post);
+                      }}
+                      className="absolute top-2.5 left-2.5 w-7 h-7 rounded-full bg-black/60 hover:bg-pink-500 text-white border border-white/15 backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      title="Save to Gallery"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+
                     {/* Score Badge */}
                     <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-black/60 text-amber-300 border border-white/15 backdrop-blur-md flex items-center gap-1">
                       <Heart className="w-3 h-3 text-amber-400 fill-amber-400" />
@@ -302,10 +297,20 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               );
             })}
           </div>
+
+          {/* Observer Sentinel for Infinite Scroll */}
+          <div ref={observerTarget} className="h-12 flex items-center justify-center">
+            {isLoadingMore && (
+              <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
+                <div className="w-4 h-4 rounded-full border-2 border-pink-500 border-t-transparent animate-spin" />
+                <span>Loading more artwork...</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* FULL-SCREEN LIGHTBOX MODAL */}
+      {/* FULL-SCREEN LIGHTBOX MODAL WITH TOUCH ZOOM */}
       <AnimatePresence>
         {selectedPost && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
@@ -323,46 +328,95 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               exit={{ opacity: 0, scale: 0.94 }}
               className="relative w-full max-w-4xl bg-slate-950 border border-white/20 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto flex flex-col max-h-[90vh]"
             >
+              {/* Header */}
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/40">
-                <span className="text-xs sm:text-sm font-bold text-white">
+                <span className="text-xs sm:text-sm font-bold text-white truncate mr-2">
                   {cleanTagTitle(selectedPost.tag_string, selectedPost.tag_string_character, selectedPost.tag_string_copyright)}
                 </span>
-                <button
-                  onClick={() => setSelectedPost(null)}
-                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-rose-500 text-white flex items-center justify-center transition cursor-pointer"
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Zoom Controls */}
+                  <div className="flex items-center gap-1 bg-white/5 rounded-full p-1 border border-white/10">
+                    <button
+                      onClick={() => setZoomScale(prev => Math.min(prev + 0.4, 3))}
+                      className="w-6 h-6 rounded-full hover:bg-white/10 text-slate-300 flex items-center justify-center transition"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setZoomScale(prev => Math.max(prev - 0.4, 0.8))}
+                      className="w-6 h-6 rounded-full hover:bg-white/10 text-slate-300 flex items-center justify-center transition"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    {zoomScale !== 1 && (
+                      <button
+                        onClick={() => setZoomScale(1)}
+                        className="w-6 h-6 rounded-full hover:bg-white/10 text-pink-400 flex items-center justify-center transition"
+                        title="Reset Zoom"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedPost(null)}
+                    className="w-8 h-8 rounded-full bg-white/10 hover:bg-rose-500 text-white flex items-center justify-center transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Image Preview with Pinch/Click Zoom */}
+              <div className="p-4 flex-1 overflow-auto custom-scrollbar flex items-center justify-center bg-black/80 touch-pan-x touch-pan-y">
+                <div
+                  className="transition-transform duration-300 ease-out cursor-zoom-in"
+                  style={{ transform: `scale(${zoomScale})` }}
+                  onDoubleClick={() => setZoomScale(prev => prev === 1 ? 2 : 1)}
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  <img
+                    src={selectedPost.large_file_url || selectedPost.file_url || selectedPost.preview_file_url}
+                    alt="Fan Art Preview"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const fallback = selectedPost.file_url || selectedPost.preview_file_url;
+                      if (target.src !== fallback && fallback) {
+                        target.src = fallback;
+                      }
+                    }}
+                    className="max-h-[65vh] w-auto object-contain rounded-xl shadow-2xl"
+                  />
+                </div>
               </div>
 
-              <div className="p-4 flex-1 overflow-y-auto custom-scrollbar flex items-center justify-center bg-black/80">
-                <img
-                  src={selectedPost.large_file_url || selectedPost.file_url || selectedPost.preview_file_url}
-                  alt="Fan Art Preview"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    const fallback = selectedPost.file_url || selectedPost.preview_file_url;
-                    if (target.src !== fallback && fallback) {
-                      target.src = fallback;
-                    }
-                  }}
-                  className="max-h-[65vh] w-auto object-contain rounded-xl shadow-2xl"
-                />
-              </div>
-
+              {/* Footer Controls */}
               <div className="p-4 border-t border-white/10 bg-black/60 flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-400 font-semibold">
+                <span className="text-xs text-slate-400 font-semibold hidden sm:inline">
                   Resolution: {selectedPost.image_width} × {selectedPost.image_height}
                 </span>
 
-                <button
-                  onClick={() => handleDownload(selectedPost)}
-                  className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Image</span>
-                </button>
+                <div className="flex items-center gap-2.5 ml-auto">
+                  <button
+                    onClick={() => handleShare(selectedPost)}
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDownload(selectedPost)}
+                    className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Save to Gallery</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

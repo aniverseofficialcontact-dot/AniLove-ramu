@@ -24,6 +24,7 @@ export interface DownloadItemInfo {
 
 export interface DownloadPluginInterface {
   startDownload(options: { item: any }): Promise<void>;
+  downloadImage(options: { imageUrl: string; fileName?: string }): Promise<{ success: boolean; filePath: string }>;
   pauseDownload(options: { downloadId: string }): Promise<void>;
   resumeDownload(options: { downloadId: string }): Promise<void>;
   cancelDownload(options: { downloadId: string }): Promise<void>;
@@ -439,5 +440,24 @@ export async function exportDownloadToPublicStorage(
     });
   } else {
     throw new Error('Exporting to device storage is only supported on Android native devices.');
+  }
+}
+
+export async function downloadFanArtImage(imageUrl: string, fileName?: string): Promise<{ success: boolean; filePath: string }> {
+  if (Capacitor.isNativePlatform()) {
+    return await DownloadPlugin.downloadImage({ imageUrl, fileName });
+  } else {
+    // Web Browser Fallback
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName || `AniLove_FanArt_${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    return { success: true, filePath: '' };
   }
 }

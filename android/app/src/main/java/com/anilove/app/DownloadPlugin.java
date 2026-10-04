@@ -16,6 +16,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.channels.FileChannel;
 import java.util.List;
 
@@ -249,5 +252,97 @@ public class DownloadPlugin extends Plugin {
             Log.e(TAG, "Error exporting file to public storage", e);
             call.reject("Export failed: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void downloadImage(PluginCall call) {
+        String imageUrl = call.getString("imageUrl");
+        String fileName = call.getString("fileName");
+
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            call.reject("Missing imageUrl");
+            return;
+        }
+
+        if (fileName == null || fileName.isEmpty()) {
+            String cleanUrl = imageUrl.split("\\?")[0];
+            int lastDot = cleanUrl.lastIndexOf('.');
+            String fileExt = (lastDot != -1) ? cleanUrl.substring(lastDot) : ".jpg";
+            fileName = "AniLove_FanArt_" + System.currentTimeMillis() + fileExt;
+        }
+
+        final String finalFileName = fileName;
+        final String finalImageUrl = imageUrl;
+
+        new Thread(() -> {
+            try {
+                File picturesDir = new File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    "AniLove"
+                );
+                if (!picturesDir.exists()) {
+                    picturesDir.mkdirs();
+                }
+
+                File destFile = new File(picturesDir, finalFileName);
+
+                URL url = new URL(finalImageUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(20000);
+                conn.setReadTimeout(30000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+                if (finalImageUrl.contains("safebooru.org")) {
+                    conn.setRequestProperty("Referer", "https://safebooru.org/");
+                } else if (finalImageUrl.contains("gelbooru.com")) {
+                    conn.setRequestProperty("Referer", "https://gelbooru.com/");
+                } else if (finalImageUrl.contains("donmai.us")) {
+                    conn.setRequestProperty("Referer", "https://danbooru.donmai.us/");
+                } else if (finalImageUrl.contains("yande.re")) {
+                    conn.setRequestProperty("Referer", "https://yande.re/");
+                }
+
+                int responseCode = conn.getResponseCode();
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    Log.e(TAG, "Image HTTP error response code: " + responseCode + " for " + finalImageUrl);
+                    call.reject("HTTP error: " + responseCode);
+                    return;
+                }
+
+                try (InputStream in = conn.getInputStream();
+                     FileOutputStream out = new FileOutputStream(destFile)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, bytesRead);
+                    }
+                }
+
+                String lowerName = finalFileName.toLowerCase();
+                String mimeType = "image/jpeg";
+                if (lowerName.endsWith(".png")) mimeType = "image/png";
+                else if (lowerName.endsWith(".webp")) mimeType = "image/webp";
+                else if (lowerName.endsWith(".gif")) mimeType = "image/gif";
+
+                MediaScannerConnection.scanFile(
+                    getContext(),
+                    new String[]{ destFile.getAbsolutePath() },
+                    new String[]{ mimeType },
+                    null
+                );
+
+                Log.i(TAG, "Successfully downloaded FanArt image to: " + destFile.getAbsolutePath());
+
+                JSObject res = new JSObject();
+                res.put("success", true);
+                res.put("filePath", destFile.getAbsolutePath());
+                call.resolve(res);
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error downloading image: " + finalImageUrl, e);
+                call.reject("Image download failed: " + e.getMessage());
+            }
+        }).start();
     }
 }
