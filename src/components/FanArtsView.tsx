@@ -7,7 +7,8 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-  RotateCcw
+  RotateCcw,
+  Heart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchDanbooruFanArts, cleanTagTitle, DanbooruPost } from '../services/danbooruService';
@@ -19,8 +20,11 @@ interface FanArtsViewProps {
   onShowToast?: (msg: string) => void;
 }
 
+const FAVORITE_FANARTS_KEY = 'anilove_favorite_fanarts_v1';
+
 export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast }) => {
   const [posts, setPosts] = useState<DanbooruPost[]>([]);
+  const [favorites, setFavorites] = useState<DanbooruPost[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,11 +47,54 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
     'Anya_Forger',
   ];
 
+  // Load Favorites from LocalStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(FAVORITE_FANARTS_KEY);
+      if (saved) {
+        setFavorites(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Error loading favorite fan arts:', e);
+    }
+  }, []);
+
+  const saveFavoritesToStorage = (updated: DanbooruPost[]) => {
+    setFavorites(updated);
+    try {
+      localStorage.setItem(FAVORITE_FANARTS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error saving favorite fan arts:', e);
+    }
+  };
+
+  const isFavorited = (id: number) => favorites.some((f) => f.id === id);
+
+  const toggleFavorite = (post: DanbooruPost, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isFavorited(post.id)) {
+      const updated = favorites.filter((f) => f.id !== post.id);
+      saveFavoritesToStorage(updated);
+      if (onShowToast) onShowToast('Removed from Favorites ❤️');
+    } else {
+      const updated = [post, ...favorites];
+      saveFavoritesToStorage(updated);
+      if (onShowToast) onShowToast('Saved to Favorites! ❤️');
+    }
+  };
+
   const loadInitialFanArts = useCallback(
     async (query = searchQuery) => {
       setIsLoading(true);
       setPage(1);
       setHasMore(true);
+
+      if (query === 'favorites') {
+        setPosts(favorites);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const data = await fetchDanbooruFanArts(query, 1, allowNsfw);
         setPosts(data);
@@ -57,7 +104,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
         setIsLoading(false);
       }
     },
-    [allowNsfw, searchQuery]
+    [allowNsfw, searchQuery, favorites]
   );
 
   useEffect(() => {
@@ -66,7 +113,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
 
   // Throttled Infinite Scroll via IntersectionObserver
   useEffect(() => {
-    if (!observerTarget.current) return;
+    if (!observerTarget.current || searchQuery === 'favorites') return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -86,7 +133,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
   }, [isLoading, isLoadingMore, hasMore, page, searchQuery, allowNsfw]);
 
   const loadMoreFanArts = async () => {
-    if (isLoadingMore || !hasMore) return;
+    if (isLoadingMore || !hasMore || searchQuery === 'favorites') return;
     setIsLoadingMore(true);
     const nextPage = page + 1;
     try {
@@ -151,9 +198,9 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5 select-none">
       {/* Top Header Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5">
             <Palette className="w-6 h-6 text-pink-500" />
@@ -194,14 +241,36 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
         </form>
       </div>
 
-      {/* Popular Character Quick Tags */}
+      {/* Popular Character Quick Tags + Favorites Tab */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
-        <span className="text-xs font-bold text-slate-400 shrink-0 mr-1">Quick Search:</span>
+        {/* Favorites Quick Button */}
+        <button
+          onClick={() => {
+            setSearchQuery('favorites');
+            loadInitialFanArts('favorites');
+          }}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold shrink-0 transition cursor-pointer ${
+            searchQuery === 'favorites'
+              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-lg shadow-pink-500/30'
+              : 'bg-pink-500/10 hover:bg-pink-500/20 text-pink-300 border border-pink-500/30'
+          }`}
+        >
+          <Heart className={`w-3.5 h-3.5 ${searchQuery === 'favorites' ? 'fill-white' : 'fill-pink-400/50'}`} />
+          <span>Favorites</span>
+          {favorites.length > 0 && (
+            <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] bg-pink-500/40 text-white">
+              {favorites.length}
+            </span>
+          )}
+        </button>
+
+        <span className="text-xs font-bold text-slate-500 shrink-0 mx-1">|</span>
+
         {popularTags.map((tag) => (
           <button
             key={tag}
             onClick={() => handleTagClick(tag)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition cursor-pointer ${
               searchQuery === tag
                 ? 'bg-pink-500 text-white font-bold'
                 : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
@@ -218,6 +287,14 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
             <div key={i} className="h-64 rounded-2xl bg-white/5 animate-pulse border border-white/10" />
           ))}
+        </div>
+      ) : searchQuery === 'favorites' && favorites.length === 0 ? (
+        <div className="p-12 text-center rounded-3xl bg-white/5 border border-white/10 max-w-lg mx-auto space-y-3">
+          <Heart className="w-12 h-12 text-pink-500/50 mx-auto" />
+          <h3 className="text-lg font-bold text-white">No Favorite Artworks Saved Yet</h3>
+          <p className="text-xs text-slate-400">
+            Tap the ❤️ Heart button on any fan art image to save it here for quick access!
+          </p>
         </div>
       ) : posts.length === 0 ? (
         <div className="p-12 text-center rounded-3xl bg-white/5 border border-white/10 max-w-lg mx-auto space-y-3">
@@ -242,7 +319,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
             {posts.map((post) => {
               const imgUrl = post.preview_file_url || post.large_file_url || post.file_url;
               const fallbackUrl = post.file_url || post.large_file_url || post.preview_file_url;
-              const title = cleanTagTitle(post.tag_string, post.tag_string_character, post.tag_string_copyright);
+              const fav = isFavorited(post.id);
 
               return (
                 <div
@@ -251,40 +328,48 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                     setSelectedPost(post);
                     setZoomScale(1);
                   }}
-                  className="group relative rounded-2xl bg-slate-900 border border-white/10 hover:border-pink-500/50 overflow-hidden shadow-lg transition-all duration-300 cursor-pointer flex flex-col justify-between"
+                  className="group relative rounded-2xl bg-slate-900 border border-white/10 hover:border-pink-500/50 overflow-hidden shadow-lg transition-all duration-300 cursor-pointer h-60 sm:h-72"
                 >
-                  <div className="h-56 sm:h-64 w-full relative overflow-hidden bg-black/40">
-                    <img
-                      src={imgUrl}
-                      alt={title}
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (target.src !== fallbackUrl && fallbackUrl) {
-                          target.src = fallbackUrl;
-                        } else {
-                          target.src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx113415-LHBAeoZDIsnF.jpg';
-                        }
-                      }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-70" />
+                  <img
+                    src={imgUrl}
+                    alt="Anime Fan Art"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (target.src !== fallbackUrl && fallbackUrl) {
+                        target.src = fallbackUrl;
+                      } else {
+                        target.src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx113415-LHBAeoZDIsnF.jpg';
+                      }
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
 
-                    {/* Quick Download Overlay Button */}
+                  {/* Top Overlay Buttons: Favorite Heart & Gallery Download */}
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+                    <button
+                      onClick={(e) => toggleFavorite(post, e)}
+                      className={`p-2 rounded-full backdrop-blur-md border transition cursor-pointer active:scale-90 ${
+                        fav
+                          ? 'bg-pink-500 text-white border-pink-400 shadow-md shadow-pink-500/50'
+                          : 'bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border-white/20'
+                      }`}
+                      title={fav ? 'Remove from Favorites' : 'Save to Favorites'}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${fav ? 'fill-white' : ''}`} />
+                    </button>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDownload(post);
                       }}
-                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 hover:bg-pink-500 text-white border border-white/15 backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      className="p-2 rounded-full bg-black/60 hover:bg-pink-500 text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition cursor-pointer active:scale-90"
                       title="Save to Gallery"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
-                  </div>
-
-                  <div className="p-3 bg-slate-950">
-                    <h3 className="text-xs font-bold text-white truncate">{title}</h3>
                   </div>
                 </div>
               );
@@ -292,18 +377,20 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
           </div>
 
           {/* Observer Sentinel for Infinite Scroll */}
-          <div ref={observerTarget} className="h-12 flex items-center justify-center">
-            {isLoadingMore && (
-              <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
-                <div className="w-4 h-4 rounded-full border-2 border-pink-500 border-t-transparent animate-spin" />
-                <span>Loading more artwork...</span>
-              </div>
-            )}
-          </div>
+          {searchQuery !== 'favorites' && (
+            <div ref={observerTarget} className="h-12 flex items-center justify-center">
+              {isLoadingMore && (
+                <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
+                  <div className="w-4 h-4 rounded-full border-2 border-pink-500 border-t-transparent animate-spin" />
+                  <span>Loading more artwork...</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* FULL-SCREEN LIGHTBOX MODAL WITH TOUCH ZOOM */}
+      {/* FULL-SCREEN LIGHTBOX MODAL WITH TOUCH ZOOM & FAVORITES TOGGLE */}
       <AnimatePresence>
         {selectedPost && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
@@ -324,21 +411,21 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               {/* Header */}
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/40">
                 <span className="text-xs sm:text-sm font-bold text-white truncate mr-2">
-                  {cleanTagTitle(selectedPost.tag_string, selectedPost.tag_string_character, selectedPost.tag_string_copyright)}
+                  {cleanTagTitle(selectedPost.tag_string, selectedPost.tag_string_character, selectedPost.tag_string_copyright) || 'Anime Fan Art'}
                 </span>
 
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Zoom Controls */}
                   <div className="flex items-center gap-1 bg-white/5 rounded-full p-1 border border-white/10">
                     <button
-                      onClick={() => setZoomScale(prev => Math.min(prev + 0.4, 3))}
+                      onClick={() => setZoomScale((prev) => Math.min(prev + 0.4, 3))}
                       className="w-6 h-6 rounded-full hover:bg-white/10 text-slate-300 flex items-center justify-center transition"
                       title="Zoom In"
                     >
                       <ZoomIn className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => setZoomScale(prev => Math.max(prev - 0.4, 0.8))}
+                      onClick={() => setZoomScale((prev) => Math.max(prev - 0.4, 0.8))}
                       className="w-6 h-6 rounded-full hover:bg-white/10 text-slate-300 flex items-center justify-center transition"
                       title="Zoom Out"
                     >
@@ -369,7 +456,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                 <div
                   className="transition-transform duration-300 ease-out cursor-zoom-in"
                   style={{ transform: `scale(${zoomScale})` }}
-                  onDoubleClick={() => setZoomScale(prev => prev === 1 ? 2 : 1)}
+                  onDoubleClick={() => setZoomScale((prev) => (prev === 1 ? 2 : 1))}
                 >
                   <img
                     src={selectedPost.large_file_url || selectedPost.file_url || selectedPost.preview_file_url}
@@ -394,6 +481,18 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                 </span>
 
                 <div className="flex items-center gap-2.5 ml-auto">
+                  <button
+                    onClick={(e) => toggleFavorite(selectedPost, e)}
+                    className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      isFavorited(selectedPost.id)
+                        ? 'bg-pink-500 text-white border-pink-400'
+                        : 'bg-white/10 hover:bg-white/20 text-white border-white/10'
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isFavorited(selectedPost.id) ? 'fill-white' : ''}`} />
+                    <span>{isFavorited(selectedPost.id) ? 'Favorited' : 'Favorite'}</span>
+                  </button>
+
                   <button
                     onClick={() => handleShare(selectedPost)}
                     className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-white/10"

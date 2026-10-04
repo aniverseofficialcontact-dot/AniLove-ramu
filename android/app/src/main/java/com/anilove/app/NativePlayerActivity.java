@@ -1431,6 +1431,13 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     @UnstableApi
     private void runSnifferFallback(String url, String originalReferer, Map<String, String> headers) {
+        if (url != null && (url.contains("hentaiocean") || is18PlusActive())) {
+            Log.i("AniLove_Sniffer", "Bypassing VideoSniffer for HentaiOcean 18+ stream -> WebPlayer mode: " + url);
+            currentEmbedUrl = url;
+            switchPlayerEngine(true);
+            return;
+        }
+
         runOnUiThread(() -> {
             if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
             VideoSniffer sniffer = new VideoSniffer(getApplicationContext());
