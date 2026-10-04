@@ -5,7 +5,6 @@ import {
   Download,
   Share2,
   X,
-  Heart,
   ZoomIn,
   ZoomOut,
   RotateCcw
@@ -277,17 +276,11 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                         e.stopPropagation();
                         handleDownload(post);
                       }}
-                      className="absolute top-2.5 left-2.5 w-7 h-7 rounded-full bg-black/60 hover:bg-pink-500 text-white border border-white/15 backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/60 hover:bg-pink-500 text-white border border-white/15 backdrop-blur-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
                       title="Save to Gallery"
                     >
                       <Download className="w-3.5 h-3.5" />
                     </button>
-
-                    {/* Score Badge */}
-                    <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-black/60 text-amber-300 border border-white/15 backdrop-blur-md flex items-center gap-1">
-                      <Heart className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      {post.score}
-                    </span>
                   </div>
 
                   <div className="p-3 bg-slate-950">

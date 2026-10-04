@@ -1730,6 +1730,11 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (!isDirectMediaStream(hlsUrl)) {
             Log.i("AniLove", "Embed page detected — attempting direct extract for: " + hlsUrl);
+            if (hlsUrl.contains("hentaiocean")) {
+                currentEmbedUrl = hlsUrl;
+                switchPlayerEngine(true);
+                return;
+            }
             if (hlsUrl.contains("vidlink.pro")) {
                 if (attemptVidLinkDirectExtract(hlsUrl, referer, headers)) return;
             } else if (hlsUrl.contains("tryembed.us.cc") || hlsUrl.contains("vidnest.fun")) {
