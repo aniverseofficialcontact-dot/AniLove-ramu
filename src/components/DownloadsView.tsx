@@ -46,7 +46,16 @@ export const DownloadsView: React.FC<DownloadsViewProps> = ({ onBack, onOpenAnim
     const unsubscribe = subscribeToDownloads(updated => {
       setDownloads(updated);
     });
-    return () => unsubscribe();
+
+    // Active polling interval every 1 second to ensure real-time progress update
+    const interval = setInterval(() => {
+      refreshDownloadsList();
+    }, 1000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   const handleExport = async (item: DownloadItemInfo) => {

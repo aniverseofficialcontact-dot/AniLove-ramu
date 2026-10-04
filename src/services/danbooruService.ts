@@ -18,6 +18,37 @@ export interface DanbooruPost {
 /**
  * Fetch Danbooru fan arts with strict SFW / 18+ filtering
  */
+export function cleanTagTitle(tags: string, characterTags?: string, copyrightTags?: string): string {
+  if (characterTags && characterTags.trim()) {
+    const chars = characterTags.split(/\s+/).map(c => c.replace(/_/g, ' ')).filter(c => c.length > 2);
+    if (chars.length > 0) {
+      const charName = chars[0].replace(/\b\w/g, l => l.toUpperCase());
+      if (copyrightTags && copyrightTags.trim()) {
+        const series = copyrightTags.split(/\s+/)[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return `${charName} (${series})`;
+      }
+      return charName;
+    }
+  }
+
+  if (!tags) return 'Anime Fan Art';
+  const tagList = tags.split(/\s+/);
+  const cleanList = tagList
+    .map(t => t.replace(/_/g, ' '))
+    .filter(t => !/^\d+(girl|boy|girls|boys)/i.test(t))
+    .filter(t => !['looking_at_viewer', 'solo', 'highres', 'absurdres', 'long_hair', 'short_hair', 'simple_background', 'white_background'].includes(t.toLowerCase()))
+    .filter(t => t.length >= 3);
+
+  if (cleanList.length > 0) {
+    return cleanList.slice(0, 3).map(w => w.replace(/\b\w/g, l => l.toUpperCase())).join(' ');
+  }
+
+  return 'Anime Fan Art';
+}
+
+/**
+ * Fetch Danbooru fan arts with strict SFW / 18+ filtering
+ */
 export async function fetchDanbooruFanArts(
   query = '',
   page = 1,
@@ -25,6 +56,7 @@ export async function fetchDanbooruFanArts(
 ): Promise<DanbooruPost[]> {
   const posts: DanbooruPost[] = [];
   const cleanTag = query.trim().toLowerCase().replace(/\s+/g, '_');
+  const INVALID_EXTS = new Set(['zip', 'webm', 'mp4', 'gif', 'swf', 'ugoira', 'rar', '7z']);
 
   // 1. Primary: Safebooru (100% SFW Danbooru-compatible API - Zero 403 blocks)
   try {
@@ -36,6 +68,9 @@ export async function fetchDanbooruFanArts(
       if (Array.isArray(safeData)) {
         safeData.forEach((item: any) => {
           if (item.image && item.directory) {
+            const ext = item.image.split('.').pop()?.toLowerCase() || 'jpg';
+            if (INVALID_EXTS.has(ext)) return;
+
             const fileUrl = `https://safebooru.org/images/${item.directory}/${item.image}`;
             const sampleUrl = item.sample
               ? `https://safebooru.org/samples/${item.directory}/sample_${item.image}`
@@ -54,7 +89,7 @@ export async function fetchDanbooruFanArts(
               preview_file_url: sampleUrl,
               image_width: item.width || 1200,
               image_height: item.height || 1600,
-              file_ext: item.image.split('.').pop() || 'jpg',
+              file_ext: ext,
             });
           }
         });
@@ -68,7 +103,6 @@ export async function fetchDanbooruFanArts(
   try {
     let resolvedTag = cleanTag ? `${cleanTag}*` : 'order:score';
 
-    // Autocomplete character tags by post count
     if (cleanTag) {
       try {
         const tagRes = await fetch(`https://danbooru.donmai.us/tags.json?search[name_matches]=*${encodeURIComponent(cleanTag)}*&search[order]=count&limit=10`);
@@ -99,7 +133,8 @@ export async function fetchDanbooruFanArts(
       if (Array.isArray(data)) {
         data.forEach((post) => {
           const img = post.large_file_url || post.file_url || post.preview_file_url;
-          if (img) {
+          const ext = (post.file_ext || '').toLowerCase();
+          if (img && !INVALID_EXTS.has(ext)) {
             if (!allowNsfw && (post.rating === 'e' || post.rating === 'q')) return;
             posts.push(post);
           }

@@ -13,7 +13,7 @@ import {
   Heart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { fetchDanbooruFanArts, DanbooruPost } from '../services/danbooruService';
+import { fetchDanbooruFanArts, cleanTagTitle, DanbooruPost } from '../services/danbooruService';
 import { UserSettings } from '../types';
 
 interface FanArtsViewProps {
@@ -234,11 +234,8 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {posts.map((post) => {
               const imgUrl = post.preview_file_url || post.large_file_url || post.file_url;
-              const title = post.tag_string_character
-                ? post.tag_string_character.replace(/_/g, ' ')
-                : post.tag_string_copyright
-                ? post.tag_string_copyright.replace(/_/g, ' ')
-                : 'Anime Artwork';
+              const fallbackUrl = post.file_url || post.large_file_url || post.preview_file_url;
+              const title = cleanTagTitle(post.tag_string, post.tag_string_character, post.tag_string_copyright);
 
               return (
                 <div
@@ -250,6 +247,15 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                     <img
                       src={imgUrl}
                       alt={title}
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src !== fallbackUrl && fallbackUrl) {
+                          target.src = fallbackUrl;
+                        } else {
+                          target.src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx113415-LHBAeoZDIsnF.jpg';
+                        }
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-70" />
@@ -262,38 +268,12 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                   </div>
 
                   <div className="p-3 bg-slate-950">
-                    <h3 className="text-xs font-bold text-white truncate capitalize">{title}</h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                      Artist: {post.tag_string_artist ? post.tag_string_artist.replace(/_/g, ' ') : 'Unknown'}
-                    </p>
+                    <h3 className="text-xs font-bold text-white truncate">{title}</h3>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {/* Load More Button */}
-          {hasMore && (
-            <div className="pt-4 flex justify-center">
-              <button
-                onClick={loadMoreFanArts}
-                disabled={isLoadingMore}
-                className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 shadow-lg flex items-center gap-2 transition active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {isLoadingMore ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-pink-400" />
-                    <span>Loading More Artwork...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Load More Fan Arts</span>
-                    <ChevronDown className="w-4 h-4 text-pink-400" />
-                  </>
-                )}
-              </button>
-            </div>
-          )}
         </div>
       )}
 

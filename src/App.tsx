@@ -57,7 +57,6 @@ const ScheduleView = lazy(() => import('./components/ScheduleView').then(m => ({
 const CardInventoryView = lazy(() => import('./components/CardInventoryView').then(m => ({ default: m.CardInventoryView })));
 const AnimeNewsView = lazy(() => import('./components/AnimeNewsView').then(m => ({ default: m.AnimeNewsView })));
 const FanArtsView = lazy(() => import('./components/FanArtsView').then(m => ({ default: m.FanArtsView })));
-const WallpapersView = lazy(() => import('./components/WallpapersView').then(m => ({ default: m.WallpapersView })));
 const AnimeReactionsView = lazy(() => import('./components/AnimeReactionsView').then(m => ({ default: m.AnimeReactionsView })));
 import { InteractiveAnime3DCardModal } from './components/InteractiveAnime3DCardModal';
 import { PinUnlockModal } from './components/PinUnlockModal';
@@ -1490,16 +1489,6 @@ export function App() {
             {currentTab === 'fanarts' && (
               <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
                 <FanArtsView
-                  settings={settings}
-                  onShowToast={(msg) => showToast('info', msg)}
-                />
-              </Suspense>
-            )}
-
-            {/* VIEW 11: 4K WALLPAPERS (YANDERE & KONACHAN) */}
-            {currentTab === 'wallpapers' && (
-              <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" /></div>}>
-                <WallpapersView
                   settings={settings}
                   onShowToast={(msg) => showToast('info', msg)}
                 />

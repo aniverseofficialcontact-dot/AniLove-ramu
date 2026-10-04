@@ -121,11 +121,6 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
       icon: Palette,
     },
     {
-      id: 'wallpapers' as TabType,
-      label: 'Wallpapers',
-      icon: Image,
-    },
-    {
       id: 'reactions' as TabType,
       label: 'Anime Express',
       icon: Smile,
