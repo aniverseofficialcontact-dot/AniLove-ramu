@@ -851,7 +851,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         window.setAttributes(params);
     }
 
-    private void toggleFullscreenInPlace() {
+    public void toggleFullscreenInPlace() {
         new Handler(Looper.getMainLooper()).post(() -> {
             isFullscreenMode = !isFullscreenMode;
             Log.i("AniLove_Fullscreen", "toggleFullscreenInPlace | isFullscreen: " + isFullscreenMode);
@@ -951,6 +951,27 @@ public class NativePlayerActivity extends AppCompatActivity {
         btnEngineToggle = findViewById(R.id.btn_engine_toggle);
         if (btnEngineToggle != null) {
             btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
+        }
+
+        View btnLandscapeToggle = findViewById(R.id.btn_landscape_toggle);
+        if (btnLandscapeToggle != null) {
+            btnLandscapeToggle.setOnClickListener(v -> toggleFullscreenInPlace());
+        }
+
+        TextView btnHome18Plus = findViewById(R.id.btn_home_18plus);
+        if (btnHome18Plus != null) {
+            if (is18PlusActive()) {
+                btnHome18Plus.setVisibility(View.VISIBLE);
+                btnHome18Plus.setOnClickListener(v -> {
+                    NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                    if (navigationListener != null) {
+                        navigationListener.onBack();
+                    }
+                    finish();
+                });
+            } else {
+                btnHome18Plus.setVisibility(View.GONE);
+            }
         }
 
         playerWebView = findViewById(R.id.player_webview);
@@ -2557,6 +2578,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (playerWebView != null) {
                     playerWebView.setVisibility(View.VISIBLE);
                     playerWebView.bringToFront();
+                    View topBar = findViewById(R.id.top_center_button_bar);
+                    if (topBar != null) topBar.bringToFront();
                     if (btnEngineToggle != null) btnEngineToggle.bringToFront();
 
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;

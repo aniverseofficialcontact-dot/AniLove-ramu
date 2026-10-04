@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Globe,
   Home,
+  Maximize2,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';

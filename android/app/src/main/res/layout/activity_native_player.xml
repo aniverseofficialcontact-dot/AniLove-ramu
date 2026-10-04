@@ -152,25 +152,64 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- Independent Floating Engine Toggle Button (Positioned top-center beside refresh) -->
-        <TextView
-            android:id="@+id/btn_engine_toggle"
+        <!-- Independent Floating Engine, Home & Landscape Bar (Positioned top-center) -->
+        <LinearLayout
+            android:id="@+id/top_center_button_bar"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
+            android:layout_height="wrap_content"
             android:layout_gravity="top|center_horizontal"
             android:layout_marginTop="10dp"
-            android:background="@drawable/speed_btn_bg"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="⚡ EXO"
-            android:textColor="#FFD700"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:clickable="true"
-            android:focusable="true"
+            android:orientation="horizontal"
             android:elevation="25dp"
-            android:translationZ="25dp"
-            android:visibility="visible" />
+            android:translationZ="25dp">
+
+            <TextView
+                android:id="@+id/btn_home_18plus"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/speed_btn_bg"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="🏠 Home"
+                android:textColor="#F43F5E"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/btn_landscape_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/speed_btn_bg"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="📺 Landscape"
+                android:textColor="#818CF8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="visible" />
+
+            <TextView
+                android:id="@+id/btn_engine_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/speed_btn_bg"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="⚡ EXO"
+                android:textColor="#FFD700"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="visible" />
+        </LinearLayout>
 
         <!-- Native Control Overlay -->
         <RelativeLayout

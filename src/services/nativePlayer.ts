@@ -24,6 +24,7 @@ export interface NativePlayerPlugin {
   }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
   switchEngine(options: { mode: 'exo' | 'web' }): Promise<void>;
+  toggleLandscape(): Promise<void>;
   close(): Promise<void>;
   addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
   addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;

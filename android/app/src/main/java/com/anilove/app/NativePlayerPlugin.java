@@ -161,6 +161,18 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void toggleLandscape(PluginCall call) {
+        if (NativePlayerActivity.currentInstance != null) {
+            NativePlayerActivity.currentInstance.runOnUiThread(() -> {
+                try {
+                    NativePlayerActivity.currentInstance.toggleFullscreenInPlace();
+                } catch (Exception ignored) {}
+            });
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
     public void close(PluginCall call) {
         lastPlayUrl = null;
         lastPlayTime = 0;

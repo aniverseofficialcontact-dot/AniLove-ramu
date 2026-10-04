@@ -98,6 +98,34 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     }
   }, [selectedAudio, isHiAnimeLocked, isHindiSelected, selectedServer]);
 
+  const toggleEpisode = (epNum: number) => {
+    setSelectedEpNumbers(prev => {
+      const next = new Set(prev);
+      if (next.has(epNum)) {
+        next.delete(epNum);
+      } else {
+        next.add(epNum);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedEpNumbers.size === episodes.length) {
+      setSelectedEpNumbers(new Set());
+    } else {
+      setSelectedEpNumbers(new Set(episodes.map(e => e.number)));
+    }
+  };
+
+  const handleSelectRange = (count: number) => {
+    const sorted = [...episodes].sort((a, b) => a.number - b.number);
+    const startIdx = sorted.findIndex(e => e.number === currentEpisodeNumber);
+    const fromIdx = startIdx >= 0 ? startIdx : 0;
+    const slice = sorted.slice(fromIdx, fromIdx + count);
+    setSelectedEpNumbers(new Set(slice.map(e => e.number)));
+  };
+
   const handleStartDownloads = () => {
     if (selectedEpNumbers.size === 0) return;
 

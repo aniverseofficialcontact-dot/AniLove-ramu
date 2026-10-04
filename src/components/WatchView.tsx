@@ -24,6 +24,7 @@ import {
   Server,
   Globe,
   Home,
+  Maximize2,
   RotateCw,
   Hash,
 } from 'lucide-react';
