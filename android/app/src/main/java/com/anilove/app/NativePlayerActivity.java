@@ -2859,6 +2859,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             if (btnEngineToggle != null) {
                 btnEngineToggle.setText(useWebView ? "🌐 WEB" : "⚡ EXO");
                 btnEngineToggle.setTextColor(useWebView ? Color.parseColor("#34D399") : Color.parseColor("#FFD700"));
+                btnEngineToggle.bringToFront();
             }
             if (useWebView) {
                 if (exoPlayer != null) {
@@ -2870,6 +2871,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
                 if (playerWebView != null) {
                     playerWebView.setVisibility(View.VISIBLE);
+                    playerWebView.bringToFront();
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
                     if (targetUrl != null && !targetUrl.trim().isEmpty()) {
                         if (targetUrl.contains("hentaiocean")) {
@@ -2899,17 +2901,28 @@ public class NativePlayerActivity extends AppCompatActivity {
                         }
                     }
                 }
-                if (touchWall != null) touchWall.setVisibility(View.GONE);
+                if (touchWall != null) {
+                    touchWall.setVisibility(View.GONE);
+                    touchWall.setClickable(false);
+                }
+                if (controlsOverlay != null) {
+                    controlsOverlay.setVisibility(View.GONE);
+                }
                 if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-                hideControlsQuietly();
-                Toast.makeText(this, "Switched to Embedded Web Player Mode", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Switched to Web Player Mode", Toast.LENGTH_SHORT).show();
             } else {
                 if (playerWebView != null) {
                     playerWebView.setVisibility(View.GONE);
                     playerWebView.loadUrl("about:blank");
                 }
                 if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
-                if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+                if (touchWall != null) {
+                    touchWall.setVisibility(View.VISIBLE);
+                    touchWall.setClickable(true);
+                }
+                if (controlsOverlay != null) {
+                    controlsOverlay.setVisibility(View.VISIBLE);
+                }
                 if (exoPlayer != null) {
                     try {
                         exoPlayer.play();
