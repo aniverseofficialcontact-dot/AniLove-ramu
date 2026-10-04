@@ -1,6 +1,7 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { resolveEpisodeSource, createDirectStreamSource, STREAM_PROVIDERS, StreamLanguage } from './streamingProviders';
+import { resolveEpisodeSource, resolveHiAnimeSource, resolveAnimeSaltSource, STREAM_PROVIDERS, StreamLanguage, SUPPORTED_LANGUAGES } from './streamingProviders';
+import { fetchUnifiedSubtitles, anonymizeAndSortSubtitleTracks } from './subtitleService';
 
 export interface DownloadItemInfo {
   id: string;
@@ -141,56 +142,93 @@ export async function queueBatchEpisodeDownloads(
   const displayTitle =
     anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
+  const isSubOrDub = audio === 'SUB' || audio === 'DUB';
+
   for (const ep of episodes) {
     try {
       let streamUrl = '';
       let selectedServerName = serverName;
+      let effectiveQuality = quality;
+      let effectiveSource = isSubOrDub ? 'HiAnime' : 'Multi-Lang';
 
-      const matchedProvider =
-        STREAM_PROVIDERS.find(p => p.serverMatch === serverName || p.label === serverName || p.id === serverName) ||
-        STREAM_PROVIDERS[0];
+      // RULE 1: Japanese (SUB) and English (DUB) downloads are LOCKED to HiAnime source at 1080p quality
+      if (isSubOrDub) {
+        effectiveSource = 'HiAnime';
+        effectiveQuality = '1080p';
+        selectedServerName = serverName.toLowerCase().includes('server 2') ? 'Server 2' : serverName.toLowerCase().includes('server 3') ? 'Server 3' : 'Server 1';
+      }
 
+      // RULE 7: Fetch & embed WebVTT subtitles with every episode download
       let subtitleUrl = '';
-      // 1. Quick probe to see if backend returns a direct URL and check language support
       try {
+        const subs = await fetchUnifiedSubtitles(anime.id, ep.number, 3000);
+        if (subs && subs.length > 0) {
+          const formatted = anonymizeAndSortSubtitleTracks(subs, 'English', 'English 2');
+          if (formatted && formatted.length > 0) {
+            subtitleUrl = formatted[0].url;
+          }
+        }
+      } catch (e) {
+        console.warn(`Subtitle fetch warning for EP ${ep.number}:`, e);
+      }
+
+      // RESOLVE STREAM BASED ON SOURCE RULES
+      if (effectiveSource === 'HiAnime') {
+        const hi = resolveHiAnimeSource(anime.id, ep.number, audio, selectedServerName);
+        if (hi && hi.selectedUrl) {
+          streamUrl = hi.selectedUrl;
+        } else {
+          errors.push(`EP ${ep.number}: HiAnime 1080p ${audio} stream is not available. Download skipped.`);
+          continue;
+        }
+      } else if (effectiveSource === 'AnimeSalt') {
+        const salt = await resolveAnimeSaltSource(displayTitle, ep.number, anime.id);
+        if (salt && salt.selectedUrl) {
+          streamUrl = salt.selectedUrl;
+        } else {
+          errors.push(`EP ${ep.number}: AnimeSalt stream is not available. Download skipped.`);
+          continue;
+        }
+      } else {
+        // Multi-Lang (MovieBox API)
         const res = await resolveEpisodeSource({
           anime,
           episodeNumber: ep.number,
-          providerId: matchedProvider.id,
+          providerId: 'anime-world-v1',
           language: audio,
-          serverName,
+          resolution: (effectiveQuality as any) || '1080p',
+          serverName: 'Multi-Lang-Server-1',
+          sourceName: 'Multi-Lang',
         });
 
         if (res && res.status === 'available' && res.source?.url) {
-          // Check if requested language is available in the episode stream
-          if (!serverName.toLowerCase().includes('server 2') && res.source.availableLanguages && res.source.availableLanguages.length > 0) {
-            if (!res.source.availableLanguages.includes(audio)) {
-              const langLabel = SUPPORTED_LANGUAGES.find(l => l.code === audio)?.label || audio;
-              errors.push(`EP ${ep.number}: ${langLabel} is not available on ${serverName}. Download skipped.`);
-              continue; // Skip this episode
-            }
+          // RULE 6: Strict Quality & Audio Availability Check Per Episode
+          const availableLangs = res.source.availableLanguages || [];
+          if (availableLangs.length > 0 && !availableLangs.includes(audio)) {
+            const langLabel = SUPPORTED_LANGUAGES.find(l => l.code === audio)?.label || audio;
+            errors.push(`EP ${ep.number}: ${langLabel} audio track is not available on Multi-Lang. Download skipped.`);
+            continue; // DO NOT PROCEED
+          }
+
+          const availableRes = res.source.availableResolutions || [];
+          if (availableRes.length > 0 && !availableRes.includes(effectiveQuality as any)) {
+            errors.push(`EP ${ep.number}: ${effectiveQuality} quality in ${audio} audio is not available on Multi-Lang. Download skipped.`);
+            continue; // DO NOT PROCEED
           }
 
           streamUrl = res.source.url;
-          selectedServerName = res.source.selectedServerName || serverName;
-          if (res.source.subtitles && res.source.subtitles.length > 0) {
-            subtitleUrl = res.source.subtitles[0].url || '';
-          } else if ((res.source as any).subtitleUrl) {
-            subtitleUrl = (res.source as any).subtitleUrl;
-          }
+        } else {
+          errors.push(`EP ${ep.number}: Multi-Lang stream is not available. Download skipped.`);
+          continue;
         }
-      } catch {
-        // Fallback immediately
       }
 
-      // 2. Direct embed stream source generator
       if (!streamUrl) {
-        const direct = createDirectStreamSource(anime, ep.number, matchedProvider, audio, '1080p', serverName);
-        streamUrl = direct.url;
-        selectedServerName = direct.selectedServerName || serverName;
+        errors.push(`EP ${ep.number}: Video stream URL could not be resolved. Download skipped.`);
+        continue;
       }
 
-      const downloadId = `${anime.id}_ep_${ep.number}_${audio.toLowerCase()}`;
+      const downloadId = `${anime.id}_ep_${ep.number}_${audio.toLowerCase()}_${effectiveQuality}`;
 
       const item: any = {
         id: downloadId,
@@ -202,7 +240,7 @@ export async function queueBatchEpisodeDownloads(
         subtitleUrl: subtitleUrl || '',
         audio,
         serverName: selectedServerName,
-        quality,
+        quality: effectiveQuality,
         thumbnail: ep.thumbnail || anime.coverImage?.large || '',
       };
 

@@ -285,18 +285,34 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
             </div>
           </div>
 
+          {/* Audio Lock Notification Badge for SUB/DUB */}
+          {(selectedAudio === 'SUB' || selectedAudio === 'DUB') && (
+            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+              <span>🔒</span>
+              <span>Japanese & English audio downloads are locked to HiAnime 1080p HD.</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Server Source</span>
             <select
               value={selectedServer}
+              disabled={selectedAudio === 'SUB' || selectedAudio === 'DUB'}
               onChange={e => setSelectedServer(e.target.value)}
-              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60 cursor-pointer"
             >
-              {availableServers.map(s => (
-                <option key={s.name} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
+              {(selectedAudio === 'SUB' || selectedAudio === 'DUB') ? (
+                <>
+                  <option value="Server 1">HiAnime - Server 1</option>
+                  <option value="Server 2">HiAnime - Server 2</option>
+                  <option value="Server 3">HiAnime - Server 3</option>
+                </>
+              ) : (
+                <>
+                  <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
+                  <option value="AnimeSalt">🧂 AnimeSalt</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -304,14 +320,19 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
             <span className="text-xs font-semibold text-neutral-300">Video Quality</span>
             <select
               value={selectedQuality}
+              disabled={selectedAudio === 'SUB' || selectedAudio === 'DUB'}
               onChange={e => setSelectedQuality(e.target.value)}
-              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60 cursor-pointer"
             >
-              {availableQualities.map(q => (
-                <option key={q} value={q}>
-                  {q === '1080p' ? '1080p Full HD' : q === '720p' ? '720p HD' : q === '480p' ? '480p SD' : q}
-                </option>
-              ))}
+              {(selectedAudio === 'SUB' || selectedAudio === 'DUB') ? (
+                <option value="1080p">1080p Full HD (Locked)</option>
+              ) : (
+                availableQualities.map(q => (
+                  <option key={q} value={q}>
+                    {q === '1080p' ? '1080p Full HD' : q === '720p' ? '720p HD' : q === '480p' ? '480p SD' : q}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

@@ -437,7 +437,7 @@ async function resolveAnimeDekhoSource(
  * SOURCE 3: HiAnime Engine
  * ─────────────────────────────────────────────────────────────
  */
-function resolveHiAnimeSource(
+export function resolveHiAnimeSource(
   anilistId: number | undefined,
   episodeNumber: number,
   language: StreamLanguage = 'SUB',
@@ -488,7 +488,7 @@ function resolveHiAnimeSource(
  * SOURCE 4: AnimeSalt Engine
  * ─────────────────────────────────────────────────────────────
  */
-async function resolveAnimeSaltSource(
+export async function resolveAnimeSaltSource(
   title: string,
   episodeNumber: number,
   anilistId?: number,
