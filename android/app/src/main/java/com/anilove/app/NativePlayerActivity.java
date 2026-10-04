@@ -178,11 +178,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private static final Pattern SERVER2_EXTRACT_PATTERN = Pattern.compile("(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)");
     private static final Pattern VIDLINK_EXTRACT_PATTERN = Pattern.compile("vidlink\\.pro/anime/(\\d+)/(\\d+)");
 
-    private WebView playerWebView;
-    private TextView btnEngineToggle;
-    private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
-    private String currentActiveEmbedUrl = null;
     private String currentActiveServerName = "";
     private String currentActiveSourceName = "";
     private final Map<String, Map<String, String>> activeLanguageQualityMap = new HashMap<>();
@@ -191,89 +187,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         return (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains("hentaiocean")) ||
                (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean")) ||
                "HentaiOcean".equalsIgnoreCase(currentActiveSourceName);
-    }
-
-    private void injectAdEraserScript(WebView webView) {
-        if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
-        String script =
-            "(function() {" +
-            "  var cssRules = '.jw-resume-modal, [class*=\"resume\"], [id*=\"resume\"], [class*=\"continue\"], [id*=\"continue\"], ' +" +
-            "                 '.jw-icon-fullscreen, .jw-btn-fullscreen, .art-icon-fullscreen, .art-control-fullscreen, .plyr__controls__item[data-plyr=\"fullscreen\"], ' +" +
-            "                 '.vjs-fullscreen-control, .dplayer-full-icon, .dplayer-full-in-icon, ' +" +
-            "                 '.jw-icon-settings, .jw-btn-settings, .art-icon-setting, .art-control-setting, .art-setting, ' +" +
-            "                 'a[href*=\"download\" i], .download-btn, .download-link, button[class*=\"download\" i], a[class*=\"download\" i], [id*=\"download\" i], .btn-download, ' +" +
-            "                 '.jw-icon-hd, .jw-settings-content, .v-quality, ' +" +
-            "                 '.jw-icon-cc, .art-icon-subtitle, .v-cc, ' +" +
-            "                 '.art-icon-pip, .jw-icon-pip, .v-pip, ' +" +
-            "                 '.ad-container, .popunder, .pop-up, iframe[src*=\"ad\"], div[class*=\"ad-\"], div[id*=\"pop\"], a[target=\"_blank\"] ' +" +
-            "                 '{ display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }';" +
-            "  function applyAdEraserToWindow(win) {" +
-            "    try {" +
-            "      if (!win.document) return;" +
-            "      try {" +
-            "        win.open = function() { return null; };" +
-            "        win.onbeforeunload = null;" +
-            "        win.Element.prototype.requestFullscreen = function() { return Promise.reject(); };" +
-            "        win.Element.prototype.webkitRequestFullscreen = function() {};" +
-            "        win.Element.prototype.webkitEnterFullscreen = function() {};" +
-            "      } catch(e) {}" +
-            "      if (!win.document.getElementById('anilove_style')) {" +
-            "        var style = win.document.createElement('style');" +
-            "        style.id = 'anilove_style';" +
-            "        style.type = 'text/css';" +
-            "        style.appendChild(win.document.createTextNode(cssRules));" +
-            "        (win.document.head || win.document.documentElement).appendChild(style);" +
-            "      }" +
-            "      try {" +
-            "        if (win.location && (win.location.href.indexOf('hentaiocean') !== -1 || win.location.href.indexOf('play?') !== -1)) {" +
-            "          var vids = win.document.querySelectorAll('video');" +
-            "          for (var vIdx = 0; vIdx < vids.length; vIdx++) {" +
-            "            vids[vIdx].muted = false;" +
-            "            vids[vIdx].play().catch(function(){});" +
-            "          }" +
-            "          var playBtns = win.document.querySelectorAll('button, .play-btn, #playback, .jw-display-icon');" +
-            "          for (var bIdx = 0; bIdx < playBtns.length; bIdx++) {" +
-            "            try { playBtns[bIdx].click(); } catch(e) {}" +
-            "          }" +
-            "        }" +
-            "      } catch(e) {}" +
-            "      var v = win.document.querySelector('video');" +
-            "      if (v && !v.dataset.aniskipBound) {" +
-            "        v.dataset.aniskipBound = 'true';" +
-            "        v.addEventListener('timeupdate', function() {" +
-            "          if (window.AndroidBridge && typeof window.AndroidBridge.onStateUpdate === 'function') {" +
-            "            window.AndroidBridge.onStateUpdate(v.currentTime, v.duration || 0, v.paused);" +
-            "          }" +
-            "        });" +
-            "      }" +
-            "    } catch(e) {}" +
-            "    for (var i = 0; i < win.frames.length; i++) {" +
-            "      try { applyAdEraserToWindow(win.frames[i]); } catch(e) {}" +
-            "    }" +
-            "  }" +
-            "  applyAdEraserToWindow(window);" +
-            "  if (!window.aniloveInterval) { window.aniloveInterval = setInterval(function() { applyAdEraserToWindow(window); }, 1000); }" +
-            "})();";
-        webView.evaluateJavascript(script, null);
-    }
-
-    private void setPlaybackSpeedWebView(float speed) {
-        if (playerWebView == null) return;
-        is2xSpeed = (speed > 1.0f);
-        String script =
-            "(function() {" +
-            "  function setSpeed(win, spd) {" +
-            "    try {" +
-            "      var vids = win.document.querySelectorAll('video');" +
-            "      for (var i = 0; i < vids.length; i++) { vids[i].playbackRate = spd; }" +
-            "    } catch(e) {}" +
-            "    for (var k = 0; k < win.frames.length; k++) {" +
-            "      try { setSpeed(win.frames[k], spd); } catch(e) {}" +
-            "    }" +
-            "  }" +
-            "  setSpeed(window, " + speed + ");" +
-            "})();";
-        playerWebView.evaluateJavascript(script, null);
     }
 
     private boolean isPlaying = true;
@@ -540,25 +453,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         // 1. Immediately cancel all active background Sniffers
         VideoSniffer.cancelActiveSniffers();
 
-        // 2. Mute, pause and clear playerWebView (Embedded Web Player Mode)
-        if (playerWebView != null) {
-            try {
-                playerWebView.evaluateJavascript(
-                    "(function(){" +
-                    "  try {" +
-                    "    var m = document.querySelectorAll('video, audio');" +
-                    "    for (var i = 0; i < m.length; i++) { m[i].pause(); m[i].muted = true; m[i].src = ''; }" +
-                    "  } catch(e) {}" +
-                    "})();", null
-                );
-                playerWebView.onPause();
-                playerWebView.pauseTimers();
-                playerWebView.stopLoading();
-                playerWebView.loadUrl("about:blank");
-                playerWebView.setVisibility(View.GONE);
-            } catch (Exception ignored) {}
-        }
-        isWebViewPlayerMode = false;
         if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
 
         // 3. Stop ExoPlayer playback synchronously without destroying the player instance for stream reuse
@@ -622,7 +516,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 rawUrl = rawUrl.replace("short.icu/", "abyssplayer.com/");
             }
             currentEmbedUrl = rawUrl;
-            currentActiveEmbedUrl = rawUrl;
         }
 
         String sName = intent.getStringExtra("serverName");
@@ -1027,160 +920,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayerView.setVisibility(View.VISIBLE);
         }
 
-        btnEngineToggle = findViewById(R.id.btn_engine_toggle);
-        if (btnEngineToggle != null) {
-            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
-        }
-
-        playerWebView = findViewById(R.id.player_webview);
-        if (playerWebView != null) {
-            playerWebView.addJavascriptInterface(new ScrubberInterface(), "AndroidBridge");
-            playerWebView.setLongClickable(false);
-            playerWebView.setOnLongClickListener(v -> true);
-
-            WebSettings settings = playerWebView.getSettings();
-            settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(true);
-            settings.setDatabaseEnabled(true);
-            settings.setMediaPlaybackRequiresUserGesture(false);
-            settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            settings.setSupportMultipleWindows(false);
-            settings.setJavaScriptCanOpenWindowsAutomatically(false);
-
-            playerWebView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onShowCustomView(View view, CustomViewCallback callback) {
-                    if (callback != null) {
-                        try { callback.onCustomViewHidden(); } catch (Exception ignored) {}
-                    }
-                    Log.i("AniLove_Fullscreen", "Blocked HTML player custom view fullscreen; native controls button active!");
-                }
-
-                @Override
-                public void onHideCustomView() {}
-
-                @Override
-                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
-                    Log.i("AniLove_AdBlock", "Blocked popup window creation in WebView Player!");
-                    return false;
-                }
-            });
-
-            playerWebView.setWebViewClient(new WebViewClient() {
-                @Override
-                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                    if (is18PlusActive()) {
-                        return super.shouldInterceptRequest(view, request);
-                    }
-                    if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString();
-                        if (isAdUrl(url)) {
-                            Log.i("AniLove_AdBlock", "Blocked ad request in WebView Player: " + url);
-                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                        }
-                    }
-                    return super.shouldInterceptRequest(view, request);
-                }
-
-                @Override
-                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                    if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString().toLowerCase();
-                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
-
-                        if (is18PlusActive()) {
-                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("whatsapp://") || url.startsWith("tg://")) {
-                                return true;
-                            }
-                            return false;
-                        }
-
-                        // 1. ALWAYS block YouTube, external app links, and ad domains across all frame levels
-                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
-                            url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://") ||
-                            url.startsWith("whatsapp://") || url.startsWith("tg://") || isAdUrl(url)) {
-                            Log.i("AniLove_AdBlock", "Blocked YouTube / App / Ad redirect in WebView Player: " + url);
-                            return true; // Cancel navigation completely
-                        }
-
-                        // 2. Block main frame redirects away from the original embed server
-                        if (request.isForMainFrame()) {
-                            if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
-                                try {
-                                    String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
-                                    if (!Objects.equals(host, originalHost) && !host.contains(originalHost) && !originalHost.contains(host) && !host.contains("about:blank")) {
-                                        Log.i("AniLove_AdBlock", "Blocked top-level domain redirect from " + originalHost + " to " + host);
-                                        return true; // Cancel top-level domain redirect
-                                    }
-                                } catch (Exception ignored) {}
-                            }
-                        }
-                    }
-                    return false; // Allow internal stream / embed sub-resources
-                }
-
-                @Override
-                public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                    super.onPageStarted(view, url, favicon);
-                    injectAdEraserScript(view);
-                }
-
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    super.onPageFinished(view, url);
-                    injectAdEraserScript(view);
-                }
-            });
-
-            GestureDetector webViewGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-                @Override
-                public boolean onDoubleTap(MotionEvent e) {
-                    if (!isWebViewPlayerMode) return false;
-                    float x = e.getX();
-                    int width = playerWebView != null ? playerWebView.getWidth() : getPhysicalScreenWidth();
-                    final boolean isForward = x > (width / 2.0f);
-                    showSeekIndicator(isForward);
-
-                    String seekScript =
-                        "(function() {" +
-                        "  function seekAll(win, delta) {" +
-                        "    try {" +
-                        "      var vids = win.document.querySelectorAll('video');" +
-                        "      for (var i = 0; i < vids.length; i++) { vids[i].currentTime = Math.max(0, vids[i].currentTime + delta); }" +
-                        "    } catch(e) {}" +
-                        "    for (var k = 0; k < win.frames.length; k++) {" +
-                        "      try { seekAll(win.frames[k], delta); } catch(e) {}" +
-                        "    }" +
-                        "  }" +
-                        "  seekAll(window, " + (isForward ? 10 : -10) + ");" +
-                        "})();";
-                    if (playerWebView != null) playerWebView.evaluateJavascript(seekScript, null);
-                    return true;
-                }
-
-                @Override
-                public void onLongPress(MotionEvent e) {
-                    if (!isWebViewPlayerMode) return;
-                    setPlaybackSpeedWebView(2.0f);
-                    if (indicator2x != null) indicator2x.setVisibility(View.VISIBLE);
-                }
-            });
-
-            playerWebView.setOnTouchListener((v, event) -> {
-                if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                    if (is2xSpeed) {
-                        setPlaybackSpeedWebView(currentPermanentSpeed);
-                        if (indicator2x != null) indicator2x.setVisibility(View.GONE);
-                    }
-                    if (event.getAction() == MotionEvent.ACTION_UP) {
-                        v.performClick();
-                    }
-                }
-                webViewGestureDetector.onTouchEvent(event);
-                return false;
-            });
-        }
-        
         loadingProgress = findViewById(R.id.loading_progress);
         controlsOverlay = findViewById(R.id.controls_overlay);
         
@@ -1267,27 +1006,10 @@ public class NativePlayerActivity extends AppCompatActivity {
                 } else if (tag instanceof Integer) {
                     targetSec = (Integer) tag;
                 }
-                if (isWebViewPlayerMode && playerWebView != null) {
-                    String seekScript =
-                        "(function() {" +
-                        "  function seekAll(win, target) {" +
-                        "    try {" +
-                        "      var vids = win.document.querySelectorAll('video');" +
-                        "      for (var i = 0; i < vids.length; i++) { vids[i].currentTime = target; }" +
-                        "    } catch(e) {}" +
-                        "    for (var k = 0; k < win.frames.length; k++) {" +
-                        "      try { seekAll(win.frames[k], target); } catch(e) {}" +
-                        "    }" +
-                        "  }" +
-                        "  seekAll(window, " + targetSec + ");" +
-                        "})();";
-                    playerWebView.evaluateJavascript(seekScript, null);
+                if (tag instanceof Double || tag instanceof Integer) {
+                    seekVideoToAbsolute(targetSec);
                 } else {
-                    if (tag instanceof Double || tag instanceof Integer) {
-                        seekVideoToAbsolute(targetSec);
-                    } else {
-                        seekVideo(85);
-                    }
+                    seekVideo(85);
                 }
             });
 
@@ -1751,11 +1473,6 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (!isDirectMediaStream(hlsUrl)) {
             Log.i("AniLove", "Embed page detected — attempting direct extract for: " + hlsUrl);
-            if (hlsUrl.contains("hentaiocean")) {
-                currentEmbedUrl = hlsUrl;
-                switchPlayerEngine(true);
-                return;
-            }
             if (hlsUrl.contains("vidlink.pro")) {
                 if (attemptVidLinkDirectExtract(hlsUrl, referer, headers)) return;
             } else if (hlsUrl.contains("tryembed.us.cc") || hlsUrl.contains("vidnest.fun")) {
@@ -1890,7 +1607,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             hasRetriedSniffer = true;
                             if (isDirect) {
                                 setupExoPlayerOnlineDirect(currentLoadedStreamUrl, getBestRefererForUrl(currentLoadedStreamUrl, null), null);
-                            } else if (!isWebViewPlayerMode && currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                            } else if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
                                 runSnifferFallback(currentEmbedUrl, getBestRefererForUrl(currentEmbedUrl, null), null);
                             }
                         }
@@ -2012,154 +1729,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         scrubberContainer.setTranslationY(0);
     }
 
-    public class ScrubberInterface {
-        @JavascriptInterface
-        public void processFrame(String base64) {}
-
-        @JavascriptInterface
-        public void onTrackFound(String label, String url) {
-            if (label == null || url == null || label.trim().isEmpty() || url.trim().isEmpty()) return;
-            if (label.equalsIgnoreCase("Off") || label.equalsIgnoreCase("ID3 Metadata")) return;
-            String cleanLabel = label.trim();
-            capturedServer2BSubtitles.put(cleanLabel, url);
-            if (!detectedSubtitles.contains(cleanLabel)) {
-                detectedSubtitles.add(cleanLabel);
-            }
-            if (parsedVttCues.isEmpty() || cleanLabel.equalsIgnoreCase("English")) {
-                subtitleUrl = url;
-                subtitleLang = cleanLabel;
-                downloadAndParseVttFile(url);
-            }
-            Log.i("SubTrackFound", "Discovered real subtitle track: " + cleanLabel + " -> " + url);
-        }
-
-        @JavascriptInterface
-        public void onMediaOptions(String json) {
-            if (json == null || json.isEmpty()) return;
-            try {
-                JSONObject obj = new JSONObject(json);
-                JSONArray qArr = obj.optJSONArray("qualities");
-                if (qArr != null && qArr.length() > 0) {
-                    List<String> list = new ArrayList<>();
-                    for (int i = 0; i < qArr.length(); i++) {
-                        String q = qArr.getString(i);
-                        if (q != null && !q.isEmpty() && !list.contains(q)) list.add(q);
-                    }
-                    if (!list.isEmpty()) detectedQualities = list;
-                }
-                JSONArray aArr = obj.optJSONArray("audios");
-                if (aArr != null && aArr.length() > 0) {
-                    List<String> list = new ArrayList<>();
-                    for (int i = 0; i < aArr.length(); i++) {
-                        String a = aArr.getString(i);
-                        if (a != null && !a.isEmpty() && !list.contains(a)) list.add(a);
-                    }
-                    if (!list.isEmpty()) detectedAudios = list;
-                }
-                JSONArray sArr = obj.optJSONArray("subtitles");
-                if (sArr != null && sArr.length() > 0) {
-                    List<String> list = new ArrayList<>();
-                    for (int i = 0; i < sArr.length(); i++) {
-                        String s = sArr.getString(i);
-                        if (s != null && !s.isEmpty() && !list.contains(s)) list.add(s);
-                    }
-                    if (!list.isEmpty()) detectedSubtitles = list;
-                }
-                String cQ = obj.optString("currentQuality");
-                if (!cQ.isEmpty() && !"null".equals(cQ)) currentSelectedQuality = cQ;
-                String cA = obj.optString("currentAudio");
-                if (!cA.isEmpty() && !"null".equals(cA)) {
-                    currentSelectedAudio = cA;
-                    updateAudioBadge(cA);
-                }
-                String cS = obj.optString("currentSub");
-                if (!cS.isEmpty() && !"null".equals(cS)) currentSelectedSubtitle = cS;
-            } catch (Exception ignored) {}
-        }
-
-        @JavascriptInterface
-        public void onStateUpdate(double current, double duration, boolean pausedInWeb) {
-            runOnUiThread(() -> {
-                currentVideoTime = current;
-                videoDuration = duration;
-                isPlaying = !pausedInWeb;
-                if (btnPlayPause != null) {
-                    btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-                }
-                updateNativeSubtitleOverlay(current);
-                checkAutoNextEpisodeTrigger((long)(current * 1000), (long)(duration * 1000));
-                if (opEdSeekBarDrawable != null) {
-                    opEdSeekBarDrawable.invalidateSelf();
-                }
-                if (loadingProgress != null && (duration > 0 || current > 0 || !pausedInWeb)) {
-                    loadingProgress.setVisibility(View.GONE);
-                }
-                if (duration > 0) {
-                    textCurrentTime.setText(formatTime((int) current));
-                    textTotalTime.setText(formatTime((int) duration));
-                    int timeLeft = (int) (duration - current);
-                    textTimeLeft.setText("-" + formatTime(timeLeft));
-
-                    if (!isDragging) {
-                        seekBar.setMax((int) duration);
-                        seekBar.setProgress((int) current);
-                    }
-                    if (pausedInWeb == isPlaying) {
-                        isPlaying = !pausedInWeb;
-                        btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-                        if (isPlaying) resetHideTimer(); else stopHideTimer();
-                    }
-                    if (isPlaying && current > 0) {
-                        broadcastProgress(current, duration);
-                        if (duration - current <= 120 || current >= duration * 0.85) {
-                            triggerNextEpisodePreFetch();
-                        }
-                    }
-
-                    boolean autoSkip = getIntent().getBooleanExtra("autoSkipIntro", false);
-
-                    if (autoSkip && isPlaying) {
-                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
-                            if (exoPlayer != null) {
-                                double targetPos = aniSkipOpEnd;
-                                aniSkipOpStart = -1; // Clear trigger to prevent repeat loops
-                                exoPlayer.seekTo((long) (targetPos * 1000L));
-                                Toast.makeText(NativePlayerActivity.this, "Auto-skipped Opening Theme ⏭️", Toast.LENGTH_SHORT).show();
-                            }
-                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
-                            if (exoPlayer != null) {
-                                double targetPos = aniSkipEdEnd;
-                                aniSkipEdStart = -1; // Clear trigger to prevent repeat loops
-                                exoPlayer.seekTo((long) (targetPos * 1000L));
-                                Toast.makeText(NativePlayerActivity.this, "Auto-skipped Ending Theme ⏭️", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    }
-
-                    TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
-                    if (btnSkipIntro != null) {
-                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && current >= aniSkipOpStart && current < aniSkipOpEnd) {
-                            btnSkipIntro.setText("⏭️ Skip Intro");
-                            btnSkipIntro.setVisibility(View.VISIBLE);
-                            btnSkipIntro.setTag(aniSkipOpEnd);
-                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && current >= aniSkipEdStart && current < aniSkipEdEnd) {
-                            btnSkipIntro.setText("⏭️ Skip Ending");
-                            btnSkipIntro.setVisibility(View.VISIBLE);
-                            btnSkipIntro.setTag(aniSkipEdEnd);
-                        } else {
-                            if (!isControlsVisible) {
-                                btnSkipIntro.setVisibility(View.GONE);
-                            } else {
-                                btnSkipIntro.setText("+85s Skip");
-                                btnSkipIntro.setTag(null);
-                            }
-                        }
-                    }
-                }
-            });
-        }
-    }
-
     private boolean isNextEpisodePreFetched = false;
 
     private void triggerNextEpisodePreFetch() {
@@ -2262,7 +1831,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     Toast.makeText(this, "Quality: " + quality, Toast.LENGTH_SHORT).show();
 
                     currentEmbedUrl = newUrl;
-                    currentActiveEmbedUrl = newUrl;
 
                     setupExoPlayerOnlineDirect(newUrl, "https://netfilm.world/", null);
                     if (exoPlayer != null && currentPosMs > 0) {
@@ -2299,7 +1867,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateAudioBadge(audioLang);
         NativePlayerPlugin.notifyLanguageChange(audioLang);
 
-        String embedUrl = (currentActiveEmbedUrl != null && !currentActiveEmbedUrl.isEmpty()) ? currentActiveEmbedUrl : (currentEmbedUrl != null ? currentEmbedUrl : "");
+        String embedUrl = currentEmbedUrl != null ? currentEmbedUrl : "";
         String srv = (currentActiveServerName != null ? currentActiveServerName : "") + " " + (currentActiveSourceName != null ? currentActiveSourceName : "");
         String srvLower = srv.toLowerCase();
         String embedLower = embedUrl.toLowerCase();
@@ -2340,7 +1908,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     Toast.makeText(this, "Switching audio to " + audioLang + "...", Toast.LENGTH_SHORT).show();
 
                     currentEmbedUrl = newUrl;
-                    currentActiveEmbedUrl = newUrl;
 
                     setupExoPlayerOnlineDirect(newUrl, "https://netfilm.world/", null);
                     if (exoPlayer != null && currentPosMs > 0) {
@@ -2367,14 +1934,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
                 if (!newEmbedUrl.equalsIgnoreCase(embedUrl)) {
                     currentEmbedUrl = newEmbedUrl;
-                    currentActiveEmbedUrl = newEmbedUrl;
                     Toast.makeText(this, "Switching audio to " + (wantsSub ? "Japanese Sub" : "English Dub") + "...", Toast.LENGTH_SHORT).show();
-
-                    if (isWebViewPlayerMode && playerWebView != null) {
-                        playerWebView.loadUrl(newEmbedUrl);
-                    } else {
-                        setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
-                    }
+                    setupExoPlayerOnline(newEmbedUrl, getBestRefererForUrl(newEmbedUrl, null), null);
                     return;
                 }
             }
@@ -2402,11 +1963,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                             }
                             if (!targetLink.isEmpty()) {
                                 Toast.makeText(this, "Switching audio stream to " + audioLang + "...", Toast.LENGTH_SHORT).show();
-                                if (isWebViewPlayerMode && playerWebView != null) {
-                                    playerWebView.loadUrl(targetLink);
-                                } else {
-                                    setupExoPlayerOnline(targetLink, getBestRefererForUrl(targetLink, null), null);
-                                }
+                                setupExoPlayerOnline(targetLink, getBestRefererForUrl(targetLink, null), null);
                                 return;
                             }
                         }
@@ -2556,29 +2113,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void togglePlayPause() {
-        if (isWebViewPlayerMode && playerWebView != null) {
-            String script =
-                "(function() {" +
-                "  function toggle(win) {" +
-                "    try {" +
-                "      var vids = win.document.querySelectorAll('video');" +
-                "      for (var i = 0; i < vids.length; i++) {" +
-                "        if (vids[i].paused) vids[i].play(); else vids[i].pause();" +
-                "      }" +
-                "    } catch(e) {}" +
-                "    for (var k = 0; k < win.frames.length; k++) {" +
-                "      try { toggle(win.frames[k]); } catch(e) {}" +
-                "    }" +
-                "  }" +
-                "  toggle(window);" +
-                "})();";
-            playerWebView.evaluateJavascript(script, null);
-            isPlaying = !isPlaying;
-            if (btnPlayPause != null) {
-                btnPlayPause.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-            }
-            if (isPlaying) resetHideTimer(); else stopHideTimer();
-        } else if (exoPlayer != null) {
+        if (exoPlayer != null) {
             if (exoPlayer.isPlaying()) {
                 exoPlayer.pause();
                 isPlaying = false;
@@ -2694,7 +2229,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         String srvLower = (currentActiveServerName != null ? currentActiveServerName : "").toLowerCase();
         String srcLower = (currentActiveSourceName != null ? currentActiveSourceName : "").toLowerCase();
-        String embedLower = (currentActiveEmbedUrl != null ? currentActiveEmbedUrl : "").toLowerCase();
+        String embedLower = (currentEmbedUrl != null ? currentEmbedUrl : "").toLowerCase();
         String loadedLower = (currentLoadedStreamUrl != null ? currentLoadedStreamUrl : "").toLowerCase();
         String combinedCheck = srcLower + " " + srvLower + " " + embedLower + " " + loadedLower;
 
@@ -2838,88 +2373,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
         }
 
-        // 6. Player Engine Switch (ExoPlayer <-> Web Player)
-        SwitchCompat switchEngine = view.findViewById(R.id.switch_player_engine);
-        if (switchEngine != null) {
-            switchEngine.setChecked(isWebViewPlayerMode);
-            switchEngine.setOnCheckedChangeListener((b, checked) -> {
-                dialog.dismiss();
-                switchPlayerEngine(checked);
-            });
-        }
-
         dialog.show();
-    }
-
-    public void switchPlayerEngine(boolean useWebView) {
-        isWebViewPlayerMode = useWebView;
-        VideoSniffer.cancelActiveSniffers();
-        runOnUiThread(() -> {
-            View touchWall = findViewById(R.id.touch_wall);
-            if (btnEngineToggle != null) {
-                btnEngineToggle.setText(useWebView ? "🌐 WEB" : "⚡ EXO");
-                btnEngineToggle.setTextColor(useWebView ? Color.parseColor("#34D399") : Color.parseColor("#FFD700"));
-                btnEngineToggle.bringToFront();
-            }
-            if (useWebView) {
-                if (exoPlayer != null) {
-                    try {
-                        exoPlayer.pause();
-                        exoPlayer.setPlayWhenReady(false);
-                    } catch (Exception ignored) {}
-                }
-                if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
-                if (playerWebView != null) {
-                    playerWebView.setVisibility(View.VISIBLE);
-                    playerWebView.bringToFront();
-                    String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
-                    if (targetUrl != null && !targetUrl.trim().isEmpty()) {
-                        Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
-                        if (isDirectMediaStream(targetUrl) || targetUrl.toLowerCase().contains(".mp4")) {
-                            String videoHtml = "<!DOCTYPE html>" +
-                                    "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
-                                    "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}video{width:100%;height:100vh;object-fit:contain;}</style>" +
-                                    "</head><body>" +
-                                    "<video src='" + targetUrl.replace("'", "\\'") + "' controls autoplay playsinline style='width:100%;height:100vh;'></video>" +
-                                    "</body></html>";
-                            playerWebView.loadDataWithBaseURL(targetUrl, videoHtml, "text/html", "UTF-8", null);
-                        } else {
-                            playerWebView.loadUrl(targetUrl);
-                        }
-                    }
-                }
-                if (touchWall != null) {
-                    touchWall.setVisibility(View.GONE);
-                    touchWall.setClickable(false);
-                }
-                if (controlsOverlay != null) {
-                    controlsOverlay.setVisibility(View.GONE);
-                }
-                if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
-                Toast.makeText(this, "Switched to Web Player Mode", Toast.LENGTH_SHORT).show();
-            } else {
-                if (playerWebView != null) {
-                    playerWebView.setVisibility(View.GONE);
-                    playerWebView.loadUrl("about:blank");
-                }
-                if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
-                if (touchWall != null) {
-                    touchWall.setVisibility(View.VISIBLE);
-                    touchWall.setClickable(true);
-                }
-                if (controlsOverlay != null) {
-                    controlsOverlay.setVisibility(View.VISIBLE);
-                }
-                if (exoPlayer != null) {
-                    try {
-                        exoPlayer.play();
-                        exoPlayer.setPlayWhenReady(true);
-                    } catch (Exception ignored) {}
-                }
-                showControlsExplicitly();
-                Toast.makeText(this, "Switched to Media3 ExoPlayer Mode", Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 
     private void showCaptionMenu() {
@@ -3334,72 +2788,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void startUpdateLoop() { 
         updateHandler.postDelayed(new Runnable() { 
             @Override public void run() { 
-                if (isWebViewPlayerMode && playerWebView != null) {
-                    String queryScript =
-                        "(function() {" +
-                        "  try {" +
-                        "    function getMedia(win) {" +
-                        "      var v = win.document.querySelector('video');" +
-                        "      if (v && v.duration > 0) return { c: v.currentTime, d: v.duration };" +
-                        "      for (var i = 0; i < win.frames.length; i++) {" +
-                        "        try {" +
-                        "          var fv = win.frames[i].document.querySelector('video');" +
-                        "          if (fv && fv.duration > 0) return { c: fv.currentTime, d: fv.duration };" +
-                        "        } catch(e) {}" +
-                        "      }" +
-                        "      return null;" +
-                        "    }" +
-                        "    return JSON.stringify(getMedia(window) || {});" +
-                        "  } catch(e) { return '{}'; }" +
-                        "})();";
-                    playerWebView.evaluateJavascript(queryScript, value -> {
-                        if (value != null && !value.isEmpty() && !"null".equals(value) && !"\"{}\"".equals(value)) {
-                            try {
-                                String clean = value;
-                                if (clean.startsWith("\"") && clean.endsWith("\"")) {
-                                    clean = clean.substring(1, clean.length() - 1).replace("\\\"", "\"");
-                                }
-                                JSONObject json = new JSONObject(clean);
-                                double c = json.optDouble("c", 0);
-                                double d = json.optDouble("d", 0);
-                                if (d > 0) {
-                                    currentVideoTime = c;
-                                    videoDuration = d;
-                                    textCurrentTime.setText(formatTime((int) c));
-                                    textTotalTime.setText(formatTime((int) d));
-                                    int timeLeft = Math.max(0, (int) (d - c));
-                                    textTimeLeft.setText("-" + formatTime(timeLeft));
-                                    if (!isDragging) {
-                                        seekBar.setMax((int) d);
-                                        seekBar.setProgress((int) c);
-                                    }
-                                    if (opEdSeekBarDrawable != null) {
-                                        opEdSeekBarDrawable.invalidateSelf();
-                                    }
-                                    updateNativeSubtitleOverlay(c);
-                                    checkAutoNextEpisodeTrigger((long)(c * 1000), (long)(d * 1000));
-
-                                    TextView btnSkipIntro = findViewById(R.id.btn_skip_intro);
-                                    if (btnSkipIntro != null) {
-                                        if (aniSkipOpStart >= 0 && aniSkipOpEnd > aniSkipOpStart && c >= aniSkipOpStart && c < aniSkipOpEnd) {
-                                            btnSkipIntro.setText("⏭️ Skip Intro");
-                                            btnSkipIntro.setVisibility(View.VISIBLE);
-                                            btnSkipIntro.setTag(aniSkipOpEnd);
-                                        } else if (aniSkipEdStart >= 0 && aniSkipEdEnd > aniSkipEdStart && c >= aniSkipEdStart && c < aniSkipEdEnd) {
-                                            btnSkipIntro.setText("⏭️ Skip Ending");
-                                            btnSkipIntro.setVisibility(View.VISIBLE);
-                                            btnSkipIntro.setTag(aniSkipEdEnd);
-                                        } else {
-                                            btnSkipIntro.setVisibility(View.GONE);
-                                        }
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                    });
-                } else {
-                    syncPlayerState();
-                }
+                syncPlayerState();
                 updateHandler.postDelayed(this, 1000); 
             } 
         }, 1000); 

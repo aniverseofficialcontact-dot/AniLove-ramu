@@ -41,12 +41,6 @@
                     app:use_controller="false"
                     android:visibility="visible" />
 
-                <WebView
-                    android:id="@+id/player_webview"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="gone" />
-
             </FrameLayout>
 
             <View
@@ -151,28 +145,6 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:visibility="gone" />
-
-
-
-        <!-- Independent Floating Engine Toggle Button (Positioned top-center to unblock settings gear icon) -->
-        <TextView
-            android:id="@+id/btn_engine_toggle"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/speed_btn_bg"
-            android:gravity="center"
-            android:paddingHorizontal="14dp"
-            android:text="⚡ EXO"
-            android:textColor="#FFD700"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:clickable="true"
-            android:focusable="true"
-            android:elevation="25dp"
-            android:translationZ="25dp"
-            android:visibility="visible" />
 
         <!-- Native Control Overlay -->
         <RelativeLayout

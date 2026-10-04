@@ -187,39 +187,5 @@
         </RelativeLayout>
 
         <!-- 6. Player Engine Mode Switch -->
-        <RelativeLayout
-            android:id="@+id/container_player_engine"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:padding="4dp">
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-                <TextView
-                    android:id="@+id/text_engine_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Embedded Web Player Mode"
-                    android:textColor="@android:color/white"
-                    android:textSize="16sp" />
-                <TextView
-                    android:id="@+id/text_engine_desc"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Switch to interactive iframe Web View player"
-                    android:textColor="#888888"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_player_engine"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true" />
-        </RelativeLayout>
-
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
