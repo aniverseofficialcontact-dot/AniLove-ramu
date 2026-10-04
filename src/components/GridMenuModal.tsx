@@ -282,19 +282,6 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
               );
             })}
 
-            {/* 3. Ask AI Sensei Button */}
-            {onOpenAiSensei && (
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenAiSensei();
-                }}
-                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl font-semibold text-sm text-purple-300 hover:text-white hover:bg-purple-500/10 transition cursor-pointer border border-transparent hover:border-purple-500/20 mt-2"
-              >
-                <Bot className="w-4.5 h-4.5 text-purple-400" />
-                <span>Ask Ai Sensei</span>
-              </button>
-            )}
           </div>
 
           {/* Bottom Profile Footer */}

@@ -286,7 +286,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         settings={settings}
         libraryCount={libraryCount}
         isPinLocked={isPinLocked}
-        onOpenAiSensei={onOpenAiSensei}
       />
     </>
   );

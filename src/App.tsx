@@ -49,8 +49,6 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AnimeGachaModal } from './components/AnimeGachaModal';
 import { getHentaiOceanHomeFeed } from './services/hentaioceanService';
-import { AiAnimeSenseiModal } from './components/AiAnimeSenseiModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
 const ReelsView = lazy(() => import('./components/ReelsView').then(m => ({ default: m.ReelsView })));
 const ArcadeView = lazy(() => import('./components/ArcadeView').then(m => ({ default: m.ArcadeView })));
@@ -1606,31 +1604,6 @@ export function App() {
       </main>
     </div>
 
-    {/* Floating Action Bar: AI Sensei & Shortcuts (Hidden in Reels, Watch Page & Anime Details) */}
-      {!isReelsActive && !activeWatchEpisode && !isDetailModalOpen && (
-        <div className={`fixed bottom-16 lg:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-2 transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          <button
-            onClick={() => setIsShortcutsModalOpen(true)}
-            className="hidden sm:flex p-3 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700/70 backdrop-blur-xl shadow-xl transition active:scale-95 cursor-pointer"
-            title="Keyboard Shortcuts Guide (?)"
-          >
-            <Keyboard className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              setAiContextAnime(null);
-              setIsAiModalOpen(true);
-            }}
-            className="group relative flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-bold text-xs shadow-xl shadow-indigo-600/40 hover:shadow-indigo-500/60 border border-indigo-400/40 hover:scale-105 transition active:scale-95 cursor-pointer"
-            title="Open AniAI Sensei Chatbot"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300 animate-spin" style={{ animationDuration: '4s' }} />
-            <span className="hidden sm:inline">Ask Sensei</span>
-          </button>
-        </div>
-      )}
-
       {/* Mobile Bottom Bar (Hidden on Watch Page, Anime Details & Reels Tab) */}
       {!activeWatchEpisode && !isDetailModalOpen && currentTab !== 'reels' && (
         <div className={`transition-opacity duration-700 ${!isPinUnlocked ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -1640,10 +1613,6 @@ export function App() {
             settings={settings}
             libraryCount={library.length}
             isPinLocked={Boolean(settings.profilePinEnabled && settings.profilePin && !isPinUnlocked)}
-            onOpenAiSensei={() => {
-              setAiContextAnime(null);
-              setIsAiModalOpen(true);
-            }}
           />
         </div>
       )}
@@ -1698,16 +1667,6 @@ export function App() {
         />
       )}
 
-      {/* AniAI Anime Sensei AI Chat Assistant Modal */}
-      <AiAnimeSenseiModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        currentAnime={aiContextAnime || selectedAnime}
-        userLibrary={library}
-        onOpenDetails={handleOpenDetails}
-        onPlayStream={handlePlayStream}
-      />
-
       {/* Anime Gacha & Rarity Summon Modal */}
       <AnimeGachaModal
         isOpen={isGachaModalOpen}
@@ -1737,12 +1696,6 @@ export function App() {
           setIsPinModalOpen(false);
           setCurrentTab('account');
         } : undefined}
-      />
-
-      {/* Keyboard Shortcuts Guide Modal */}
-      <KeyboardShortcutsModal
-        isOpen={isShortcutsModalOpen}
-        onClose={() => setIsShortcutsModalOpen(false)}
       />
 
       {/* Global Anime Theme Song Jukebox Player */}

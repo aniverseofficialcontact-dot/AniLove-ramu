@@ -62,7 +62,6 @@ interface AccountViewProps {
   onLockSession?: () => void;
   onUnlockSession?: () => void;
   onNavigateToReels?: (reelId?: string) => void;
-  onReplayIntro?: () => void;
 }
 
 // Preset High-Resolution Anime Avatars
@@ -458,22 +457,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
     onShowToast('info', 'AniList account disconnected.', 'Disconnected');
   };
 
-  // Toggle Content Restrictions (18+ / Mature filter)
-  const handleToggleContentRestrictions = () => {
-    const updatedVal = !settings.contentRestrictions;
-    onSaveSettings({
-      ...settings,
-      contentRestrictions: updatedVal,
-    });
-    onShowToast(
-      updatedVal ? 'info' : 'success',
-      updatedVal
-        ? 'Content Restrictions turned ON: 18+ and adult content will be filtered.'
-        : 'Content Restrictions turned OFF: All anime content visible.',
-      'Content Filter'
-    );
-  };
-
   // Toggle 18+ Secret Profile Mode (Two Profiles in One Device)
   const handleToggle18PlusMode = () => {
     const nextVal = !settings.is18PlusMode;
@@ -727,69 +710,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 )}
               </div>
 
-
-
-              {/* App Opening Cinematic Logo Intro (AniLove 4s Intro) */}
-              <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 text-pink-400 border border-pink-500/30 shadow-sm">
-                    <Film className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Cinematic Logo Intro</span>
-                      <span className="px-2 py-0.2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 text-white text-[9px] font-black uppercase">
-                        AniLove 7S
-                      </span>
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      6–7s cinematic anime intro: glowing heart formation, anime sunset sky parallax scene, and AniLove logo reveal.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  {onReplayIntro && (
-                    <button
-                      type="button"
-                      onClick={onReplayIntro}
-                      className="px-3 py-1 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 active:scale-95 text-pink-300 border border-pink-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      title="Play the 6–7s anime opening animation now"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Preview</span>
-                    </button>
-                  )}
-
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
-                      settings.appIntroAnimationEnabled !== false
-                        ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    {settings.appIntroAnimationEnabled !== false ? 'Enabled' : 'Disabled'}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextVal = settings.appIntroAnimationEnabled === false ? true : false;
-                      onSaveSettings({ ...settings, appIntroAnimationEnabled: nextVal });
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      settings.appIntroAnimationEnabled !== false ? 'bg-pink-500 shadow-md shadow-pink-500/30' : 'bg-white/10'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.appIntroAnimationEnabled !== false ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
               {/* Profile PIN Row - MOVED HERE */}
               <div className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -972,79 +892,133 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 </div>
               </div>
 
-              {/* Primary Preferred Audio Language */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
-                    <Volume2 className="w-4 h-4" />
+              {/* Preferred Audio Languages (Top 3 Priority) */}
+              <div className="py-3.5 space-y-3 border-b border-white/10">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-white/5 text-pink-300">
+                      <Volume2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">Preferred Audio Languages (Top 3 Priority)</p>
+                      <p className="text-xs text-slate-400">Audio language sequence used for video playback stream selection</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Primary Preferred Language (Priority 1)</p>
-                    <p className="text-xs text-slate-400">First audio preference for streams (Default: English Voice Dub)</p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveSettings({
+                        ...settings,
+                        preferredPrimaryLanguage: 'DUB',
+                        preferredSecondaryLanguage: 'SUB',
+                        preferredLanguages: ['DUB', 'SUB', 'HIN'],
+                        preferredAudio: 'dub',
+                      });
+                      onShowToast('success', 'Reset Audio Languages to Default (DUB -> SUB -> HIN).', 'Defaults Restored');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[10px] font-bold text-slate-300 transition cursor-pointer"
+                  >
+                    Reset Defaults
+                  </button>
                 </div>
-                <select
-                  value={String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase()}
-                  onChange={e => {
-                    const primary = e.target.value as any;
-                    const secondary = String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase();
-                    onSaveSettings({
-                      ...settings,
-                      preferredPrimaryLanguage: primary,
-                      preferredSecondaryLanguage: secondary as any,
-                      preferredLanguages: [primary, secondary as any],
-                      preferredAudio: (primary === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
-                    });
-                    onShowToast('success', `Primary audio set to ${primary}.`, 'Audio Updated');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
-                >
-                  <option value="DUB">🇺🇸 English Dub (Default)</option>
-                  <option value="SUB">🇯🇵 Japanese Subtitles</option>
-                  <option value="HIN">🇮🇳 Hindi Dub</option>
-                  <option value="TAM">🇮🇳 Tamil Dub</option>
-                  <option value="TEL">🇮🇳 Telugu Dub</option>
-                  <option value="MAL">🇮🇳 Malayalam Dub</option>
-                  <option value="KAN">🇮🇳 Kannada Dub</option>
-                  <option value="BEN">🇮🇳 Bengali Dub</option>
-                </select>
-              </div>
 
-              {/* Secondary Preferred Audio Language */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
-                    <Volume2 className="w-4 h-4" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                  {/* Priority 1 */}
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                      <span>#1 Primary Language</span>
+                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-[9px]">Priority 1</span>
+                    </div>
+                    <select
+                      value={String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase()}
+                      onChange={e => {
+                        const newP1 = e.target.value as any;
+                        const p2 = String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase();
+                        const p3 = String(settings.preferredLanguages?.[2] || 'HIN').toUpperCase();
+                        onSaveSettings({
+                          ...settings,
+                          preferredPrimaryLanguage: newP1,
+                          preferredLanguages: [newP1, p2 as any, p3 as any],
+                          preferredAudio: (newP1 === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
+                        });
+                        onShowToast('success', `Primary audio set to ${newP1}.`, 'Audio Updated');
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    >
+                      <option value="DUB">🇺🇸 English Dub (Default)</option>
+                      <option value="SUB">🇯🇵 Japanese Sub</option>
+                      <option value="HIN">🇮🇳 Hindi Dub</option>
+                      <option value="TAM">🇮🇳 Tamil Dub</option>
+                      <option value="TEL">🇮🇳 Telugu Dub</option>
+                      <option value="MAL">🇮🇳 Malayalam Dub</option>
+                      <option value="KAN">🇮🇳 Kannada Dub</option>
+                      <option value="BEN">🇮🇳 Bengali Dub</option>
+                    </select>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Secondary Preferred Language (Priority 2)</p>
-                    <p className="text-xs text-slate-400">Fallback audio if primary language is unavailable (Default: Japanese Sub)</p>
+
+                  {/* Priority 2 */}
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-indigo-300">
+                      <span>#2 Secondary Language</span>
+                      <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-[9px]">Priority 2</span>
+                    </div>
+                    <select
+                      value={String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase()}
+                      onChange={e => {
+                        const newP2 = e.target.value as any;
+                        const p1 = String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
+                        const p3 = String(settings.preferredLanguages?.[2] || 'HIN').toUpperCase();
+                        onSaveSettings({
+                          ...settings,
+                          preferredSecondaryLanguage: newP2,
+                          preferredLanguages: [p1 as any, newP2, p3 as any],
+                        });
+                        onShowToast('success', `Secondary audio set to ${newP2}.`, 'Audio Updated');
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-indigo-400 cursor-pointer"
+                    >
+                      <option value="SUB">🇯🇵 Japanese Sub (Default)</option>
+                      <option value="DUB">🇺🇸 English Dub</option>
+                      <option value="HIN">🇮🇳 Hindi Dub</option>
+                      <option value="TAM">🇮🇳 Tamil Dub</option>
+                      <option value="TEL">🇮🇳 Telugu Dub</option>
+                      <option value="MAL">🇮🇳 Malayalam Dub</option>
+                      <option value="KAN">🇮🇳 Kannada Dub</option>
+                      <option value="BEN">🇮🇳 Bengali Dub</option>
+                    </select>
+                  </div>
+
+                  {/* Priority 3 */}
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300">
+                      <span>#3 Tertiary Language</span>
+                      <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[9px]">Priority 3</span>
+                    </div>
+                    <select
+                      value={String(settings.preferredLanguages?.[2] || 'HIN').toUpperCase()}
+                      onChange={e => {
+                        const newP3 = e.target.value as any;
+                        const p1 = String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
+                        const p2 = String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase();
+                        onSaveSettings({
+                          ...settings,
+                          preferredLanguages: [p1 as any, p2 as any, newP3],
+                        });
+                        onShowToast('success', `Tertiary audio set to ${newP3}.`, 'Audio Updated');
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      <option value="HIN">🇮🇳 Hindi Dub (Default)</option>
+                      <option value="SUB">🇯🇵 Japanese Sub</option>
+                      <option value="DUB">🇺🇸 English Dub</option>
+                      <option value="TAM">🇮🇳 Tamil Dub</option>
+                      <option value="TEL">🇮🇳 Telugu Dub</option>
+                      <option value="MAL">🇮🇳 Malayalam Dub</option>
+                      <option value="KAN">🇮🇳 Kannada Dub</option>
+                      <option value="BEN">🇮🇳 Bengali Dub</option>
+                    </select>
                   </div>
                 </div>
-                <select
-                  value={String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase()}
-                  onChange={e => {
-                    const secondary = e.target.value as any;
-                    const primary = String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
-                    onSaveSettings({
-                      ...settings,
-                      preferredPrimaryLanguage: primary as any,
-                      preferredSecondaryLanguage: secondary,
-                      preferredLanguages: [primary as any, secondary],
-                    });
-                    onShowToast('success', `Secondary audio set to ${secondary}.`, 'Audio Updated');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/15 text-xs font-bold text-slate-200 focus:outline-none focus:border-pink-500 cursor-pointer max-w-[180px] sm:max-w-xs"
-                >
-                  <option value="SUB">🇯🇵 Japanese Subtitles (Default)</option>
-                  <option value="DUB">🇺🇸 English Dub</option>
-                  <option value="HIN">🇮🇳 Hindi Dub</option>
-                  <option value="TAM">🇮🇳 Tamil Dub</option>
-                  <option value="TEL">🇮🇳 Telugu Dub</option>
-                  <option value="MAL">🇮🇳 Malayalam Dub</option>
-                  <option value="KAN">🇮🇳 Kannada Dub</option>
-                  <option value="BEN">🇮🇳 Bengali Dub</option>
-                </select>
               </div>
 
               {/* Preferred Default Streaming Source */}
@@ -1132,112 +1106,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
                 />
               </div>
 
-              {/* 12 Streaming Scrapers Top-3 Priority Setup */}
-              <div className="py-3.5 space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-white/5 text-pink-300">
-                      <Globe className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-white">Streaming Servers (Prioritize Top 3)</p>
-                      <p className="text-xs text-slate-400">Scrapes from 12 live server engines with prioritized failover</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSaveSettings({
-                        ...settings,
-                        preferredServers: [],
-                        defaultStreamServer: 'none',
-                      });
-                      onShowToast('success', 'Reset to Default (No streaming servers active).', 'Defaults Restored');
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[10px] font-bold text-slate-300 transition cursor-pointer"
-                  >
-                    Reset Defaults
-                  </button>
-                </div>
-
-                {/* 3 Priority Dropdowns */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                  {/* Priority 1 */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
-                      <span>#1 Primary Server</span>
-                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-[9px]">Priority 1</span>
-                    </div>
-                    <select
-                      value={settings.preferredServers?.[0] || 'none'}
-                      onChange={e => {
-                        const newFirst = e.target.value as StreamServerId;
-                        onSaveSettings({
-                          ...settings,
-                          preferredServers: [newFirst],
-                          defaultStreamServer: newFirst,
-                        });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-amber-400 cursor-pointer"
-                    >
-                      {STREAM_PROVIDERS.length > 0 ? (
-                        STREAM_PROVIDERS.map(prov => (
-                          <option key={`acc-p1-${prov.id}`} value={prov.id}>
-                            {prov.label}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="none">No Servers Enabled</option>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Priority 2 */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-indigo-300">
-                      <span>#2 Secondary Server</span>
-                      <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-[9px]">Priority 2</span>
-                    </div>
-                    <select
-                      value={settings.preferredServers?.[1] || 'none'}
-                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-indigo-400 cursor-pointer"
-                    >
-                      {STREAM_PROVIDERS.length > 0 ? (
-                        STREAM_PROVIDERS.map(prov => (
-                          <option key={`acc-p2-${prov.id}`} value={prov.id}>
-                            {prov.label}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="none">No Servers Enabled</option>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Priority 3 */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300">
-                      <span>#3 Tertiary Server</span>
-                      <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-[9px]">Priority 3</span>
-                    </div>
-                    <select
-                      value={settings.preferredServers?.[2] || 'none'}
-                      className="w-full px-2 py-1.5 rounded-lg bg-black/60 border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
-                    >
-                      {STREAM_PROVIDERS.length > 0 ? (
-                        STREAM_PROVIDERS.map(prov => (
-                          <option key={`acc-p3-${prov.id}`} value={prov.id}>
-                            {prov.label}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="none">No Servers Enabled</option>
-                      )}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
               {/* 18+ Secret Vault Profile Switch Card */}
               <div className="p-4 my-3 rounded-2xl bg-gradient-to-r from-red-950/40 via-purple-950/30 to-slate-900/50 border border-red-500/20 shadow-lg">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1271,96 +1139,6 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>{settings.is18PlusMode ? 'Switch to Normal Profile' : 'Switch to 18+ Profile'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Content Restrictions (ON/OFF Toggle, default OFF) */}
-              <div className="py-3.5 flex items-center justify-between gap-4 border-b border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-white/5 text-pink-300">
-                    {settings.contentRestrictions ? (
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <ShieldAlert className="w-4 h-4 text-amber-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Content Restrictions</p>
-                    <p className="text-xs text-slate-400">
-                      {settings.contentRestrictions
-                        ? 'Filtering active: Mature & 18+ content hidden'
-                        : 'Restrictions OFF: Showing all anime including mature content'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
-                      settings.contentRestrictions
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    {settings.contentRestrictions ? 'Active' : 'Off'}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={handleToggleContentRestrictions}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      settings.contentRestrictions ? 'bg-pink-500' : 'bg-white/10'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.contentRestrictions ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* 18+ Unfiltered Content Toggle (Default: OFF / Safe Filter Active) */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-white/5 text-amber-300">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Allow 18+ / Unfiltered Art & Wallpapers</p>
-                    <p className="text-xs text-slate-400">
-                      {settings.allowNsfwContent
-                        ? '18+ Mode ON: Unfiltered content visible in Fan Arts & Wallpapers'
-                        : '18+ Filter OFF (Default): All explicit & 18+ art strictly filtered'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
-                      settings.allowNsfwContent
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    }`}
-                  >
-                    {settings.allowNsfwContent ? '18+ Enabled' : 'Safe Mode'}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={handleToggleAllowNsfwContent}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      settings.allowNsfwContent ? 'bg-amber-500' : 'bg-white/10'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                        settings.allowNsfwContent ? 'right-1' : 'left-1'
-                      }`}
-                    />
                   </button>
                 </div>
               </div>
