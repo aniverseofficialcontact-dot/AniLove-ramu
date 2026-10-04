@@ -703,3 +703,54 @@ export function createDirectStreamSource(
     actualLanguage: language,
   };
 }
+
+/**
+ * Probe MovieBox API for live available audio languages and qualities
+ */
+export async function probeMovieBoxAvailability(title: string, episodeNumber: number = 1): Promise<{
+  availableLanguages: StreamLanguage[];
+  languageQualityMap: Record<string, string[]>;
+}> {
+  try {
+    const res = await resolveMultiLangSource(title, 1, episodeNumber, 'DUB', '1080p');
+    if (res && res.languageQualityMap) {
+      const langs: StreamLanguage[] = ['SUB', 'DUB'];
+      const langQualMap: Record<string, string[]> = {
+        SUB: ['1080p'],
+        DUB: ['1080p'],
+      };
+
+      Object.keys(res.languageQualityMap).forEach(langKey => {
+        let code: StreamLanguage | null = null;
+        if (langKey.includes('Hindi')) code = 'HIN';
+        else if (langKey.includes('Tamil')) code = 'TAM';
+        else if (langKey.includes('Telugu')) code = 'TEL';
+        else if (langKey.includes('Malayalam')) code = 'MAL';
+        else if (langKey.includes('Kannada')) code = 'KAN';
+        else if (langKey.includes('Bengali')) code = 'BEN';
+
+        if (code && !langs.includes(code)) langs.push(code);
+
+        const qualities = Object.keys(res.languageQualityMap[langKey] || {});
+        if (code) {
+          langQualMap[code] = qualities.length > 0 ? qualities : ['1080p', '720p', '480p'];
+        }
+      });
+
+      return { availableLanguages: langs, languageQualityMap: langQualMap };
+    }
+  } catch (e) {
+    console.warn('[MovieBox Probe] Warning:', e);
+  }
+
+  return {
+    availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL', 'MAL', 'KAN', 'BEN'],
+    languageQualityMap: {
+      SUB: ['1080p'],
+      DUB: ['1080p'],
+      HIN: ['1080p', '720p', '480p', '360p'],
+      TAM: ['1080p', '720p', '480p'],
+      TEL: ['1080p', '720p', '480p'],
+    }
+  };
+}

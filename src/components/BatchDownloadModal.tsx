@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Download, Check, X, Film, CheckSquare, Square, HardDrive, AlertCircle } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSource } from '../services/streamingProviders';
+import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSource, probeMovieBoxAvailability } from '../services/streamingProviders';
 import { queueBatchEpisodeDownloads, isEpisodeDownloaded } from '../services/downloadManager';
 import { verifyBatchSubtitleAvailability } from '../services/subtitleService';
 import { NativePlayer } from '../services/nativePlayer';
@@ -31,12 +31,37 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
   const [selectedSubtitleLang, setSelectedSubtitleLang] = useState<string>('English');
   const [availableLanguages, setAvailableLanguages] = useState<StreamLanguage[]>(SUPPORTED_LANGUAGES.map(l => l.code));
+  const [movieBoxLangQualMap, setMovieBoxLangQualMap] = useState<Record<string, string[]>>({});
   const [isProbingStream, setIsProbingStream] = useState(false);
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
     return new Set([currentEpisodeNumber]);
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  const displayTitle =
+    anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
+
+  // Probe live MovieBox API for available languages & qualities
+  useEffect(() => {
+    let isMounted = true;
+    setIsProbingStream(true);
+    probeMovieBoxAvailability(displayTitle, currentEpisodeNumber)
+      .then(res => {
+        if (isMounted && res) {
+          if (res.availableLanguages && res.availableLanguages.length > 0) {
+            setAvailableLanguages(res.availableLanguages);
+          }
+          if (res.languageQualityMap) {
+            setMovieBoxLangQualMap(res.languageQualityMap);
+          }
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsProbingStream(false);
+      });
+    return () => { isMounted = false; };
+  }, [displayTitle, currentEpisodeNumber]);
 
   // Hide floating Native Player overlay while modal is open so UI is fully visible
   useEffect(() => {
@@ -50,52 +75,8 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     };
   }, []);
 
-  const [availableQualities, setAvailableQualities] = useState<string[]>(['1080p', '720p', '480p']);
-  const [availableServers, setAvailableServers] = useState<{ name: string; linkId: string }[]>([
-    { name: 'Server 1', linkId: '' },
-    { name: 'Server 1-B', linkId: '' },
-    { name: 'Server 2-A-SUB', linkId: '' },
-    { name: 'Server 2-B-SUB', linkId: '' },
-    { name: 'Server 2-C-SUB', linkId: '' },
-    { name: 'Server 2-A-DUB', linkId: '' },
-    { name: 'Server 2-B-DUB', linkId: '' },
-    { name: 'Server 2-C-DUB', linkId: '' },
-  ]);
-
-  const filteredLanguages = SUPPORTED_LANGUAGES;
-
-  const displayTitle =
-    anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-
-  const toggleEpisode = (epNum: number) => {
-    setSelectedEpNumbers(prev => {
-      const next = new Set(prev);
-      if (next.has(epNum)) {
-        next.delete(epNum);
-      } else {
-        next.add(epNum);
-      }
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedEpNumbers.size === episodes.length) {
-      setSelectedEpNumbers(new Set());
-    } else {
-      setSelectedEpNumbers(new Set(episodes.map(e => e.number)));
-    }
-  };
-
-  const handleSelectRange = (count: number) => {
-    const sorted = [...episodes].sort((a, b) => a.number - b.number);
-    const startIdx = sorted.findIndex(e => e.number === currentEpisodeNumber);
-    const fromIdx = startIdx >= 0 ? startIdx : 0;
-    const slice = sorted.slice(fromIdx, fromIdx + count);
-    setSelectedEpNumbers(new Set(slice.map(e => e.number)));
-  };
-
   const isHiAnimeLocked = selectedAudio === 'DUB' || selectedAudio === 'SUB';
+  const isHindiSelected = selectedAudio === 'HIN';
 
   useEffect(() => {
     if (isHiAnimeLocked) {
@@ -103,8 +84,14 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
         setSelectedServer('Server 1');
       }
       setSelectedQuality('1080p');
+    } else {
+      if (selectedServer.startsWith('Server') && !isHindiSelected) {
+        setSelectedServer('Multi-Lang');
+      } else if (!selectedServer.includes('Multi-Lang') && !selectedServer.includes('AnimeSalt')) {
+        setSelectedServer('Multi-Lang');
+      }
     }
-  }, [selectedAudio, isHiAnimeLocked, selectedServer]);
+  }, [selectedAudio, isHiAnimeLocked, isHindiSelected, selectedServer]);
 
   const handleStartDownloads = () => {
     if (selectedEpNumbers.size === 0) return;
@@ -209,13 +196,14 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
                   <option value="Server 2">🌸 HiAnime (Server 2)</option>
                   <option value="Server 3">🌸 HiAnime (Server 3)</option>
                 </>
+              ) : isHindiSelected ? (
+                <>
+                  <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
+                  <option value="AnimeSalt">🧂 AnimeSalt</option>
+                </>
               ) : (
                 <>
                   <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
-                  <option value="Server 1">🌸 HiAnime (Server 1)</option>
-                  <option value="Server 2">🌸 HiAnime (Server 2)</option>
-                  <option value="Server 3">🌸 HiAnime (Server 3)</option>
-                  <option value="AnimeSalt">🧂 AnimeSalt</option>
                 </>
               )}
             </select>
@@ -224,18 +212,17 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Video Quality</span>
             <select
-              value="1080p"
+              value={isHiAnimeLocked ? '1080p' : selectedQuality}
               disabled={isHiAnimeLocked}
               onChange={e => setSelectedQuality(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-75"
             >
-              <option value="1080p">1080p Full HD {isHiAnimeLocked ? '(Adaptive HLS Stream)' : ''}</option>
-              {!isHiAnimeLocked && (
-                <>
-                  <option value="720p">720p HD</option>
-                  <option value="480p">480p SD</option>
-                  <option value="360p">360p Low</option>
-                </>
+              {isHiAnimeLocked ? (
+                <option value="1080p">1080p Full HD (Adaptive HLS Stream)</option>
+              ) : (
+                (movieBoxLangQualMap[selectedAudio] || ['1080p', '720p', '480p', '360p']).map(q => (
+                  <option key={q} value={q}>{q} {q === '1080p' ? 'Full HD' : q === '720p' ? 'HD' : q === '480p' ? 'SD' : 'Low'}</option>
+                ))
               )}
             </select>
           </div>
