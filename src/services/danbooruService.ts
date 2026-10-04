@@ -100,7 +100,8 @@ const TAG_ALIAS_MAP: Record<string, string> = {
   'jujutsu_kaisen': 'jujutsu_kaisen',
   'my_hero_academia': 'boku_no_hero_academia',
   'one_piece': 'one_piece',
-  'naruto': 'naruto',
+  'naruto': 'uzumaki_naruto',
+  'naruto_shippuden': 'uzumaki_naruto',
   'bleach': 'bleach',
   'dragon_ball': 'dragon_ball',
   'solo_leveling': 'solo_leveling',
@@ -126,48 +127,100 @@ const TAG_ALIAS_MAP: Record<string, string> = {
   'vinland_saga': 'vinland_saga',
   'jojo': 'jojo_no_kimyou_na_bouken',
 
-  // Character Name Aliases (English Order -> Japanese Booru Order)
+  // Character Name Aliases (Single Names & Full Names -> Official Japanese Booru Tags)
+  'naruto_uzumaki': 'uzumaki_naruto',
+  'sasuke': 'uchiha_sasuke',
+  'sasuke_uchiha': 'uchiha_sasuke',
+  'kakashi': 'hatake_kakashi',
+  'itachi': 'uchiha_itachi',
+  'hinata': 'hyuuga_hinata',
+  'gaara': 'gaara',
+  'jiraiya': 'jiraiya',
+  'tsunade': 'tsunade_(naruto)',
+  'sakura': 'haruno_sakura',
+
   'goku': 'son_goku',
   'son_goku': 'son_goku',
+  'vegeta': 'vegeta',
+  'gohan': 'son_gohan',
+
   'megumi_fushiguro': 'fushiguro_megumi',
   'megumi': 'fushiguro_megumi',
   'fushiguro_megumi': 'fushiguro_megumi',
   'satoru_gojo': 'gojo_satoru',
   'gojo': 'gojo_satoru',
   'gojo_satoru': 'gojo_satoru',
+  'sukuna': 'ryomen_sukuna',
+  'yuji': 'itadori_yuji',
+  'itadori': 'itadori_yuji',
+  'nobara': 'kugisaki_nobara',
+  'toji': 'fushiguro_toji',
+  'maki': 'zeni_maki',
+
   'mikasa_ackerman': 'ackerman_mikasa',
   'mikasa': 'ackerman_mikasa',
-  'anya_forger': 'forger_anya',
-  'anya': 'forger_anya',
-  'tanjiro_kamado': 'kamado_tanjiro',
-  'tanjiro': 'kamado_tanjiro',
-  'nezuko_kamado': 'kamado_nezuko',
-  'nezuko': 'kamado_nezuko',
   'eren_yeager': 'eren_yeager',
   'eren_jaeger': 'eren_yeager',
   'eren': 'eren_yeager',
   'levi_ackerman': 'ackerman_levi',
   'levi': 'ackerman_levi',
+
+  'anya_forger': 'forger_anya',
+  'anya': 'forger_anya',
+  'yor': 'yor_forger',
+  'loid': 'loid_forger',
+
+  'tanjiro_kamado': 'kamado_tanjiro',
+  'tanjiro': 'kamado_tanjiro',
+  'nezuko_kamado': 'kamado_nezuko',
+  'nezuko': 'kamado_nezuko',
+  'zenitsu': 'agatsuma_zenitsu',
+  'inosuke': 'hashibira_inosuke',
+  'rengoku': 'rengoku_kyoujurou',
+
   'sung_jinwoo': 'sung_jin-woo',
   'sung_jin_woo': 'sung_jin-woo',
   'jinwoo': 'sung_jin-woo',
-  'naruto_uzumaki': 'uzumaki_naruto',
-  'sasuke_uchiha': 'uchiha_sasuke',
-  'sasuke': 'uchiha_sasuke',
+
   'ichigo_kurosaki': 'kurosaki_ichigo',
   'ichigo': 'kurosaki_ichigo',
+  'rukia': 'kuchiki_rukia',
+  'aizen': 'aizen_sousuke',
+
   'luffy': 'monkey_d._luffy',
   'monkey_d_luffy': 'monkey_d._luffy',
   'zoro': 'roronoa_zoro',
   'roronoa_zoro': 'roronoa_zoro',
   'sanji': 'sanji_(one_piece)',
-  'vegeta': 'vegeta',
+  'nami': 'nami_(one_piece)',
+  'robin': 'nico_robin',
+
   'saitama': 'saitama_(one-punch_man)',
+  'genos': 'genos_(one-punch_man)',
+
   'light_yagami': 'yagami_light',
+  'light': 'yagami_light',
+  'misa': 'amane_misa',
+
   'killua': 'killua_zoldyck',
   'killua_zoldyck': 'killua_zoldyck',
   'gon': 'gon_freecss',
   'gon_freecss': 'gon_freecss',
+  'hisoka': 'hisoka_morow',
+
+  'makima': 'makima_(chainsaw_man)',
+  'power': 'power_(chainsaw_man)',
+  'denji': 'denji_(chainsaw_man)',
+
+  'rem': 'rem_(re:zero)',
+  'ram': 'ram_(re:zero)',
+  'emilia': 'emilia_(re:zero)',
+
+  'zero_two': 'zero_two_(darling_in_the_franxx)',
+  '02': 'zero_two_(darling_in_the_franxx)',
+
+  'fern': 'fern_(frieren)',
+  'stark': 'stark_(frieren)',
 };
 
 function resolveTagAlias(rawTag: string): string {
@@ -205,8 +258,28 @@ export async function fetchDanbooruFanArts(
 
   const posts: DanbooruPost[] = [];
   const rawTag = query.trim().toLowerCase().replace(/\s+/g, '_');
-  const cleanTag = resolveTagAlias(rawTag);
+  let cleanTag = resolveTagAlias(rawTag);
   const INVALID_EXTS = new Set(['zip', 'webm', 'mp4', 'gif', 'swf', 'ugoira', 'rar', '7z']);
+
+  // If searching a single word, try Danbooru Autocomplete API to get top character tag
+  if (rawTag && !rawTag.includes('_') && cleanTag === rawTag) {
+    try {
+      const tagRes = await fetch(`https://danbooru.donmai.us/tags.json?search[name_matches]=*${encodeURIComponent(rawTag)}*&search[order]=count&limit=10`);
+      if (tagRes.ok) {
+        const tagList = await tagRes.json();
+        if (Array.isArray(tagList) && tagList.length > 0) {
+          const topCharTag = tagList
+            .filter((t: any) => t.category === 4 || t.category === 3 || t.category === 0)
+            .sort((a: any, b: any) => (b.post_count || 0) - (a.post_count || 0))[0];
+          if (topCharTag && topCharTag.name) {
+            cleanTag = topCharTag.name;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Danbooru] Autocomplete resolution warning:', e);
+    }
+  }
 
   // Check if reversed 2-word variant exists
   const parts = rawTag.split('_');
@@ -251,7 +324,45 @@ export async function fetchDanbooruFanArts(
         }
       }
 
-      // If reversed tag exists and returned 0 posts, try secondary search with reversed tag
+      // Fallback 1: If 0 posts found and single word, try wildcard search *rawTag*
+      if (posts.length === 0 && rawTag) {
+        const wildUrl = `https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit=30&pid=${page - 1}&tags=${encodeURIComponent('*' + rawTag + '*')}`;
+        const wildRes = await fetch(wildUrl);
+        if (wildRes.ok) {
+          const wildData = await wildRes.json();
+          if (Array.isArray(wildData)) {
+            wildData.forEach((item: any) => {
+              if (item.image && item.directory) {
+                const ext = item.image.split('.').pop()?.toLowerCase() || 'jpg';
+                if (INVALID_EXTS.has(ext)) return;
+
+                const fileUrl = `https://safebooru.org/images/${item.directory}/${item.image}`;
+                const sampleUrl = item.sample
+                  ? `https://safebooru.org/samples/${item.directory}/sample_${item.image}`
+                  : fileUrl;
+                posts.push({
+                  id: item.id || Math.floor(Math.random() * 1000000),
+                  created_at: String(item.change || Date.now()),
+                  score: item.score || 0,
+                  rating: 'g',
+                  tag_string: item.tags || '',
+                  tag_string_character: item.tags || '',
+                  tag_string_copyright: '',
+                  tag_string_artist: 'Artist',
+                  file_url: fileUrl,
+                  large_file_url: sampleUrl,
+                  preview_file_url: sampleUrl,
+                  image_width: item.width || 1200,
+                  image_height: item.height || 1600,
+                  file_ext: ext,
+                });
+              }
+            });
+          }
+        }
+      }
+
+      // Fallback 2: If reversed 2-word tag exists and still 0 posts, try reversed tag
       if (posts.length === 0 && reversedTag) {
         const revUrl = `https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit=30&pid=${page - 1}&tags=${encodeURIComponent(reversedTag + '*')}`;
         const revRes = await fetch(revUrl);
@@ -335,25 +446,6 @@ export async function fetchDanbooruFanArts(
   const fetchDanbooru = async () => {
     try {
       let resolvedTag = cleanTag ? `${cleanTag}*` : 'order:score';
-
-      if (cleanTag) {
-        try {
-          const tagRes = await fetch(`https://danbooru.donmai.us/tags.json?search[name_matches]=*${encodeURIComponent(cleanTag)}*&search[order]=count&limit=10`);
-          if (tagRes.ok) {
-            const tagList = await tagRes.json();
-            if (Array.isArray(tagList) && tagList.length > 0) {
-              const topCharTag = tagList
-                .filter((t: any) => t.category === 4 || t.category === 3 || t.category === 0)
-                .sort((a: any, b: any) => (b.post_count || 0) - (a.post_count || 0))[0];
-              if (topCharTag && topCharTag.name) {
-                resolvedTag = topCharTag.name;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('[Danbooru] Tag autocomplete warning:', e);
-        }
-      }
 
       let tagsParam = `limit=30&page=${page}&tags=${encodeURIComponent(resolvedTag)}`;
       if (!allowNsfw) {
