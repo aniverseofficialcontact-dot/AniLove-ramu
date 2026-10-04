@@ -1225,6 +1225,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             String referer = getIntent().getStringExtra("referer");
             setupExoPlayerOnline(streamUrl, referer, null);
         }
+
+        String reqEngine = getIntent().getStringExtra("engineMode");
+        if (is18PlusActive() || "web".equalsIgnoreCase(reqEngine)) {
+            switchPlayerEngine(true);
+        }
+
         startUpdateLoop();
         resetHideTimer();
     }

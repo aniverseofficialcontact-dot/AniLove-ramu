@@ -129,6 +129,7 @@ public class NativePlayerPlugin extends Plugin {
             intent.putExtra("autoSkipIntro", autoSkipIntro != null ? autoSkipIntro : false);
             intent.putExtra("allSubtitles", call.getString("allSubtitles"));
             intent.putExtra("startTime", call.getInt("startTime", 0));
+            intent.putExtra("engineMode", call.getString("engineMode", "exo"));
             intent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             getActivity().startActivity(intent);
             call.resolve();

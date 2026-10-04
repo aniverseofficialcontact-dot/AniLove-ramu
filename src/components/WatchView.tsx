@@ -178,7 +178,16 @@ export const WatchView: React.FC<WatchViewProps> = ({
     return is18PlusActive ? ['HentaiOcean'] : ['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'];
   }, [is18PlusActive]);
 
-  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>('exo');
+  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>(is18PlusActive ? 'web' : 'exo');
+
+  useEffect(() => {
+    if (is18PlusActive) {
+      setPlayerEngineMode('web');
+      if (Capacitor.isNativePlatform()) {
+        NativePlayer.switchEngine({ mode: 'web' }).catch(() => {});
+      }
+    }
+  }, [anime.id, is18PlusActive]);
 
   const handleToggleEngine = () => {
     const nextEngine = playerEngineMode === 'exo' ? 'web' : 'exo';

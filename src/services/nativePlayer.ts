@@ -20,6 +20,7 @@ export interface NativePlayerPlugin {
     startTime?: number;
     subtitleUrl?: string;
     subtitleLang?: string;
+    engineMode?: 'exo' | 'web';
   }): Promise<void>;
   updatePosition(options: { y: number }): Promise<void>;
   switchEngine(options: { mode: 'exo' | 'web' }): Promise<void>;
@@ -96,6 +97,9 @@ export async function launchNativePlayer({
   const streamUrl = res.source?.url || `https://vidlink.pro/anime/${anime.id}/${epNum}?dub=${audio === 'DUB' ? 'true' : 'false'}`;
   const activeServerName = res.source?.selectedServerName || serverName || 'AnimeDekho-Server-1';
 
+  const is18Plus = Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
+  const targetEngineMode = is18Plus ? 'web' : 'exo';
+
   // Launch NativePlayerActivity directly
   await NativePlayer.play({
     url: streamUrl,
@@ -113,5 +117,6 @@ export async function launchNativePlayer({
     audio: (audio as string) || 'DUB',
     advancePlayer: settings?.advancePlayerEnabled ?? false,
     startTime: startTime || 0,
+    engineMode: targetEngineMode,
   });
 }

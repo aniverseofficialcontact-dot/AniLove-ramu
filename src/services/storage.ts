@@ -108,7 +108,13 @@ export function getStoredSettings(): UserSettings {
       }));
     }
 
-    return { ...DEFAULT_SETTINGS, ...parsed, theme };
+    // Read session-based 18+ Mode (Resets to false on cold app boot / recent tabs closure)
+    let is18Session = false;
+    try {
+      is18Session = sessionStorage.getItem('anilove_18plus_active_session') === 'true';
+    } catch {}
+
+    return { ...DEFAULT_SETTINGS, ...parsed, theme, is18PlusMode: is18Session };
   } catch (e) {
     console.error('Error reading stored settings:', e);
     return DEFAULT_SETTINGS;
@@ -119,7 +125,19 @@ export const getUserSettings = getStoredSettings;
 
 export function saveStoredSettings(settings: UserSettings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // Persist 18+ Mode state in sessionStorage for active session only
+    try {
+      if (settings.is18PlusMode) {
+        sessionStorage.setItem('anilove_18plus_active_session', 'true');
+      } else {
+        sessionStorage.removeItem('anilove_18plus_active_session');
+      }
+    } catch {}
+
+    // Exclude is18PlusMode from persistent localStorage so cold app restart always opens in Normal Mode
+    const persistentSettings = { ...settings, is18PlusMode: false };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(persistentSettings));
+
     // Trigger background cloud sync for cards and coins if logged in with AniList or MyAnimeList
     const trackerToken = getActiveTrackerToken(settings);
     if (trackerToken) {
