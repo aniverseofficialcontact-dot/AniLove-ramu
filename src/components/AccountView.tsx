@@ -474,6 +474,21 @@ export const AccountView: React.FC<AccountViewProps> = ({
     );
   };
 
+  const handleToggleAllowNsfwContent = () => {
+    const updatedVal = !settings.allowNsfwContent;
+    onSaveSettings({
+      ...settings,
+      allowNsfwContent: updatedVal,
+    });
+    onShowToast(
+      updatedVal ? 'warning' : 'info',
+      updatedVal
+        ? '18+ Unfiltered Mode ON: Safe filters disabled for Fan Arts & Wallpapers.'
+        : '18+ Filter Mode OFF: Explicit 18+ content filtered across Fan Arts & Wallpapers.',
+      '18+ Content Filter'
+    );
+  };
+
   const displayName = currentProfile.name || settings.customDisplayName || 'Anime Explorer';
   const email = settings.customEmail || currentProfile.email || 'Guest User (Not Signed In)';
   const avatarUrl = currentProfile.avatar || settings.customAvatar || PRESET_AVATARS[0].url;
@@ -1188,7 +1203,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </div>
 
               {/* Content Restrictions (ON/OFF Toggle, default OFF) */}
-              <div className="py-3.5 flex items-center justify-between gap-4">
+              <div className="py-3.5 flex items-center justify-between gap-4 border-b border-white/5">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-white/5 text-pink-300">
                     {settings.contentRestrictions ? (
@@ -1228,6 +1243,49 @@ export const AccountView: React.FC<AccountViewProps> = ({
                     <span
                       className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
                         settings.contentRestrictions ? 'right-1' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* 18+ Unfiltered Content Toggle (Default: OFF / Safe Filter Active) */}
+              <div className="py-3.5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-white/5 text-amber-300">
+                    <Lock className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">Allow 18+ / Unfiltered Art & Wallpapers</p>
+                    <p className="text-xs text-slate-400">
+                      {settings.allowNsfwContent
+                        ? '18+ Mode ON: Unfiltered content visible in Fan Arts & Wallpapers'
+                        : '18+ Filter OFF (Default): All explicit & 18+ art strictly filtered'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
+                      settings.allowNsfwContent
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    }`}
+                  >
+                    {settings.allowNsfwContent ? '18+ Enabled' : 'Safe Mode'}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleAllowNsfwContent}
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                      settings.allowNsfwContent ? 'bg-amber-500' : 'bg-white/10'
+                    }`}
+                  >
+                    <span
+                      className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        settings.allowNsfwContent ? 'right-1' : 'left-1'
                       }`}
                     />
                   </button>

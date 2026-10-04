@@ -15,7 +15,10 @@ import {
   ChevronDown,
   ChevronRight,
   Bot,
-  Newspaper
+  Newspaper,
+  Palette,
+  Image,
+  Smile
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TabType } from './Navbar';
@@ -75,7 +78,7 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
     onClose();
   };
 
-  // Sub-items under Home (Account removed since it is accessible from the bottom profile footer)
+  // Sub-items under Home
   const lowerNavSubItems = [
     {
       id: 'home' as TabType,
@@ -105,12 +108,27 @@ export const GridMenuModal: React.FC<GridMenuModalProps> = ({
     },
   ];
 
-  // Top-level standalone menu items
+  // Top-level standalone menu items (including new Fan Arts, Wallpapers, and Anime Reactions)
   const standaloneMenuItems = [
     {
       id: 'news' as TabType,
       label: 'News & Trends',
       icon: Newspaper,
+    },
+    {
+      id: 'fanarts' as TabType,
+      label: 'Fan Arts',
+      icon: Palette,
+    },
+    {
+      id: 'wallpapers' as TabType,
+      label: 'Wallpapers',
+      icon: Image,
+    },
+    {
+      id: 'reactions' as TabType,
+      label: 'Anime Express',
+      icon: Smile,
     },
     {
       id: 'schedule' as TabType,
