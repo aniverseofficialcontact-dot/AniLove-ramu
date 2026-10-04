@@ -108,7 +108,11 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
   const [quality, setQuality] = useState<StreamResolution>('1080p');
   const [refreshKey, setRefreshKey] = useState<number>(0);
-  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>('exo');
+  const is18PlusActive = useMemo(() => {
+    return Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
+  }, [settings?.is18PlusMode, anime]);
+
+  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>(is18PlusActive ? 'web' : 'exo');
 
   const handleToggleEngine = () => {
     const nextEngine = playerEngineMode === 'exo' ? 'web' : 'exo';
@@ -493,7 +497,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
       }
     }
 
-    const is18PlusActive = Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
     const defaultSrc = is18PlusActive ? 'HentaiOcean' : 'Multi-Lang';
     const defaultSrv = is18PlusActive ? 'HentaiOcean Engine' : 'Multi-Lang-Server-1';
 
@@ -527,7 +530,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     let cancelled = false;
 
-    const is18PlusActive = Boolean(settings?.is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
     const activeSrcName = selectedSource || (is18PlusActive ? 'HentaiOcean' : 'AnimeDekho');
     const requestedServer = selectedSubServerName || (is18PlusActive ? 'HentaiOcean Engine' : 'Server 1');
     const cacheKey = `${activeSrcName}_${anime.id}_${episodeNumber}_${activeServer}_${audioMode}_${requestedServer}`;
