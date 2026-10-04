@@ -3,7 +3,6 @@ import {
   Newspaper,
   Search,
   ExternalLink,
-  Sparkles,
   Bookmark,
   Calendar,
   User,
@@ -18,8 +17,7 @@ import {
   fetchGlobalAnimeNews,
   fetchUserWatchlistNews,
   getCachedNews,
-  getSafeNewsThumbnail,
-  hasValidThumbnail,
+  isOfficialThumbnail,
   NewsItem
 } from '../services/animeNews';
 
@@ -57,13 +55,13 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     // 1. Check persistent 6-hour cache first
     const cached = getCachedNews();
     if (cached && cached.length > 0) {
-      setNewsList(cached);
+      setNewsList(cached.filter((item) => isOfficialThumbnail(item.imageUrl)));
       setIsLoading(false);
 
       // Asynchronously load watchlist news
       try {
         const userNews = await fetchUserWatchlistNews(library);
-        setWatchlistNews(userNews.filter(hasValidThumbnail));
+        setWatchlistNews(userNews.filter((item) => isOfficialThumbnail(item.imageUrl)));
       } catch (e) {
         // Silently handle
       }
@@ -76,8 +74,8 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         fetchGlobalAnimeNews(1),
         fetchUserWatchlistNews(library),
       ]);
-      setNewsList(globalNews.filter(hasValidThumbnail));
-      setWatchlistNews(userNews.filter(hasValidThumbnail));
+      setNewsList(globalNews.filter((item) => isOfficialThumbnail(item.imageUrl)));
+      setWatchlistNews(userNews.filter((item) => isOfficialThumbnail(item.imageUrl)));
     } catch (err) {
       console.error('Error loading initial anime news:', err);
     } finally {
@@ -92,7 +90,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     const nextPage = page + 1;
     try {
       const moreNews = await fetchGlobalAnimeNews(nextPage);
-      const validMore = moreNews.filter(hasValidThumbnail);
+      const validMore = moreNews.filter((item) => isOfficialThumbnail(item.imageUrl));
       if (validMore.length === 0) {
         setHasMore(false);
       } else {
@@ -128,8 +126,8 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loadMoreNews, isLoadingMore, isLoading, hasMore]);
 
-  // Combine, filter invalid thumbnails & deduplicate news
-  let displayedNews = [...watchlistNews, ...newsList].filter(hasValidThumbnail);
+  // Strict rule: Combine and filter out ANY article without an official thumbnail
+  let displayedNews = [...watchlistNews, ...newsList].filter((item) => isOfficialThumbnail(item.imageUrl));
   const uniqueMap = new Map<string, NewsItem>();
   displayedNews.forEach((item) => uniqueMap.set(item.title, item));
   displayedNews = Array.from(uniqueMap.values());
@@ -151,7 +149,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
     });
 
     if (displayedNews.length === 0 && watchlistNews.length > 0) {
-      displayedNews = watchlistNews.filter(hasValidThumbnail);
+      displayedNews = watchlistNews.filter((item) => isOfficialThumbnail(item.imageUrl));
     }
   } else if (activeCategory === 'announcements') {
     displayedNews = displayedNews.filter(
@@ -195,7 +193,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 select-none">
-      {/* Sleek Minimal Top Header Row (Refresh button removed) */}
+      {/* Sleek Minimal Top Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -233,7 +231,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
+      {/* Category Filter Tabs (Total count badge removed from Watchlist News as requested) */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto custom-scrollbar">
         <button
           onClick={() => setActiveCategory('all')}
@@ -249,7 +247,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
         <button
           onClick={() => setActiveCategory('watchlist')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 relative ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
             activeCategory === 'watchlist'
               ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md'
               : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10'
@@ -257,11 +255,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         >
           <Bookmark className="w-4 h-4 text-amber-400" />
           <span>My Watchlist News</span>
-          {watchlistNews.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white text-[9px] font-black">
-              {watchlistNews.length}
-            </span>
-          )}
         </button>
 
         <button
@@ -313,9 +306,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 <img
                   src={featuredArticle.imageUrl}
                   alt={featuredArticle.title}
-                  onError={(e) => {
-                    e.currentTarget.src = getSafeNewsThumbnail('', featuredArticle.title, 0);
-                  }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 filter brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
@@ -364,7 +354,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
 
           {/* MAIN NEWS CARDS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(searchQuery ? displayedNews : remainingArticles).map((article, idx) => {
+            {(searchQuery ? displayedNews : remainingArticles).map((article) => {
               const isWatchlist = library.some(
                 (a) =>
                   a.id === article.animeId ||
@@ -384,9 +374,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                       <img
                         src={article.imageUrl}
                         alt={article.title}
-                        onError={(e) => {
-                          e.currentTarget.src = getSafeNewsThumbnail('', article.title, idx + 1);
-                        }}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
@@ -449,7 +436,7 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         </div>
       )}
 
-      {/* ARTICLE READER MODAL */}
+      {/* ARTICLE READER MODAL (Image 3 Official Coverage Story box removed) */}
       <AnimatePresence>
         {selectedArticle && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
@@ -475,9 +462,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 <img
                   src={selectedArticle.imageUrl}
                   alt={selectedArticle.title}
-                  onError={(e) => {
-                    e.currentTarget.src = getSafeNewsThumbnail('', selectedArticle.title, 0);
-                  }}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
@@ -518,16 +502,6 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
                 {/* Full Readable Article Content */}
                 <div className="space-y-3 whitespace-pre-line text-slate-200 leading-relaxed font-normal text-xs sm:text-sm">
                   {selectedArticle.fullContent || selectedArticle.summary}
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5 mt-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
-                    <Sparkles className="w-4 h-4" />
-                    <span>Official Coverage Story</span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    This article contains verified anime industry updates and broadcast announcements.
-                  </p>
                 </div>
               </div>
 

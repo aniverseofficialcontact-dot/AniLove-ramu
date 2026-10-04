@@ -16,57 +16,45 @@ export interface NewsItem {
   category?: 'General' | 'Watchlist' | 'Announcement' | 'Trailer';
 }
 
-const NEWS_CACHE_KEY = 'anilove_news_feed_v3';
-const NEWS_CACHE_TIME_KEY = 'anilove_news_feed_time_v3';
+const NEWS_CACHE_KEY = 'anilove_news_feed_v4';
+const NEWS_CACHE_TIME_KEY = 'anilove_news_feed_time_v4';
 const CACHE_6_HOURS_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-// Pool of real, high-resolution anime artwork wallpapers & character covers
-const ANIME_THUMBNAIL_POOL = [
-  'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-];
-
-const SPECIFIC_ANIME_IMAGES: Record<string, string> = {
-  'solo leveling': 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-  'jujutsu kaisen': 'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
-  'demon slayer': 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-  'chainsaw man': 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80',
-  'bleach': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-};
-
 /**
- * Strict thumbnail validity checker: Drops any news article without a valid thumbnail
+ * Strict Official Thumbnail Checker: Drops any news article that does NOT have a real official image from the source
  */
-export function hasValidThumbnail(item: NewsItem): boolean {
-  if (!item || !item.imageUrl || typeof item.imageUrl !== 'string') return false;
-  const url = item.imageUrl.trim();
-  if (url.length < 10) return false;
-  if (url.includes('undefined') || url.includes('null') || url.includes('placeholder')) return false;
-  if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+export function isOfficialThumbnail(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim();
+  if (clean.length < 15) return false;
+  if (clean.includes('undefined') || clean.includes('null') || clean.includes('placeholder')) return false;
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) return false;
   return true;
 }
 
 /**
- * Get a valid high-resolution anime thumbnail
+ * Extract official image URL from RSS item HTML or enclosure
  */
-export function getSafeNewsThumbnail(url?: string, title = '', index = 0): string {
-  if (url && typeof url === 'string' && url.length > 10 && !url.includes('undefined') && !url.includes('null')) {
-    const lowerTitle = title.toLowerCase();
-    for (const [key, img] of Object.entries(SPECIFIC_ANIME_IMAGES)) {
-      if (lowerTitle.includes(key)) return img;
+
+function extractRssOfficialImage(item: any): string | null {
+  if (item.thumbnail && isOfficialThumbnail(item.thumbnail)) return item.thumbnail;
+  if (item.enclosure?.link && isOfficialThumbnail(item.enclosure.link)) return item.enclosure.link;
+
+  if (item.description && typeof item.description === 'string') {
+    const imgMatch = item.description.match(/<img[^>]+src="([^">]+)"/i);
+    if (imgMatch && imgMatch[1] && isOfficialThumbnail(imgMatch[1])) {
+      return imgMatch[1];
     }
-    return url;
   }
 
-  const lowerTitle = title.toLowerCase();
-  for (const [key, img] of Object.entries(SPECIFIC_ANIME_IMAGES)) {
-    if (lowerTitle.includes(key)) return img;
+  if (item.content && typeof item.content === 'string') {
+    const imgMatch = item.content.match(/<img[^>]+src="([^">]+)"/i);
+    if (imgMatch && imgMatch[1] && isOfficialThumbnail(imgMatch[1])) {
+      return imgMatch[1];
+    }
   }
 
-  return ANIME_THUMBNAIL_POOL[index % ANIME_THUMBNAIL_POOL.length];
+  return null;
 }
 
 /**
@@ -82,8 +70,7 @@ export function getCachedNews(): NewsItem[] | null {
       if (!isNaN(cacheTime) && Date.now() - cacheTime < CACHE_6_HOURS_MS) {
         const parsed = JSON.parse(rawData);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Ensure strict thumbnail rule on cached items as well
-          return parsed.filter(hasValidThumbnail);
+          return parsed.filter((item) => isOfficialThumbnail(item.imageUrl));
         }
       }
     }
@@ -98,7 +85,7 @@ export function getCachedNews(): NewsItem[] | null {
  */
 export function saveCachedNews(items: NewsItem[]): void {
   try {
-    const validItems = items.filter(hasValidThumbnail);
+    const validItems = items.filter((item) => isOfficialThumbnail(item.imageUrl));
     localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify(validItems));
     localStorage.setItem(NEWS_CACHE_TIME_KEY, Date.now().toString());
   } catch (e) {
@@ -115,7 +102,6 @@ async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 20
       return await fn();
     } catch (err) {
       if (attempt === retries) throw err;
-      console.warn(`News fetch attempt ${attempt} failed, retrying in 2 seconds...`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
@@ -129,12 +115,15 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
   if (!library || library.length === 0) return [];
 
   const newsResults: NewsItem[] = [];
-  const targetAnime = library.slice(0, 6);
+  const targetAnime = library.slice(0, 8);
 
   for (let i = 0; i < targetAnime.length; i++) {
     const anime = targetAnime[i];
     const animeName = anime.title?.userPreferred || anime.title?.english || anime.title?.romaji || 'Anime';
-    const coverArt = anime.bannerImage || anime.coverImage;
+    const officialCover = anime.bannerImage || anime.coverImage;
+
+    // Strict rule: Only include if anime has an official cover art
+    if (!isOfficialThumbnail(officialCover)) continue;
 
     let fetchedForThisAnime = false;
     const malId = anime.idMal || anime.id;
@@ -157,6 +146,10 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
           const items = json.data.slice(0, 2).map((item: any, idx: number) => {
             const bodyExcerpt = item.excerpt || item.intro || '';
+            const officialImg = item.images?.jpg?.image_url || officialCover;
+
+            if (!isOfficialThumbnail(officialImg)) return null;
+
             const fullStory = `${bodyExcerpt}\n\nProduction & Broadcast Details:\nOfficial updates for ${animeName} have been released. The production team and voice cast have shared insights regarding key visual designs, sound design, and broadcast timing for upcoming episodes.\n\nFans can look forward to expanded character arcs, high-octane animation sequences, and special broadcast events. Stay tuned to AniLove2 for live episode streaming and community discussions.`;
 
             return {
@@ -164,7 +157,7 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
               title: item.title || `${animeName} • Official Broadcast & Production Update`,
               summary: bodyExcerpt || `New official updates and community commentary regarding ${animeName}.`,
               fullContent: fullStory,
-              imageUrl: getSafeNewsThumbnail(item.images?.jpg?.image_url || coverArt, animeName, i + idx),
+              imageUrl: officialImg,
               date: item.date
                 ? new Date(item.date).toLocaleDateString(undefined, {
                     month: 'short',
@@ -180,22 +173,25 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
               animeTitle: animeName,
               category: 'Watchlist' as const,
             };
-          });
-          newsResults.push(...items);
-          fetchedForThisAnime = true;
+          }).filter((item): item is NewsItem => item !== null);
+
+          if (items.length > 0) {
+            newsResults.push(...items);
+            fetchedForThisAnime = true;
+          }
         }
       } catch (e) {
         // Fallback handles gracefully
       }
     }
 
-    if (!fetchedForThisAnime) {
+    if (!fetchedForThisAnime && isOfficialThumbnail(officialCover)) {
       newsResults.push({
         id: `watchlist-fallback-${anime.id}`,
         title: `${animeName} • Broadcast & Production Highlights`,
         summary: `Latest information, release dates, and official announcements for ${animeName} from your watchlist.`,
         fullContent: `Official Production & Broadcast Announcement for ${animeName}:\n\nThe animation studio and production committee have released updated details regarding the broadcast schedule, voice cast commentaries, and key visual artworks for ${animeName}.\n\nKey Highlights:\n• Enhanced animation quality and cinematic sound mixing.\n• Special cast interviews and behind-the-scenes production footage.\n• Synchronized global streaming schedule.\n\nAdd ${animeName} to your AniLove2 Library to receive real-time notifications for new episode releases!`,
-        imageUrl: getSafeNewsThumbnail(coverArt, animeName, i),
+        imageUrl: officialCover,
         date: 'Recent Update',
         source: 'Watchlist News',
         url: '#',
@@ -208,15 +204,13 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
     }
   }
 
-  // Filter out any articles without a valid thumbnail
-  return newsResults.filter(hasValidThumbnail);
+  return newsResults.filter((item) => isOfficialThumbnail(item.imageUrl));
 }
 
 /**
- * Fetch Top Global Anime News cleanly with 6-hour caching & automatic 2-second retries
+ * Fetch Top Global Anime News cleanly with 6-hour caching, retries, and strict official thumbnail filtering
  */
 export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
-  // Page 1 can return cached news if available
   if (page === 1) {
     const cached = getCachedNews();
     if (cached && cached.length > 0) {
@@ -226,12 +220,12 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
 
   const allNews: NewsItem[] = [];
 
-  // 1. Query AniList GraphQL with retry
+  // 1. Query AniList GraphQL for trending media announcements with official cover images
   try {
     const fetchAniList = async () => {
       const query = `
         query ($page: Int) {
-          Page(page: $page, perPage: 12) {
+          Page(page: $page, perPage: 15) {
             media(type: ANIME, sort: TRENDING_DESC) {
               id
               title {
@@ -280,39 +274,43 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
 
     const json = await fetchWithRetry(fetchAniList, 3, 2000);
     const mediaList = json.data?.Page?.media || [];
-    const trendNews: NewsItem[] = mediaList.map((m: any, idx: number) => {
-      const studioName = m.studios?.nodes?.[0]?.name || 'Official Studio';
-      const rawDesc = m.description || '';
-      const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
-      const shortSummary = cleanDesc.slice(0, 180) + '...';
-      const animeName = m.title.userPreferred || m.title.english || 'Anime Series';
-      const coverArt = m.bannerImage || m.coverImage?.extraLarge || m.coverImage?.large;
+    const trendNews: NewsItem[] = mediaList
+      .map((m: any) => {
+        const studioName = m.studios?.nodes?.[0]?.name || 'Official Studio';
+        const rawDesc = m.description || '';
+        const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
+        const shortSummary = cleanDesc.slice(0, 180) + '...';
+        const animeName = m.title.userPreferred || m.title.english || 'Anime Series';
+        const officialCover = m.bannerImage || m.coverImage?.extraLarge || m.coverImage?.large;
 
-      const fullStory = `Official Production Update for ${animeName}:\n\n${cleanDesc}\n\nProduction & Broadcast Details:\nProduced by ${studioName}, this title continues to garner immense global popularity. The creative staff has emphasized high-fidelity animation, dynamic battle sequences, and immersive soundscapes.\n\nCatch full episode streams, character breakdowns, and episode countdowns directly on AniLove2!`;
+        if (!isOfficialThumbnail(officialCover)) return null;
 
-      return {
-        id: `trend-news-${m.id}-p${page}`,
-        title: `${animeName} • Official Production & Broadcast Announcement`,
-        summary: shortSummary,
-        fullContent: fullStory,
-        imageUrl: getSafeNewsThumbnail(coverArt, animeName, idx),
-        date: m.startDate?.year ? `${m.startDate.year}` : 'Current Season',
-        source: 'Official Announcement',
-        url: m.siteUrl || '#',
-        author: studioName,
-        commentsCount: 35,
-        animeId: m.id,
-        animeTitle: animeName,
-        category: 'Announcement' as const,
-      };
-    });
+        const fullStory = `Official Production Update for ${animeName}:\n\n${cleanDesc}\n\nProduction & Broadcast Details:\nProduced by ${studioName}, this title continues to garner immense global popularity. The creative staff has emphasized high-fidelity animation, dynamic battle sequences, and immersive soundscapes.\n\nCatch full episode streams, character breakdowns, and episode countdowns directly on AniLove2!`;
+
+        return {
+          id: `trend-news-${m.id}-p${page}`,
+          title: `${animeName} • Official Production & Broadcast Announcement`,
+          summary: shortSummary,
+          fullContent: fullStory,
+          imageUrl: officialCover,
+          date: m.startDate?.year ? `${m.startDate.year}` : 'Current Season',
+          source: 'Official Announcement',
+          url: m.siteUrl || '#',
+          author: studioName,
+          commentsCount: 35,
+          animeId: m.id,
+          animeTitle: animeName,
+          category: 'Announcement' as const,
+        };
+      })
+      .filter((item): item is NewsItem => item !== null);
 
     allNews.push(...trendNews);
   } catch (err) {
     console.warn('AniList news fetch retry failed:', err);
   }
 
-  // 2. Fetch live RSS news via public RSS2JSON API with retry
+  // 2. Fetch live RSS news via public RSS2JSON API - Strict thumbnail filter applied
   try {
     const fetchRSS = async () => {
       const rssUrl = encodeURIComponent('https://www.animenewsnetwork.com/news/rss.xml?s=all');
@@ -330,41 +328,39 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
 
     const json = await fetchWithRetry(fetchRSS, 3, 2000);
     if (json.status === 'ok' && Array.isArray(json.items)) {
-      const parsedItems: NewsItem[] = json.items.map((item: any, idx: number) => {
-        let img = item.thumbnail || item.enclosure?.link;
-        if (!img && item.description) {
-          const imgMatch = item.description.match(/<img[^>]+src="([^">]+)"/);
-          if (imgMatch && imgMatch[1]) {
-            img = imgMatch[1];
-          }
-        }
+      const parsedItems: NewsItem[] = json.items
+        .map((item: any, idx: number) => {
+          const officialImg = extractRssOfficialImage(item);
+          // Drop item if it has no official thumbnail image!
+          if (!officialImg) return null;
 
-        const rawDesc = item.description || item.content || '';
-        const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
-        const shortSummary = cleanDesc.slice(0, 180) + '...';
+          const rawDesc = item.description || item.content || '';
+          const cleanDesc = rawDesc.replace(/<[^>]*>?/gm, '').trim();
+          const shortSummary = cleanDesc.slice(0, 180) + '...';
 
-        const fullStory = `${cleanDesc}\n\nIndustry Context & Commentary:\nThis news update represents key developments across the anime and light novel adaptation landscape. Creators and voice cast members have shared optimistic outlooks for the upcoming broadcast window.\n\nFor more updates, trailers, and episode tracking, check back regularly on AniLove2.`;
+          const fullStory = `${cleanDesc}\n\nIndustry Context & Commentary:\nThis news update represents key developments across the anime and light novel adaptation landscape. Creators and voice cast members have shared optimistic outlooks for the upcoming broadcast window.\n\nFor more updates, trailers, and episode tracking, check back regularly on AniLove2.`;
 
-        return {
-          id: `rss-p${page}-${idx}-${Date.now()}`,
-          title: item.title,
-          summary: shortSummary,
-          fullContent: fullStory,
-          imageUrl: getSafeNewsThumbnail(img, item.title, idx),
-          date: item.pubDate
-            ? new Date(item.pubDate).toLocaleDateString(undefined, {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })
-            : 'Latest Update',
-          source: 'Industry News',
-          url: item.link || '#',
-          author: item.author || 'Editorial Desk',
-          commentsCount: 22,
-          category: 'General' as const,
-        };
-      });
+          return {
+            id: `rss-p${page}-${idx}-${Date.now()}`,
+            title: item.title,
+            summary: shortSummary,
+            fullContent: fullStory,
+            imageUrl: officialImg,
+            date: item.pubDate
+              ? new Date(item.pubDate).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : 'Latest Update',
+            source: 'Industry News',
+            url: item.link || '#',
+            author: item.author || 'Editorial Desk',
+            commentsCount: 22,
+            category: 'General' as const,
+          };
+        })
+        .filter((item): item is NewsItem => item !== null);
 
       allNews.push(...parsedItems);
     }
@@ -372,13 +368,8 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
     console.warn('RSS news fetch retry failed:', err);
   }
 
-  // Ensure rich fallback news if network requests yield few items
-  if (allNews.length < 5) {
-    allNews.push(...getCuratedFallbackNews());
-  }
-
-  // Strict thumbnail rule: Filter out any items without a valid thumbnail!
-  const validNews = allNews.filter(hasValidThumbnail);
+  // Strict thumbnail rule: Filter out ANY item without an official thumbnail!
+  const validNews = allNews.filter((item) => isOfficialThumbnail(item.imageUrl));
 
   // Deduplicate by title
   const uniqueNews = Array.from(new Map(validNews.map((item) => [item.title, item])).values());
@@ -393,15 +384,13 @@ export async function fetchGlobalAnimeNews(page = 1): Promise<NewsItem[]> {
 
 /**
  * Background pre-warming function called immediately on app start.
- * If cache is expired or clean, fetches news immediately in background so it's ready when user opens News!
  */
 export async function prewarmAnimeNewsOnAppStart(library: Anime[] = []): Promise<void> {
   const cached = getCachedNews();
   if (cached && cached.length > 0) {
-    return; // Valid 6-hour cache exists!
+    return;
   }
 
-  // Cache is missing or expired -> Fetch in background immediately!
   try {
     const [globalNews] = await Promise.all([
       fetchGlobalAnimeNews(1),
@@ -413,77 +402,4 @@ export async function prewarmAnimeNewsOnAppStart(library: Anime[] = []): Promise
   } catch (err) {
     console.warn('Background news prewarm error:', err);
   }
-}
-
-/**
- * Rich fallback anime news with valid thumbnails
- */
-function getCuratedFallbackNews(): NewsItem[] {
-  return [
-    {
-      id: 'curated-1',
-      title: 'Solo Leveling Season 2: Arise from the Shadow Official Premiere Window & Key Visual Revealed',
-      summary: 'A-1 Pictures and Crunchyroll have officially revealed the premiere window, expanded cast, and action-packed key visual for Solo Leveling Season 2.',
-      fullContent: `A-1 Pictures and Crunchyroll have officially revealed the premiere window, expanded voice cast, and an action-packed key visual for Solo Leveling Season 2: Arise from the Shadow.\n\nStory Overview:\nFollowing the thrilling climax of Season 1, Shadow Monarch Sung Jinwoo faces formidable S-Rank dungeons, Jeju Island raiding arc, and the emergence of ancient Monarch threats.\n\nProduction Staff:\n• Studio: A-1 Pictures\n• Music: Hiroyuki Sawano\n• Director: Shunsuke Nakashige\n\nSeason 2 promises higher-budget animation sequences, expanded webtoon lore, and global simultaneous streaming on AniLove2!`,
-      imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-      date: 'Today',
-      source: 'Official Announcement',
-      url: '#',
-      author: 'A-1 Pictures',
-      commentsCount: 88,
-      category: 'Announcement',
-    },
-    {
-      id: 'curated-2',
-      title: 'Jujutsu Kaisen Culling Game Arc Formally Confirmed in Production by MAPPA',
-      summary: 'Following the dramatic conclusion of the Shibuya Incident, Studio MAPPA has announced that the next major arc enters active animation production.',
-      fullContent: `Studio MAPPA has officially confirmed that Jujutsu Kaisen: Culling Game Arc is currently in active animation production.\n\nArc Highlights:\nNoritoshi Kamo / Kenjaku unleashes a deadly sorcerer battle royale tournament across Japan. Yuji Itadori, Yuta Okkotsu, and Megumi Fushiguro must navigate deadly barrier rules to rescue Megumi's sister and unseal Satoru Gojo.\n\nVisuals & Audio:\nDirector Sunghoo Park and the core MAPPA staff return to deliver movie-quality sorcery choreography and sound design. Watch the teaser trailers and track episode countdowns directly on AniLove2!`,
-      imageUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=800&auto=format&fit=crop&q=80',
-      date: 'Yesterday',
-      source: 'Industry Update',
-      url: '#',
-      author: 'Studio MAPPA',
-      commentsCount: 142,
-      category: 'General',
-    },
-    {
-      id: 'curated-3',
-      title: 'Demon Slayer: Hashira Training Arc World Tour & Feature Film Details Released',
-      summary: 'Ufotable announces the global theatrical release and broadcast schedule for the Hashira Training Arc with enhanced theatrical IMAX visuals.',
-      fullContent: `Ufotable and Aniplex have announced the global World Tour and theatrical screening event for Demon Slayer: Hashira Training Arc.\n\nEvent Overview:\nThe special theatrical cut bridges the conclusion of the Swordsmith Village Arc with the first episode of the Hashira Training Arc, remastered in 4K resolution with Dolby Atmos audio.\n\nCast Commentary:\nNatsuki Hanae (Tanjiro Kamado) and the Hashira voice actors shared gratitude for global fanbase support. Stream the complete Demon Slayer series in full HD on AniLove2!`,
-      imageUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80',
-      date: '2 days ago',
-      source: 'Official Announcement',
-      url: '#',
-      author: 'Ufotable',
-      commentsCount: 95,
-      category: 'Announcement',
-    },
-    {
-      id: 'curated-4',
-      title: 'Chainsaw Man Movie: Reze Arc Theatrical Release Window & Teaser Revealed',
-      summary: 'MAPPA releases the high-octane teaser trailer for Chainsaw Man Movie: Reze Arc, promising cinematic animation and global theatrical release dates.',
-      fullContent: `Studio MAPPA has unveiled the first trailer and teaser visual for Chainsaw Man The Movie: Reze Arc.\n\nMovie Context:\nAdapting one of the most beloved manga arcs, the film follows Denji's encounter with Reze, a mysterious cafe worker whose explosive secret turns Denji's world upside down.\n\nProduction Quality:\nFeature-film budgeting allows MAPPA to push character acting and cinematic action choreography to new heights. Follow AniLove2 for release calendar updates!`,
-      imageUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80',
-      date: '3 days ago',
-      source: 'Official Announcement',
-      url: '#',
-      author: 'Studio MAPPA',
-      commentsCount: 210,
-      category: 'Announcement',
-    },
-    {
-      id: 'curated-5',
-      title: 'Bleach: Thousand-Year Blood War Part 3 Conflict Key Visual & Cast Interview',
-      summary: 'Studio Pierrot drops new concept art and creator commentary highlighting pivotal battles in the upcoming conflict arc of Bleach TYBW.',
-      fullContent: `Studio Pierrot and Tite Kubo have revealed new key visuals and staff commentary for Bleach: Thousand-Year Blood War Part 3 - The Conflict.\n\nStory Overview:\nIchigo Kurosaki and the Gotei 13 Soul Reapers launch their assault on the Royal Realm to confront Yhwach and the Sternritter Elite Guard.\n\nEnhanced Animation:\nPart 3 features original anime-exclusive scenes supervised directly by author Tite Kubo, offering expanded lore and Bankai reveals!`,
-      imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80',
-      date: '4 days ago',
-      source: 'Industry Update',
-      url: '#',
-      author: 'Studio Pierrot',
-      commentsCount: 76,
-      category: 'General',
-    },
-  ];
 }
