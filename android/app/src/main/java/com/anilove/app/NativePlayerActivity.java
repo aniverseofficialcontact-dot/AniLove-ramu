@@ -184,6 +184,12 @@ public class NativePlayerActivity extends AppCompatActivity {
     private String currentActiveSourceName = "";
     private final Map<String, Map<String, String>> activeLanguageQualityMap = new HashMap<>();
 
+    public boolean is18PlusActive() {
+        return (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains("hentaiocean")) ||
+               (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean")) ||
+               "HentaiOcean".equalsIgnoreCase(currentActiveSourceName);
+    }
+
     private void injectAdEraserScript(WebView webView) {
         if (webView == null || !isWebViewPlayerMode || webView.getVisibility() != View.VISIBLE) return;
         String script =
@@ -1058,6 +1064,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             playerWebView.setWebViewClient(new WebViewClient() {
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (is18PlusActive()) {
+                        return super.shouldInterceptRequest(view, request);
+                    }
                     if (request != null && request.getUrl() != null) {
                         String url = request.getUrl().toString();
                         if (isAdUrl(url)) {
@@ -1073,6 +1082,13 @@ public class NativePlayerActivity extends AppCompatActivity {
                     if (request != null && request.getUrl() != null) {
                         String url = request.getUrl().toString().toLowerCase();
                         String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
+
+                        if (is18PlusActive()) {
+                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("whatsapp://") || url.startsWith("tg://")) {
+                                return true;
+                            }
+                            return false;
+                        }
 
                         // 1. ALWAYS block YouTube, external app links, and ad domains across all frame levels
                         if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||

@@ -16,6 +16,7 @@ import { ProVideoPlayer } from './ProVideoPlayer';
 import { AnimeWatchOrderTab } from './AnimeWatchOrderTab';
 import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
 import { getAnimeReleaseStatus } from '../services/releaseHelper';
+import { getStoredSettings } from '../services/storage';
 import {
   checkIsFillerEpisode,
   getArcOrFormattedTitle,
@@ -163,7 +164,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     setSelectedEpisodeRange('all');
     setShowFullSynopsis(false);
 
-    const is18PlusTitle = Boolean((anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult || settings?.is18PlusMode);
+    const is18PlusTitle = Boolean((anime as any)?.is18Plus || (anime as any)?.slug || getStoredSettings().is18PlusMode);
 
     if (is18PlusTitle) {
       setDetails(anime as any);

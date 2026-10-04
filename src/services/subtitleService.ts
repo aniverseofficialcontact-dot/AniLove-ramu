@@ -4,6 +4,8 @@
  * https://subtitles-l8cm.onrender.com/subtitles.php
  */
 
+import { getStoredSettings } from './storage';
+
 export interface RawSubtitleTrack {
   id: string;
   provider: string; // "HiAnime" | "SubtitleCat" | etc.
@@ -89,6 +91,7 @@ export function evictSubtitleCache(anilistId: number, epNum: number): void {
  */
 export async function fetchUnifiedSubtitles(anilistId: number, epNum: number, timeoutMs: number = 3000): Promise<RawSubtitleTrack[]> {
   if (!anilistId || !epNum) return [];
+  if (getStoredSettings().is18PlusMode) return [];
 
   // Check 3-day local cache first
   const cached = getCachedSubtitles(anilistId, epNum);
