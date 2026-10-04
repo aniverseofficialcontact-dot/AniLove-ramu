@@ -656,10 +656,10 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void applyWindowSettings(Intent intent) {
         if (intent == null) intent = getIntent();
-        if (!hasInitializedWindowSettings) {
-            isFullscreenMode = intent != null && intent.getBooleanExtra("startFullscreen", false);
-            hasInitializedWindowSettings = true;
+        if (intent != null && intent.hasExtra("startFullscreen")) {
+            isFullscreenMode = intent.getBooleanExtra("startFullscreen", false);
         }
+        hasInitializedWindowSettings = true;
         isOfflineMode = intent != null && intent.getBooleanExtra("offlineMode", isOfflineMode);
         if (intent != null && intent.hasExtra("yOffset")) {
             currentY = intent.getIntExtra("yOffset", 0);
@@ -721,6 +721,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
                 View topBar = findViewById(R.id.top_bar);
+                View topCenterBar = findViewById(R.id.top_center_button_bar);
                 
                 if (videoRoot != null) {
                     ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
@@ -730,6 +731,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
                 if (statusBarFiller != null) statusBarFiller.setVisibility(View.GONE);
+                if (topCenterBar != null) topCenterBar.setVisibility(View.GONE);
                 if (topBar != null) {
                     topBar.setVisibility(View.VISIBLE);
                     int safeTopPadding = (int) (14 * getResources().getDisplayMetrics().density);
@@ -764,6 +766,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
                 View topBar = findViewById(R.id.top_bar);
+                View topCenterBar = findViewById(R.id.top_center_button_bar);
                 
                 if (videoRoot != null) {
                     ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
@@ -772,6 +775,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     videoRoot.setLayoutParams(lp);
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
+                if (topCenterBar != null) topCenterBar.setVisibility(View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -818,6 +822,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
                 View statusBarFiller = findViewById(R.id.status_bar_filler);
                 View topBar = findViewById(R.id.top_bar);
+                View topCenterBar = findViewById(R.id.top_center_button_bar);
                 
                 if (videoRoot != null) {
                     ViewGroup.LayoutParams lp = videoRoot.getLayoutParams();
@@ -826,6 +831,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     videoRoot.setLayoutParams(lp);
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
+                if (topCenterBar != null) topCenterBar.setVisibility(View.VISIBLE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -855,49 +861,15 @@ public class NativePlayerActivity extends AppCompatActivity {
             isFullscreenMode = !isFullscreenMode;
             Log.i("AniLove_Fullscreen", "toggleFullscreenInPlace | isFullscreen: " + isFullscreenMode);
 
-            if (isFullscreenMode) {
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                if (isWebViewPlayerMode && playerWebView != null) {
-                    String js =
-                        "(function() {" +
-                        "  var v = document.querySelector('video');" +
-                        "  if (v) {" +
-                        "    if (v.requestFullscreen) v.requestFullscreen();" +
-                        "    else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();" +
-                        "  }" +
-                        "})();";
-                    playerWebView.evaluateJavascript(js, null);
-                }
-            } else {
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-                if (isWebViewPlayerMode && playerWebView != null) {
-                    String js =
-                        "(function() {" +
-                        "  if (document.exitFullscreen) document.exitFullscreen();" +
-                        "  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();" +
-                        "})();";
-                    playerWebView.evaluateJavascript(js, null);
-                }
-            }
+            int targetOrientation = isFullscreenMode 
+                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE 
+                : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+            NativePlayerPlugin.setScreenOrientation(targetOrientation);
+            setRequestedOrientation(targetOrientation);
 
-            View topContainer = findViewById(R.id.video_root_container);
-            if (topContainer != null) {
-                topContainer.animate()
-                        .scaleX(isFullscreenMode ? 1.04f : 0.96f)
-                        .scaleY(isFullscreenMode ? 1.04f : 0.96f)
-                        .setDuration(120)
-                        .withEndAction(() -> {
-                            topContainer.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start();
-                            Intent intent = getIntent();
-                            intent.putExtra("startFullscreen", isFullscreenMode);
-                            applyWindowSettings(intent);
-                        })
-                        .start();
-            } else {
-                Intent intent = getIntent();
-                intent.putExtra("startFullscreen", isFullscreenMode);
-                applyWindowSettings(intent);
-            }
+            Intent intent = getIntent();
+            if (intent != null) intent.putExtra("startFullscreen", isFullscreenMode);
+            applyWindowSettings(intent);
         });
     }
 

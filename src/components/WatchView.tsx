@@ -847,56 +847,30 @@ export const WatchView: React.FC<WatchViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSortAsc(prev => !prev)}
-                className={`p-2.5 rounded-2xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
-                  !sortAsc
-                    ? 'bg-indigo-600/90 border-indigo-400 text-white shadow-md shadow-indigo-600/20'
-                    : 'bg-[#0d101a] hover:bg-[#141926] border-white/10 text-neutral-300 hover:text-white'
-                }`}
+                className="p-2.5 rounded-2xl bg-[#0d101a] hover:bg-[#141926] border border-white/10 text-neutral-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
                 title={sortAsc ? 'Sort Descending (Newest first)' : 'Sort Ascending (Oldest first)'}
               >
-                <ArrowUpDown className="w-4 h-4 text-indigo-400" />
+                <ArrowUpDown className="w-4 h-4 text-neutral-300" />
                 <span className="hidden md:inline text-xs">{sortAsc ? '1-N' : 'N-1'}</span>
               </button>
 
-              {/* Grid / List / Compact Layout Switcher */}
-              <div className="flex items-center bg-[#0d101a] border border-white/10 p-1 rounded-2xl shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setEpisodeViewMode('grid')}
-                  className={`p-1.5 rounded-xl transition cursor-pointer ${
-                    episodeViewMode === 'grid'
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title="Card Grid layout"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEpisodeViewMode('list')}
-                  className={`p-1.5 rounded-xl transition cursor-pointer ${
-                    episodeViewMode === 'list'
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title="Detailed List layout"
-                >
-                  <List className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEpisodeViewMode('compact')}
-                  className={`p-1.5 rounded-xl transition cursor-pointer ${
-                    episodeViewMode === 'compact'
-                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title="Compact Number Tiles layout"
-                >
-                  <Hash className="w-4 h-4" />
-                </button>
-              </div>
+              {/* Grid / List / Compact Layout Cycling Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEpisodeViewMode(prev => {
+                    if (prev === 'grid') return 'list';
+                    if (prev === 'list') return 'compact';
+                    return 'grid';
+                  });
+                }}
+                className="p-2.5 rounded-2xl bg-[#0d101a] hover:bg-[#141926] border border-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
+              >
+                {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-neutral-300" />}
+                {episodeViewMode === 'list' && <List className="w-4 h-4 text-neutral-300" />}
+                {episodeViewMode === 'compact' && <Hash className="w-4 h-4 text-neutral-300" />}
+              </button>
             </div>
 
             {/* Episode Range Chunks for Long Series */}

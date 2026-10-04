@@ -1397,28 +1397,16 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                               <X className="w-3.5 h-3.5" />
                             </button>
                           )}
-                        </div>
-
-                        <div className="flex items-center gap-1 bg-[#121628] border border-slate-800 p-1 rounded-xl shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setEpisodeViewMode('list')}
-                            className={`p-1.5 rounded-lg transition ${
-                              episodeViewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <List className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEpisodeViewMode('grid')}
-                            className={`p-1.5 rounded-lg transition ${
-                              episodeViewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <LayoutGrid className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {/* List vs Grid Switcher */}
+                        <button
+                          type="button"
+                          onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
+                          className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                          title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
+                        >
+                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
+                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
+                        </button>
                       </div>
 
                       {/* Episode List Rows with Highlighted Active Item */}
@@ -1536,28 +1524,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                         </div>
 
                         {/* List vs Grid Switcher */}
-                        <div className="flex items-center gap-1 bg-[#121628] border border-slate-800 p-1 rounded-xl shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setEpisodeViewMode('list')}
-                            className={`p-1.5 rounded-lg transition ${
-                              episodeViewMode === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                            }`}
-                            title="List View"
-                          >
-                            <List className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEpisodeViewMode('grid')}
-                            className={`p-1.5 rounded-lg transition ${
-                              episodeViewMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-                            }`}
-                            title="Grid View"
-                          >
-                            <LayoutGrid className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
+                          className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                          title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
+                        >
+                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
+                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
+                        </button>
                       </div>
 
                       {/* Episode Range Filter Bar for Anime with >50 Episodes */}
