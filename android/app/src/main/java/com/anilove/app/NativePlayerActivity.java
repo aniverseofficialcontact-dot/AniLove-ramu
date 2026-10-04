@@ -854,8 +854,33 @@ public class NativePlayerActivity extends AppCompatActivity {
     private void toggleFullscreenInPlace() {
         new Handler(Looper.getMainLooper()).post(() -> {
             isFullscreenMode = !isFullscreenMode;
-            Log.i("AniLove", "toggleFullscreenInPlace | now: " + isFullscreenMode);
-            
+            Log.i("AniLove_Fullscreen", "toggleFullscreenInPlace | isFullscreen: " + isFullscreenMode);
+
+            if (isFullscreenMode) {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                if (isWebViewPlayerMode && playerWebView != null) {
+                    String js =
+                        "(function() {" +
+                        "  var v = document.querySelector('video');" +
+                        "  if (v) {" +
+                        "    if (v.requestFullscreen) v.requestFullscreen();" +
+                        "    else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();" +
+                        "  }" +
+                        "})();";
+                    playerWebView.evaluateJavascript(js, null);
+                }
+            } else {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                if (isWebViewPlayerMode && playerWebView != null) {
+                    String js =
+                        "(function() {" +
+                        "  if (document.exitFullscreen) document.exitFullscreen();" +
+                        "  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();" +
+                        "})();";
+                    playerWebView.evaluateJavascript(js, null);
+                }
+            }
+
             View topContainer = findViewById(R.id.video_root_container);
             if (topContainer != null) {
                 topContainer.animate()
@@ -981,6 +1006,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                         if (isAdUrl(lower) || host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg")) {
                             Log.i("AniLove_AdBlock", "Blocked ad redirect: " + url);
                             return true;
+                        }
+
+                        // Strict HentaiOcean Domain Lock:
+                        // Disallow any top-level or popup navigation away from HentaiOcean domain & video CDN
+                        if (is18PlusActive() || (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean"))) {
+                            if (!host.contains("hentaiocean") && !host.contains("pyyokibh") && !host.contains("localhost")) {
+                                Log.i("AniLove_AdBlock", "KILLED 18+ ad redirect to external domain: " + host + " (" + url + ")");
+                                return true; // CANCEL AD REDIRECT!
+                            }
                         }
 
                         if (request.isForMainFrame()) {
