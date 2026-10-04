@@ -615,6 +615,21 @@ export function App() {
     handleUpdateStatus(anime, status);
   }, [handleUpdateStatus]);
 
+  // Open Direct Stream / Watch with Live Resume
+  const handlePlayStream = useCallback((anime: Anime, episodeNumber?: number, startTime?: number) => {
+    const epNum = episodeNumber || 1;
+    setIsDetailModalOpen(false);
+    setIs3DCardModalOpen(false);
+    setActiveWatchEpisode({
+      anime,
+      episodeNumber: epNum,
+      startTime: startTime || 0,
+    });
+    if (!Capacitor.isNativePlatform()) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
   // Open Details Modal (or directly play stream if in 18+ Secret Profile Mode)
   const handleOpenDetails = useCallback((anime: Anime) => {
     if (settings.is18PlusMode || (anime as any)?.is18Plus) {
@@ -645,21 +660,6 @@ export function App() {
     setIs3DCardModalOpen(true);
     soundEffects.playCardFlip();
   }, [settings.is18PlusMode, settings.enable3DCardPreview, handleOpenDetails]);
-
-  // Open Direct Stream / Watch with Live Resume
-  const handlePlayStream = useCallback((anime: Anime, episodeNumber?: number, startTime?: number) => {
-    const epNum = episodeNumber || 1;
-    setIsDetailModalOpen(false);
-    setIs3DCardModalOpen(false);
-    setActiveWatchEpisode({
-      anime,
-      episodeNumber: epNum,
-      startTime: startTime || 0,
-    });
-    if (!Capacitor.isNativePlatform()) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, []);
 
   const currentWatchingAnimeRef = React.useRef<Anime | null>(null);
   const activeWatchEpisodeRef = React.useRef(activeWatchEpisode);
