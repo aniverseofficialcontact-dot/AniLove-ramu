@@ -615,8 +615,12 @@ export function App() {
     handleUpdateStatus(anime, status);
   }, [handleUpdateStatus]);
 
-  // Open Details Modal with stacked history support
+  // Open Details Modal (or directly play stream if in 18+ Secret Profile Mode)
   const handleOpenDetails = useCallback((anime: Anime) => {
+    if (settings.is18PlusMode || (anime as any)?.is18Plus) {
+      handlePlayStream(anime);
+      return;
+    }
     setSelectedAnime(prev => {
       if (prev && prev.id !== anime.id) {
         setAnimeDetailsHistory(historyPrev => [...historyPrev, prev]);
@@ -629,18 +633,18 @@ export function App() {
     setStreamInitialTime(undefined);
     setStartInWatchMode(false);
     setIsDetailModalOpen(true);
-  }, []);
+  }, [settings.is18PlusMode, handlePlayStream]);
 
   // Open 360° 3D Anime Card Modal (or bypass to details if disabled in settings)
   const handleInspect3DCard = useCallback((anime: Anime) => {
-    if (settings.enable3DCardPreview === false) {
+    if (settings.is18PlusMode || (anime as any)?.is18Plus || settings.enable3DCardPreview === false) {
       handleOpenDetails(anime);
       return;
     }
     setSelectedAnimeFor3D(anime);
     setIs3DCardModalOpen(true);
     soundEffects.playCardFlip();
-  }, [settings.enable3DCardPreview, handleOpenDetails]);
+  }, [settings.is18PlusMode, settings.enable3DCardPreview, handleOpenDetails]);
 
   // Open Direct Stream / Watch with Live Resume
   const handlePlayStream = useCallback((anime: Anime, episodeNumber?: number, startTime?: number) => {

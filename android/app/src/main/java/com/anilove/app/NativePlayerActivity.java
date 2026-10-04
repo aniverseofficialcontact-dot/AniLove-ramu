@@ -989,6 +989,50 @@ public class NativePlayerActivity extends AppCompatActivity {
                     }
                     return false;
                 }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    if (view != null) {
+                        String autoClickScript =
+                            "(function() {" +
+                            "  function autoTrigger(win) {" +
+                            "    try {" +
+                            "      if (!win.document) return;" +
+                            "      var vids = win.document.querySelectorAll('video');" +
+                            "      for (var i = 0; i < vids.length; i++) {" +
+                            "        vids[i].muted = false;" +
+                            "        vids[i].play().catch(function(){});" +
+                            "      }" +
+                            "      var btns = win.document.querySelectorAll('button, .play-btn, .play, #playback, .jw-display-icon, div[class*=\"play\"]');" +
+                            "      for (var j = 0; j < btns.length; j++) {" +
+                            "        try { btns[j].click(); } catch(e){}" +
+                            "      }" +
+                            "    } catch(e) {}" +
+                            "    try {" +
+                            "      for (var k = 0; k < win.frames.length; k++) {" +
+                            "        autoTrigger(win.frames[k]);" +
+                            "      }" +
+                            "    } catch(e) {}" +
+                            "  }" +
+                            "  autoTrigger(window);" +
+                            "  setTimeout(function(){ autoTrigger(window); }, 500);" +
+                            "  setTimeout(function(){ autoTrigger(window); }, 1200);" +
+                            "})();";
+                        view.evaluateJavascript(autoClickScript, null);
+                    }
+                }
+            });
+
+            playerWebView.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.performClick();
+                    float x = event.getX();
+                    float y = event.getY();
+                    String clickScript = "var el = document.elementFromPoint(" + x + ", " + y + "); if (el) el.click();";
+                    playerWebView.evaluateJavascript(clickScript, null);
+                }
+                return false;
             });
         }
 
