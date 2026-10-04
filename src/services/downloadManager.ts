@@ -201,7 +201,9 @@ export async function queueBatchEpisodeDownloads(
 
   // 2. MovieBox (Multi-Lang) Batch Streams Pre-fetch
   const movieBoxMap: Record<number, string> = {};
-  const isMovieBox = serverName.toLowerCase().includes('multi-lang') || serverName.toLowerCase().includes('moviebox');
+  const isMovieBox = serverName.toLowerCase().includes('multi-lang') ||
+                     serverName.toLowerCase().includes('moviebox') ||
+                     (!serverName.toLowerCase().includes('server') && !serverName.toLowerCase().includes('animesalt'));
 
   if (isMovieBox) {
     try {

@@ -31,6 +31,7 @@ import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -478,19 +479,88 @@ public class EpisodeDownloadService extends Service {
         return rawUrl;
     }
 
+    private String fetchFreshMovieBoxStreamUrl(DownloadItem item) {
+        try {
+            String audioParam = item.audio != null ? item.audio : "English";
+            if ("SUB".equalsIgnoreCase(audioParam)) audioParam = "Japanese";
+            else if ("DUB".equalsIgnoreCase(audioParam)) audioParam = "English";
+            else if ("HIN".equalsIgnoreCase(audioParam)) audioParam = "Hindi";
+            else if ("TAM".equalsIgnoreCase(audioParam)) audioParam = "Tamil";
+            else if ("TEL".equalsIgnoreCase(audioParam)) audioParam = "Telugu";
+
+            String urlStr = "https://moviebox-api-mklm.onrender.com/api/anime/batch-download?title="
+                + URLEncoder.encode(item.animeTitle, "UTF-8")
+                + "&episodes=" + item.episodeNumber
+                + "&se=1&audio=" + URLEncoder.encode(audioParam, "UTF-8")
+                + "&quality=" + (item.quality != null ? item.quality : "1080p");
+
+            HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
+            c.setConnectTimeout(25000);
+            c.setReadTimeout(35000);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0");
+            c.setRequestProperty("Accept", "application/json");
+
+            if (c.getResponseCode() == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+
+                JSONObject obj = new JSONObject(sb.toString());
+                JSONArray eps = obj.optJSONArray("episodes");
+                if (eps != null && eps.length() > 0) {
+                    JSONObject first = eps.optJSONObject(0);
+                    if (first != null) {
+                        return first.optString("direct_download_url", "");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed refreshing fresh MovieBox stream URL: " + e.getMessage());
+        }
+        return null;
+    }
+
     private void downloadDirectVideo(DownloadItem item, File targetFile) throws Exception {
         long existingLength = targetFile.exists() ? targetFile.length() : 0;
         item.bytesDownloaded = existingLength;
 
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
-        HttpURLConnection conn = openConnectionWithHeaders(item.streamUrl, referer);
+        HttpURLConnection conn = null;
+        int responseCode = 0;
 
-        if (existingLength > 0) {
-            conn.setRequestProperty("Range", "bytes=" + existingLength + "-");
+        try {
+            conn = openConnectionWithHeaders(item.streamUrl, referer);
+            if (existingLength > 0) {
+                conn.setRequestProperty("Range", "bytes=" + existingLength + "-");
+            }
+            conn.connect();
+            responseCode = conn.getResponseCode();
+        } catch (Exception connErr) {
+            Log.w(TAG, "Initial connection error: " + connErr.getMessage() + ". Attempting URL refresh...");
         }
-        conn.connect();
 
-        int responseCode = conn.getResponseCode();
+        // Auto-refresh expired URL if connection failed or returned HTTP 403 / 410 / 400
+        if (responseCode == 403 || responseCode == 410 || responseCode == 400 || responseCode == 0) {
+            String freshUrl = fetchFreshMovieBoxStreamUrl(item);
+            if (freshUrl != null && !freshUrl.isEmpty()) {
+                Log.i(TAG, "Successfully refreshed fresh MovieBox URL for EP " + item.episodeNumber);
+                item.streamUrl = freshUrl;
+                item.pageUrl = "https://netfilm.world/";
+                referer = "https://netfilm.world/";
+                conn = openConnectionWithHeaders(item.streamUrl, referer);
+                if (existingLength > 0) {
+                    conn.setRequestProperty("Range", "bytes=" + existingLength + "-");
+                }
+                conn.connect();
+                responseCode = conn.getResponseCode();
+            }
+        }
+
+        if (responseCode != 200 && responseCode != 206) {
+            throw new Exception("HTTP " + responseCode + " downloading video stream");
+        }
         boolean isPartial = (responseCode == HttpURLConnection.HTTP_PARTIAL);
 
         long contentLength = conn.getContentLength();
@@ -602,8 +672,8 @@ public class EpisodeDownloadService extends Service {
                 conn.setRequestProperty("Origin", u.getProtocol() + "://" + u.getHost());
             } catch (Exception ignored) {}
 
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(25000);
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(45000);
 
             int code = conn.getResponseCode();
             if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP
