@@ -552,6 +552,29 @@ export async function resolveEpisodeSource({
   const reqServer = (serverName || '').toLowerCase().trim();
   const combined = `${reqSrc} ${reqServer}`;
 
+  // ROUTE 0: HentaiOcean 18+ Source
+  if ((anime as any).is18Plus || (anime as any).slug || combined.includes('hentaiocean')) {
+    const slug = (anime as any).slug || 'my-mother-1';
+    const embedUrl = `https://hentaiocean.com/embed/${slug}?la=1`;
+    return {
+      status: 'available',
+      source: {
+        provider: DEFAULT_PROVIDER,
+        url: embedUrl,
+        language: 'SUB',
+        resolution: '1080p',
+        isEmbeddable: true,
+        external: false,
+        skipData: { intro: [0, 0], outro: [0, 0] },
+        availableServers: [{ name: 'HentaiOcean Engine', type: '18+', linkId: embedUrl }],
+        availableLanguages: ['SUB'],
+        availableResolutions: ['1080p'],
+        selectedServerName: 'HentaiOcean Engine',
+        isDubAvailable: false,
+      },
+    };
+  }
+
   // ROUTE 1: Multi-Lang (MovieBox) Source
   if (combined.includes('multi-lang') || combined.includes('multilang') || combined.includes('moviebox')) {
     const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);

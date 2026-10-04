@@ -74,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          {/* Top-Left: Three-Line Menu Trigger Button */}
+          {/* Top-Left: Three-Line Menu Trigger Button & Optional 18+ Profile Badge */}
           <div className="flex items-center gap-3">
             <button
               id="nav-grid-menu-btn"
@@ -94,6 +94,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Menu
               </span>
             </button>
+
+            {settings.is18PlusMode && (
+              <button
+                onClick={() => onSelectTab('account')}
+                className="px-2.5 py-1.5 rounded-xl bg-red-600/20 text-red-400 border border-red-500/30 text-[10px] sm:text-xs font-black tracking-wider flex items-center gap-1.5 animate-pulse hover:bg-red-600/30 transition cursor-pointer"
+                title="18+ Secret Profile Mode Active. Click to manage in Account."
+              >
+                <span>🔥</span>
+                <span className="hidden xs:inline">18+ SECRET PROFILE</span>
+                <span className="xs:hidden">18+ VAULT</span>
+              </button>
+            )}
           </div>
 
           {/* Desktop Navigation Links */}

@@ -43,7 +43,7 @@ public class VideoSniffer {
     private static final List<String> VIDEO_EXTENSIONS = Arrays.asList(
             ".m3u8", ".mp4", ".mpd", ".m4v", "googlevideo.com",
             "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u",
-            "anixx.cloud", "dramahot.top", "hakunaymatata.com"
+            "anixx.cloud", "dramahot.top", "hakunaymatata.com", "hentaiocean.com"
     );
 
     public interface OnVideoFoundListener {

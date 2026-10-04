@@ -3,6 +3,7 @@ import { Search, X, SlidersHorizontal, Camera, RotateCcw } from 'lucide-react';
 import { Anime, UserMediaListItem, MediaListStatus } from '../types';
 import { AnimeCard } from './AnimeCard';
 import { searchAnimeAdvanced, fetchAnimeDetails } from '../services/anilist';
+import { searchHentaiOcean } from '../services/hentaioceanService';
 import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 
 interface SearchViewProps {
@@ -12,6 +13,7 @@ interface SearchViewProps {
   onUpdateStatus: (anime: Anime, status: MediaListStatus) => void;
   onUpdateProgress: (anime: Anime, progress: number) => void;
   onInspect3DCard?: (anime: Anime) => void;
+  is18PlusMode?: boolean;
 }
 
 const ALL_GENRES = [
@@ -135,15 +137,20 @@ export const SearchView: React.FC<SearchViewProps> = ({
       const executeSearch = async () => {
         setIsLoading(true);
         try {
-          const searchData = await searchAnimeAdvanced({
-            search: searchQuery.trim() || undefined,
-            genres: selectedGenres.length > 0 ? selectedGenres : undefined,
-            status: selectedStatus || undefined,
-            format: selectedFormat || undefined,
-            seasonYear: selectedYear ? parseInt(selectedYear, 10) : undefined,
-            sort: selectedSort,
-          });
-          setResults(searchData);
+          if (is18PlusMode) {
+            const searchData = await searchHentaiOcean(searchQuery.trim() || 'all');
+            setResults(searchData);
+          } else {
+            const searchData = await searchAnimeAdvanced({
+              search: searchQuery.trim() || undefined,
+              genres: selectedGenres.length > 0 ? selectedGenres : undefined,
+              status: selectedStatus || undefined,
+              format: selectedFormat || undefined,
+              seasonYear: selectedYear ? parseInt(selectedYear, 10) : undefined,
+              sort: selectedSort,
+            });
+            setResults(searchData);
+          }
         } catch (err) {
           console.error('Error fetching search results:', err);
         } finally {
@@ -157,7 +164,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     return () => {
       clearTimeout(timer);
     };
-  }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort]);
+  }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort, is18PlusMode]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

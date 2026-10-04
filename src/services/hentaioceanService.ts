@@ -1,0 +1,287 @@
+import { Anime } from '../types';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+
+export interface HentaiInfo {
+  id: number;
+  urlname: string; // slug e.g. "my-mother-1"
+  videoname: string;
+  description: string;
+  releasedate: string;
+  uploaddate: string;
+  coverimg: string;
+  series: any;
+  status: number;
+  recentrelease: number;
+}
+
+export interface HentaiGenre {
+  genre: string;
+}
+
+export interface HentaiApiResponse {
+  info: HentaiInfo[];
+  genres: HentaiGenre[];
+}
+
+// Popular starter slugs catalog for fast initial load & search seed
+export const POPULAR_HENTAI_SLUGS = [
+  'my-mother-1',
+  'resort-boin',
+  'manga-uketsuke-joushi',
+  'fault',
+  'chichinoe',
+  'overflow',
+  'jukan-shinsou',
+  'energy-kyouka',
+  'yume-ketsuma',
+  'otome-dori',
+  'discipline',
+  'fura-kannagi',
+  'kuroinu',
+  'rance-hikari',
+  'night-shift-nurses',
+  'sweet-home',
+  'succubus-stayed',
+  'bitch-kanojo',
+];
+
+// Memory cache for HentaiOcean items
+const HENTAI_CACHE = new Map<string, Anime>();
+
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Universal fetch helper for HentaiOcean API
+ */
+async function fetchHentaiApi(url: string): Promise<any> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await CapacitorHttp.get({ url });
+      if (res.status >= 200 && res.status < 300 && res.data) {
+        return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+      }
+    } catch (e) {
+      console.warn('[HentaiOcean] Native fetch error:', e);
+    }
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('[HentaiOcean] Web fetch error:', e);
+  }
+  return null;
+}
+
+/**
+ * Maps HentaiOcean API JSON into AniLove Anime Object
+ */
+export function mapHentaiToAnime(info: HentaiInfo, genres: HentaiGenre[] = []): Anime {
+  const slug = info.urlname || 'hentai-item';
+  const idNum = info.id || hashCode(slug);
+  const titleStr = info.videoname || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const coverFilename = info.coverimg;
+  const coverUrl = coverFilename && coverFilename.length > 5
+    ? `https://hentaiocean.com/assets/cover/${coverFilename}`
+    : `https://hentaiocean.com/thumbnail/${slug}.webp`;
+  const thumbUrl = `https://hentaiocean.com/thumbnail/${slug}.webp`;
+
+  const genreList = genres.map(g => g.genre).filter(Boolean);
+  if (genreList.length === 0) {
+    genreList.push('18+', 'Uncensored', 'Hentai');
+  } else if (!genreList.includes('18+')) {
+    genreList.unshift('18+');
+  }
+
+  const anime: Anime = {
+    id: idNum,
+    title: {
+      userPreferred: titleStr,
+      english: titleStr,
+      romaji: titleStr,
+      native: titleStr,
+    },
+    coverImage: {
+      extraLarge: coverUrl,
+      large: coverUrl,
+      medium: thumbUrl,
+      color: '#ec4899',
+    },
+    bannerImage: thumbUrl,
+    format: '18+ ONA',
+    episodes: 1,
+    duration: 28,
+    status: 'FINISHED',
+    seasonYear: info.releasedate ? parseInt(info.releasedate.slice(0, 4), 10) : 2023,
+    averageScore: 88,
+    meanScore: 88,
+    popularity: 15000,
+    genres: genreList,
+    description: info.description || 'Exclusive 18+ Animated Title available on HentaiOcean.',
+    isAdult: true,
+    siteUrl: `https://hentaiocean.com/embed/${slug}?la=1`,
+    // Extended properties
+    slug,
+    is18Plus: true,
+  } as Anime & { slug: string; is18Plus: boolean };
+
+  HENTAI_CACHE.set(slug, anime);
+  return anime;
+}
+
+/**
+ * Fetches single Hentai title details by slug
+ */
+export async function fetchHentaiDetailsBySlug(slug: string): Promise<Anime | null> {
+  if (HENTAI_CACHE.has(slug)) {
+    return HENTAI_CACHE.get(slug)!;
+  }
+
+  const apiUrl = `https://hentaiocean.com/api?action=hentai&slug=${encodeURIComponent(slug)}`;
+  const data: HentaiApiResponse = await fetchHentaiApi(apiUrl);
+
+  if (data && Array.isArray(data.info) && data.info.length > 0) {
+    const info = data.info[0];
+    const genres = Array.isArray(data.genres) ? data.genres : [];
+    return mapHentaiToAnime(info, genres);
+  }
+
+  // Fallback placeholder if single item API is slow
+  const titleStr = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const fallbackAnime = mapHentaiToAnime({
+    id: hashCode(slug),
+    urlname: slug,
+    videoname: titleStr,
+    description: 'Exclusive 18+ Animated Content.',
+    releasedate: '2023-01-01',
+    uploaddate: '2023-01-01',
+    coverimg: '',
+    series: null,
+    status: 1,
+    recentrelease: 1,
+  });
+  return fallbackAnime;
+}
+
+/**
+ * Parses RSS XML Feed to discover latest Hentai release slugs
+ */
+export async function fetchHentaiRssFeed(): Promise<string[]> {
+  const rssUrl = 'https://hentaiocean.com/rss.xml';
+  let xmlText = '';
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await CapacitorHttp.get({ url: rssUrl });
+      if (res.data) xmlText = typeof res.data === 'string' ? res.data : '';
+    } catch (e) {
+      console.warn('[HentaiOcean RSS] Native fetch error:', e);
+    }
+  }
+
+  if (!xmlText) {
+    try {
+      const res = await fetch(rssUrl);
+      if (res.ok) {
+        xmlText = await res.text();
+      }
+    } catch (e) {
+      console.warn('[HentaiOcean RSS] Web fetch error:', e);
+    }
+  }
+
+  if (!xmlText) return POPULAR_HENTAI_SLUGS;
+
+  const slugs: string[] = [];
+  try {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+    const items = xmlDoc.querySelectorAll('item');
+
+    items.forEach(item => {
+      const link = item.querySelector('link')?.textContent || '';
+      const guid = item.querySelector('guid')?.textContent || '';
+      const target = link || guid;
+      if (target) {
+        const parts = target.split('/').filter(Boolean);
+        const slug = parts[parts.length - 1];
+        if (slug && !slugs.includes(slug)) {
+          slugs.push(slug);
+        }
+      }
+    });
+  } catch (e) {
+    console.warn('[HentaiOcean RSS] Parse error:', e);
+  }
+
+  return slugs.length > 0 ? slugs : POPULAR_HENTAI_SLUGS;
+}
+
+/**
+ * Fetches catalog feed for 18+ Home Screen (Trending, Recent, Categories)
+ */
+export async function getHentaiOceanHomeFeed(): Promise<{
+  trending: Anime[];
+  recent: Anime[];
+  topRated: Anime[];
+  uncensored: Anime[];
+}> {
+  const rssSlugs = await fetchHentaiRssFeed();
+  const allSlugs = Array.from(new Set([...rssSlugs, ...POPULAR_HENTAI_SLUGS]));
+
+  // Fetch details in batch parallel (chunks of 6 to avoid hammering)
+  const results: Anime[] = [];
+  const chunkSize = 6;
+  for (let i = 0; i < Math.min(allSlugs.length, 18); i += chunkSize) {
+    const chunk = allSlugs.slice(i, i + chunkSize);
+    const chunkPromises = chunk.map(slug => fetchHentaiDetailsBySlug(slug));
+    const chunkResults = await Promise.all(chunkPromises);
+    chunkResults.forEach(a => {
+      if (a) results.push(a);
+    });
+  }
+
+  const trending = results.slice(0, 6);
+  const recent = results.slice(6, 12).length > 0 ? results.slice(6, 12) : results.slice(0, 6);
+  const topRated = [...results].sort((a, b) => b.id - a.id).slice(0, 6);
+  const uncensored = results.filter(a => a.genres.some(g => g.toLowerCase().includes('uncensored')));
+
+  return {
+    trending,
+    recent,
+    topRated,
+    uncensored: uncensored.length > 0 ? uncensored : results.slice(0, 6),
+  };
+}
+
+/**
+ * Search HentaiOcean catalog by keyword query
+ */
+export async function searchHentaiOcean(query: string): Promise<Anime[]> {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  const rssSlugs = await fetchHentaiRssFeed();
+  const allSlugs = Array.from(new Set([...rssSlugs, ...POPULAR_HENTAI_SLUGS]));
+
+  // Filter matching slugs first
+  const matchingSlugs = allSlugs.filter(slug => slug.toLowerCase().includes(q) || q.includes(slug));
+
+  const slugsToFetch = matchingSlugs.length > 0 ? matchingSlugs.slice(0, 10) : allSlugs.slice(0, 8);
+
+  const animeList = await Promise.all(slugsToFetch.map(slug => fetchHentaiDetailsBySlug(slug)));
+  return animeList.filter((a): a is Anime => a !== null);
+}

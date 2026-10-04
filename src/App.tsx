@@ -48,6 +48,7 @@ import { DownloadsView } from './components/DownloadsView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AnimeGachaModal } from './components/AnimeGachaModal';
+import { getHentaiOceanHomeFeed } from './services/hentaioceanService';
 import { AiAnimeSenseiModal } from './components/AiAnimeSenseiModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 
@@ -423,8 +424,30 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 2. Fetch Initial Catalog from AniList GraphQL (Live AniList Sync with 24h Cache)
+  // 2. Fetch Initial Catalog from AniList GraphQL (or HentaiOcean when in 18+ Secret Profile Mode)
   const loadHomeContent = useCallback(async () => {
+    setIsMainLoading(true);
+
+    if (settings.is18PlusMode) {
+      try {
+        const hentaiFeed = await getHentaiOceanHomeFeed();
+        setTrendingAnime(hentaiFeed.trending || []);
+        setPopularAnime(hentaiFeed.recent || []);
+        setTopRatedAnime(hentaiFeed.topRated || []);
+        setNewestAnime(hentaiFeed.recent || []);
+        setUpcomingAnime(hentaiFeed.uncensored || []);
+        setMoviesAnime(hentaiFeed.topRated || []);
+        setActionAnime(hentaiFeed.trending || []);
+        setFantasyAnime(hentaiFeed.recent || []);
+        setRomComAnime(hentaiFeed.uncensored || []);
+      } catch (err: any) {
+        console.error('Error loading 18+ HentaiOcean content:', err);
+      } finally {
+        setIsMainLoading(false);
+      }
+      return;
+    }
+
     const cachedFeed = getHomeFeedCache();
     if (cachedFeed && cachedFeed.trending && cachedFeed.trending.length > 0) {
       setTrendingAnime(cachedFeed.trending || []);
@@ -440,7 +463,6 @@ export function App() {
       return;
     }
 
-    setIsMainLoading(true);
     try {
       const feed = await fetchHomeFeed(12);
       if (feed && feed.trending && feed.trending.length > 0) {
@@ -464,14 +486,15 @@ export function App() {
     } finally {
       setIsMainLoading(false);
     }
-  }, [showToast, trendingAnime.length]);
+  }, [showToast, trendingAnime.length, settings.is18PlusMode]);
 
   useEffect(() => {
     // SIGNAL NATIVE DISMISSAL IMMEDIATELY for the fastest possible launch experience
     // This allows our custom web-based "CoolLoadingSplash" to take over instantly!
     (window as any).isWebReady = true;
     loadHomeContent();
-  }, [loadHomeContent]);
+    setLibrary(getUserLibrary(settings.is18PlusMode));
+  }, [loadHomeContent, settings.is18PlusMode]);
 
   // Two-Way Sync Dispatcher (AniList + MyAnimeList)
   const performAniListSync = useCallback(async (anime: Anime, updates: { status?: MediaListStatus; progress?: number; score?: number }) => {
@@ -1344,6 +1367,7 @@ export function App() {
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateProgress={handleUpdateProgress}
                 onInspect3DCard={handleInspect3DCard}
+                is18PlusMode={settings.is18PlusMode}
               />
             )}
 

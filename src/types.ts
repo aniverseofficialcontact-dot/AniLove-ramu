@@ -369,6 +369,7 @@ export interface UserSettings {
   customEmail?: string;
   customAvatar?: string;
   contentRestrictions: boolean; // Mature/Adult filter: default false
+  is18PlusMode?: boolean; // 18+ Secret Profile Mode toggle
   // Notifications
   notificationsEnabled: boolean;
   notifyAiringEpisodes: boolean;

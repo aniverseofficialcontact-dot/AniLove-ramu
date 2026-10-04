@@ -474,6 +474,30 @@ export const AccountView: React.FC<AccountViewProps> = ({
     );
   };
 
+  // Toggle 18+ Secret Profile Mode (Two Profiles in One Device)
+  const handleToggle18PlusMode = () => {
+    const nextVal = !settings.is18PlusMode;
+
+    if (settings.profilePinEnabled && settings.profilePin && !isPinUnlocked) {
+      if (onLockSession) onLockSession();
+      setIsPinModalOpen(true);
+      return;
+    }
+
+    onSaveSettings({
+      ...settings,
+      is18PlusMode: nextVal,
+    });
+
+    onShowToast(
+      nextVal ? 'warning' : 'success',
+      nextVal
+        ? 'Switched to 18+ Secret Profile. Only 18+ content, 18+ library & history active.'
+        : 'Switched back to Normal Anime Profile. Main anime library & history restored.',
+      nextVal ? '18+ Secret Profile Active' : 'Normal Profile Active'
+    );
+  };
+
   const handleToggleAllowNsfwContent = () => {
     const updatedVal = !settings.allowNsfwContent;
     onSaveSettings({
@@ -1211,6 +1235,43 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       )}
                     </select>
                   </div>
+                </div>
+              </div>
+
+              {/* 18+ Secret Vault Profile Switch Card */}
+              <div className="p-4 my-3 rounded-2xl bg-gradient-to-r from-red-950/40 via-purple-950/30 to-slate-900/50 border border-red-500/20 shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className={`p-2.5 rounded-xl ${settings.is18PlusMode ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/5 text-purple-300'}`}>
+                      <Flame className="w-5 h-5 text-red-400 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black text-white">18+ Secret Profile Mode</p>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${settings.is18PlusMode ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                          {settings.is18PlusMode ? '18+ VAULT ACTIVE' : 'NORMAL MODE'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {settings.is18PlusMode
+                          ? '18+ Mode Active: Showing HentaiOcean catalog, isolated 18+ library & watch history.'
+                          : 'Acts as two separate profiles. Switch ON to access private 18+ catalog & library.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleToggle18PlusMode}
+                    className={`px-4 py-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 ${
+                      settings.is18PlusMode
+                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-900/30'
+                        : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-900/30'
+                    }`}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{settings.is18PlusMode ? 'Switch to Normal Profile' : 'Switch to 18+ Profile'}</span>
+                  </button>
                 </div>
               </div>
 

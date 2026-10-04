@@ -17,6 +17,8 @@ const CARD_AWAKENINGS_KEY = 'anilove_card_awakenings_v1';
 const ACTIVE_COMPANION_KEY = 'anilove_active_companion_v1';
 const WATCH_HISTORY_KEY = 'anilove_watch_history_v2';
 const WATCH_HISTORY_KEY_LEGACY = 'anilove_watch_history_v1';
+const LIBRARY_KEY_18PLUS = 'anilove_library_18plus_v1';
+const WATCH_HISTORY_KEY_18PLUS = 'anilove_watch_history_18plus_v1';
 
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'midnight',
@@ -60,6 +62,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   customEmail: '',
   customAvatar: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=300&auto=format&fit=crop&q=80',
   contentRestrictions: false,
+  is18PlusMode: false,
   notificationsEnabled: true,
   notifyAiringEpisodes: true,
   notifySyncUpdates: true,
@@ -341,9 +344,11 @@ export const syncUserDataWithMAL = (tokenOrUsername: string) => syncUserDataWith
 // =============================================================
 // USER LIBRARY
 // =============================================================
-export function getStoredLibrary(): UserMediaListItem[] {
+export function getStoredLibrary(force18PlusMode?: boolean): UserMediaListItem[] {
   try {
-    const raw = localStorage.getItem(LIBRARY_KEY) || localStorage.getItem(LIBRARY_KEY_LEGACY);
+    const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
+    const targetKey = is18 ? LIBRARY_KEY_18PLUS : (localStorage.getItem(LIBRARY_KEY) ? LIBRARY_KEY : LIBRARY_KEY_LEGACY);
+    const raw = localStorage.getItem(targetKey) || (is18 ? null : localStorage.getItem(LIBRARY_KEY_LEGACY));
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -354,9 +359,14 @@ export function getStoredLibrary(): UserMediaListItem[] {
 
 export const getUserLibrary = getStoredLibrary;
 
-export function saveStoredLibrary(items: UserMediaListItem[]): void {
+export function saveStoredLibrary(items: UserMediaListItem[], force18PlusMode?: boolean): void {
   try {
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(items));
+    const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
+    const targetKey = is18 ? LIBRARY_KEY_18PLUS : LIBRARY_KEY;
+    localStorage.setItem(targetKey, JSON.stringify(items));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('library_updated', { detail: { items, is18PlusMode: is18 } }));
+    }
   } catch (e) {
     console.error('Error saving stored library:', e);
   }
@@ -536,9 +546,11 @@ export function saveStoredNotifications(notifications: import('../types').AppNot
 // =============================================================
 // WATCH HISTORY
 // =============================================================
-export function getStoredWatchHistory(): WatchHistoryEntry[] {
+export function getStoredWatchHistory(force18PlusMode?: boolean): WatchHistoryEntry[] {
   try {
-    const raw = localStorage.getItem(WATCH_HISTORY_KEY) || localStorage.getItem(WATCH_HISTORY_KEY_LEGACY);
+    const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
+    const targetKey = is18 ? WATCH_HISTORY_KEY_18PLUS : (localStorage.getItem(WATCH_HISTORY_KEY) ? WATCH_HISTORY_KEY : WATCH_HISTORY_KEY_LEGACY);
+    const raw = localStorage.getItem(targetKey) || (is18 ? null : localStorage.getItem(WATCH_HISTORY_KEY_LEGACY));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -581,7 +593,7 @@ export function getStoredWatchHistory(): WatchHistoryEntry[] {
 
     if (hadDuplicates) {
       try {
-        localStorage.setItem(WATCH_HISTORY_KEY, JSON.stringify(deduplicated));
+        localStorage.setItem(targetKey, JSON.stringify(deduplicated));
       } catch {}
     }
 
@@ -592,8 +604,11 @@ export function getStoredWatchHistory(): WatchHistoryEntry[] {
   }
 }
 
-export function saveStoredWatchHistory(history: WatchHistoryEntry[]): void {
+export function saveStoredWatchHistory(history: WatchHistoryEntry[], force18PlusMode?: boolean): void {
   try {
+    const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
+    const targetKey = is18 ? WATCH_HISTORY_KEY_18PLUS : WATCH_HISTORY_KEY;
+
     // Ensure strict uniqueness per anime
     const animeMap = new Map<number, WatchHistoryEntry>();
     const sorted = [...history].sort((a, b) => (b.lastWatchedAt || 0) - (a.lastWatchedAt || 0));
@@ -603,9 +618,9 @@ export function saveStoredWatchHistory(history: WatchHistoryEntry[]): void {
       }
     }
     const cleanList = Array.from(animeMap.values()).slice(0, 30);
-    localStorage.setItem(WATCH_HISTORY_KEY, JSON.stringify(cleanList));
+    localStorage.setItem(targetKey, JSON.stringify(cleanList));
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('watch_history_updated', { detail: cleanList }));
+      window.dispatchEvent(new CustomEvent('watch_history_updated', { detail: { history: cleanList, is18PlusMode: is18 } }));
     }
     scheduleCloudSync();
   } catch (e) {
