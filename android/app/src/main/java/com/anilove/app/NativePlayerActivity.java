@@ -159,6 +159,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     
     // Volume / Brightness
     private boolean isAdvancePlayerEnabled = false;
+    private boolean hasNextEpisode = false;
+    private boolean hasPrevEpisode = false;
+    private long lastNavigationTimestamp = 0;
     private TextView indicatorVolume, indicatorBrightness;
     private AudioManager audioManager;
     private int initialVolume = -1;
@@ -611,6 +614,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
     private void updateMetadataFromIntent(Intent intent) {
         if (intent == null) return;
+        hasNextEpisode = intent.getBooleanExtra("hasNext", false);
+        hasPrevEpisode = intent.getBooleanExtra("hasPrev", false);
         String rawUrl = intent.getStringExtra("url");
         if (rawUrl != null && !rawUrl.trim().isEmpty()) {
             if (rawUrl.contains("short.icu/")) {
@@ -1863,7 +1868,9 @@ public class NativePlayerActivity extends AppCompatActivity {
                         } else if (playbackState == Player.STATE_ENDED) {
                             isPlaying = false;
                             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                            navigateEpisode(true);
+                            if (hasNextEpisode && isAdvancePlayerEnabled) {
+                                navigateEpisode(true);
+                            }
                         }
                     }
 
@@ -3285,6 +3292,24 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void navigateEpisode(boolean next) {
+        long now = System.currentTimeMillis();
+        if (now - lastNavigationTimestamp < 3000) {
+            Log.w("AniLove", "Blocked rapid episode navigation loop!");
+            return;
+        }
+
+        if (next && !hasNextEpisode) {
+            Log.i("AniLove", "Cannot navigate next: hasNext is false.");
+            return;
+        }
+
+        if (!next && !hasPrevEpisode) {
+            Log.i("AniLove", "Cannot navigate prev: hasPrev is false.");
+            return;
+        }
+
+        lastNavigationTimestamp = now;
+
         if (navigationListener != null) {
             if (loadingProgress != null) loadingProgress.setVisibility(View.VISIBLE);
             navigationListener.onNavigate(next);

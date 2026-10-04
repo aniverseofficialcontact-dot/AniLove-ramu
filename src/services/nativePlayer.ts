@@ -37,14 +37,17 @@ let currentAudioForNative = 'DUB';
 if (Capacitor.isNativePlatform()) {
   NativePlayer.addListener('onEpisodeNavigation', async (data) => {
     if (!activeAnimeForNative) return;
+    const maxEp = activeAnimeForNative.episodes || 9999;
     const targetEp = data.direction === 'next' ? currentEpNumForNative + 1 : currentEpNumForNative - 1;
-    if (targetEp >= 1) {
+    if (targetEp >= 1 && targetEp <= maxEp) {
       await launchNativePlayer({
         anime: activeAnimeForNative,
         episodeNumber: targetEp,
         audio: currentAudioForNative,
         totalEpisodes: activeAnimeForNative.episodes,
       });
+    } else {
+      console.warn(`[NativePlayer] Aborting auto-navigation to episode ${targetEp}: exceeds episode count ${maxEp}.`);
     }
   });
 }
@@ -67,14 +70,19 @@ export async function launchNativePlayer({
   serverName?: string;
   totalEpisodes?: number;
 }) {
-  activeAnimeForNative = anime;
-  currentEpNumForNative = Number(episodeNumber) || 1;
-  currentAudioForNative = (audio as string) || 'DUB';
-
   const settings = getStoredSettings();
   const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
   const epNum = Number(episodeNumber) || 1;
   const maxEp = totalEpisodes || anime.episodes || 9999;
+
+  if (epNum > maxEp || epNum < 1) {
+    console.warn(`[NativePlayer] Aborting launch: episode ${epNum} is out of bounds (1..${maxEp}).`);
+    return;
+  }
+
+  activeAnimeForNative = anime;
+  currentEpNumForNative = epNum;
+  currentAudioForNative = (audio as string) || 'DUB';
 
   // Resolve stream source
   const res = await resolveEpisodeSource({
