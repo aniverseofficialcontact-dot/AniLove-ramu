@@ -27,14 +27,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -209,10 +207,6 @@ public class EpisodeDownloadService extends Service {
 
     public static List<DownloadItem> getAllDownloads() {
         return new ArrayList<>(allDownloads.values());
-    }
-
-    public static DownloadItem getDownload(String id) {
-        return allDownloads.get(id);
     }
 
     public void queueDownload(DownloadItem item) {
@@ -622,7 +616,9 @@ public class EpisodeDownloadService extends Service {
             if (now - lastProgressUpdate > 600) {
                 double seconds = (now - lastProgressUpdate) / 1000.0;
                 double speedKBps = (bytesSinceLastUpdate / 1024.0) / Math.max(0.1, seconds);
-                String speedStr = speedKBps > 1024 ? String.format("%.1f MB/s", speedKBps / 1024.0) : String.format("%.0f KB/s", speedKBps);
+                String speedStr = speedKBps > 1024 
+                        ? String.format(Locale.US, "%.1f MB/s", speedKBps / 1024.0) 
+                        : String.format(Locale.US, "%.0f KB/s", speedKBps);
                 item.speed = speedStr;
 
                 if (item.totalBytes > 0) {
@@ -824,7 +820,7 @@ public class EpisodeDownloadService extends Service {
 
         // If it was a master playlist, select variant matching requested quality or closest available
         if (isMasterPlaylist && !variantObjects.isEmpty()) {
-            Collections.sort(variantObjects, (a, b) -> {
+            variantObjects.sort((a, b) -> {
                 if (a.height != b.height) return Integer.compare(a.height, b.height);
                 return Integer.compare(a.bandwidth, b.bandwidth);
             });

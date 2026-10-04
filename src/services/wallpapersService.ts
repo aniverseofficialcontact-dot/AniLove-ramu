@@ -29,26 +29,29 @@ export async function fetchAnimeWallpapers(
   const ratingTag = allowNsfw ? '' : ' rating:safe';
 
   let cleanQuery = query.trim().toLowerCase().replace(/\s+/g, '_');
+  let tagQuery = '';
 
-  // Smart Tag Resolution for Yandere / Konachan (e.g. "rimuru" -> "rimuru_tempest")
+  // Smart Tag Resolution for Yandere / Konachan (e.g. "gojo" -> "gojou_satoru", "rimuru" -> "rimuru_tempest")
   if (cleanQuery) {
+    let bestTag = `${cleanQuery}*`;
     try {
-      const tagRes = await fetch(`https://yande.re/tag.json?name=${encodeURIComponent(cleanQuery)}&limit=5`);
+      const tagRes = await fetch(`https://yande.re/tag.json?name=*${encodeURIComponent(cleanQuery)}*&order=count&limit=10`);
       if (tagRes.ok) {
         const tagList = await tagRes.json();
         if (Array.isArray(tagList) && tagList.length > 0) {
           const topMatch = tagList.sort((a: any, b: any) => (b.count || 0) - (a.count || 0))[0];
           if (topMatch && topMatch.name) {
-            cleanQuery = topMatch.name;
+            bestTag = topMatch.name;
           }
         }
       }
     } catch (e) {
       console.warn('[Yandere] Tag autocomplete warning:', e);
     }
+    tagQuery = `${bestTag}${ratingTag}`;
+  } else {
+    tagQuery = ratingTag.trim() || 'order:score';
   }
-
-  const tagQuery = cleanQuery ? `${cleanQuery}${ratingTag}` : ratingTag.trim() || 'order:score';
 
   // 1. Fetch from Yandere
   try {

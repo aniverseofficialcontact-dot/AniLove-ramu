@@ -58,7 +58,6 @@ public class VideoSniffer {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
