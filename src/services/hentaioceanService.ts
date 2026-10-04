@@ -85,13 +85,25 @@ async function fetchHentaiApi(url: string): Promise<any> {
   return null;
 }
 
+export function getHentaiRootSlug(slug: string): string {
+  if (!slug) return 'my-mother';
+  return slug.replace(/-\d+$/, '');
+}
+
+export function getHentaiSlugForEpisode(baseSlug: string, epNum: number): string {
+  if (!baseSlug) return 'my-mother-1';
+  const root = getHentaiRootSlug(baseSlug);
+  return `${root}-${epNum}`;
+}
+
 /**
  * Maps HentaiOcean API JSON into AniLove Anime Object
  */
 export function mapHentaiToAnime(info: HentaiInfo, genres: HentaiGenre[] = []): Anime {
   const slug = info.urlname || 'hentai-item';
   const idNum = info.id || hashCode(slug);
-  const titleStr = info.videoname || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const rawTitle = info.videoname || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const cleanTitle = rawTitle.replace(/\s+\d+$/, '').trim() || rawTitle;
 
   const coverFilename = info.coverimg;
   const coverUrl = coverFilename && coverFilename.length > 5
@@ -109,10 +121,10 @@ export function mapHentaiToAnime(info: HentaiInfo, genres: HentaiGenre[] = []): 
   const anime: Anime = {
     id: idNum,
     title: {
-      userPreferred: titleStr,
-      english: titleStr,
-      romaji: titleStr,
-      native: titleStr,
+      userPreferred: cleanTitle,
+      english: cleanTitle,
+      romaji: cleanTitle,
+      native: cleanTitle,
     },
     coverImage: {
       extraLarge: coverUrl,
@@ -122,7 +134,7 @@ export function mapHentaiToAnime(info: HentaiInfo, genres: HentaiGenre[] = []): 
     },
     bannerImage: thumbUrl,
     format: '18+ ONA',
-    episodes: 1,
+    episodes: 12, // Enable episode switching (Ep 1, Ep 2, Ep 3...)
     duration: 28,
     status: 'FINISHED',
     seasonYear: info.releasedate ? parseInt(info.releasedate.slice(0, 4), 10) : 2023,

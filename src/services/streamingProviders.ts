@@ -1,5 +1,7 @@
 import { Anime, StreamServerId } from '../types';
 import { CapacitorHttp, Capacitor } from '@capacitor/core';
+import { getStoredSettings } from './storage';
+import { getHentaiSlugForEpisode } from './hentaioceanService';
 
 export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'KAN' | 'BEN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p' | '360p';
@@ -552,10 +554,13 @@ export async function resolveEpisodeSource({
   const reqServer = (serverName || '').toLowerCase().trim();
   const combined = `${reqSrc} ${reqServer}`;
 
-  // ROUTE 0: HentaiOcean 18+ Source
-  if ((anime as any).is18Plus || (anime as any).slug || combined.includes('hentaiocean')) {
-    const slug = (anime as any).slug || 'my-mother-1';
-    const embedUrl = `https://hentaiocean.com/embed/${slug}?la=1`;
+  // ROUTE 0: HentaiOcean 18+ Source (Strictly blocks all other normal providers when in 18+ mode or for 18+ content)
+  const is18Mode = (getStoredSettings().is18PlusMode ?? false) || (anime as any).is18Plus || Boolean((anime as any).slug) || Boolean(anime.isAdult) || combined.includes('hentaiocean');
+
+  if (is18Mode) {
+    const rawSlug = (anime as any).slug || (anime.title?.english ? anime.title.english.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'my-mother-1');
+    const activeSlug = getHentaiSlugForEpisode(rawSlug, episodeNumber);
+    const embedUrl = `https://hentaiocean.com/embed/${activeSlug}?la=1`;
     return {
       status: 'available',
       source: {

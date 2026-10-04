@@ -73,6 +73,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
   onUpdateStatus,
   onUpdateProgress,
   onInspect3DCard,
+  is18PlusMode = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);

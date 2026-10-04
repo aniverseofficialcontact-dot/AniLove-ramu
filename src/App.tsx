@@ -1193,10 +1193,12 @@ export function App() {
 
                 {/* Home Content Container */}
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-                  {/* Quote of the Day Section */}
-                  <QuoteOfTheDay
-                    onOpenAnimeDetails={handleOpenDetails}
-                  />
+                  {/* Quote of the Day Section (Normal Mode Only) */}
+                  {!settings.is18PlusMode && (
+                    <QuoteOfTheDay
+                      onOpenAnimeDetails={handleOpenDetails}
+                    />
+                  )}
 
                   {/* 1. Continue Watching / Watch History Section */}
                   <ContinueWatchingSection
@@ -1209,151 +1211,219 @@ export function App() {
                   />
 
                   {/* Horizontal Category Rows */}
-                  <div className="space-y-8 pt-2">
-                    {/* Trending Now */}
-                    {trendingAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Trending Now"
-                        category="trending"
-                        animeList={trendingAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                  {settings.is18PlusMode ? (
+                    <div className="space-y-8 pt-2">
+                      {/* 🔥 18+ Trending Hits */}
+                      {trendingAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="🔥 18+ Trending Hits"
+                          category="trending"
+                          animeList={trendingAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Most Popular */}
-                    {popularAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Most Popular Anime"
-                        category="popular"
-                        animeList={popularAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* 🌟 Latest 18+ Releases */}
+                      {newestAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="🌟 Latest 18+ Releases"
+                          category="newest"
+                          animeList={newestAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Top Rated All-Time */}
-                    {topRatedAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Top Rated of All Time"
-                        category="topRated"
-                        animeList={topRatedAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* 💎 Uncensored Masterpieces */}
+                      {upcomingAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="💎 Uncensored Masterpieces"
+                          category="uncensored"
+                          animeList={upcomingAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Newest Releases & Episodes */}
-                    {newestAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Newest Releases & Episodes"
-                        category="newest"
-                        animeList={newestAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* 🏆 Top Rated 18+ Catalog */}
+                      {topRatedAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="🏆 Top Rated 18+ Catalog"
+                          category="topRated"
+                          animeList={topRatedAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-8 pt-2">
+                      {/* Trending Now */}
+                      {trendingAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Trending Now"
+                          category="trending"
+                          animeList={trendingAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Highly Anticipated & Upcoming */}
-                    {upcomingAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Upcoming & Most Anticipated"
-                        category="upcoming"
-                        animeList={upcomingAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* Most Popular */}
+                      {popularAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Most Popular Anime"
+                          category="popular"
+                          animeList={popularAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Anime Movies & Feature Films */}
-                    {moviesAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Anime Movies & Films"
-                        category="movies"
-                        animeList={moviesAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* Top Rated All-Time */}
+                      {topRatedAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Top Rated of All Time"
+                          category="topRated"
+                          animeList={topRatedAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Top Action & Battle Shonen */}
-                    {actionAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Top Action & Battle Anime"
-                        category="action"
-                        animeList={actionAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* Newest Releases & Episodes */}
+                      {newestAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Newest Releases & Episodes"
+                          category="newest"
+                          animeList={newestAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Top Fantasy & Supernatural */}
-                    {fantasyAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Top Fantasy & Magic"
-                        category="fantasy"
-                        animeList={fantasyAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
+                      {/* Highly Anticipated & Upcoming */}
+                      {upcomingAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Upcoming & Most Anticipated"
+                          category="upcoming"
+                          animeList={upcomingAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
 
-                    {/* Top Rom-Com & Romantic Comedy */}
-                    {romComAnime.length > 0 && (
-                      <HorizontalAnimeRow
-                        title="Top Rom-Com & Romantic Comedy"
-                        category="romcom"
-                        animeList={romComAnime}
-                        userLibrary={library}
-                        isLoading={isMainLoading}
-                        onOpenDetails={handleOpenDetails}
-                        onPlayStream={handlePlayStream}
-                        onUpdateStatus={handleUpdateStatus}
-                        onUpdateProgress={handleUpdateProgress}
-                        onSelectGenre={handleSelectGenre}
-                      />
-                    )}
-                  </div>
+                      {/* Anime Movies & Feature Films */}
+                      {moviesAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Anime Movies & Films"
+                          category="movies"
+                          animeList={moviesAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
+
+                      {/* Top Action & Battle Shonen */}
+                      {actionAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Top Action & Battle Anime"
+                          category="action"
+                          animeList={actionAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
+
+                      {/* Top Fantasy & Supernatural */}
+                      {fantasyAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Top Fantasy & Magic"
+                          category="fantasy"
+                          animeList={fantasyAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
+
+                      {/* Top Rom-Com & Romantic Comedy */}
+                      {romComAnime.length > 0 && (
+                        <HorizontalAnimeRow
+                          title="Top Rom-Com & Romantic Comedy"
+                          category="romcom"
+                          animeList={romComAnime}
+                          userLibrary={library}
+                          isLoading={isMainLoading}
+                          onOpenDetails={handleOpenDetails}
+                          onPlayStream={handlePlayStream}
+                          onUpdateStatus={handleUpdateStatus}
+                          onUpdateProgress={handleUpdateProgress}
+                          onSelectGenre={handleSelectGenre}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
