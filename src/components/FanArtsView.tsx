@@ -13,7 +13,9 @@ import {
   Heart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Capacitor } from '@capacitor/core';
 import { fetchDanbooruFanArts, cleanTagTitle, DanbooruPost } from '../services/danbooruService';
+import { DownloadPlugin } from '../services/downloadManager';
 import { UserSettings } from '../types';
 
 interface FanArtsViewProps {
@@ -114,9 +116,35 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
   };
 
   const handleDownload = async (post: DanbooruPost) => {
-    const url = post.large_file_url || post.file_url;
+    const url = post.large_file_url || post.file_url || post.preview_file_url;
     if (!url) return;
-    if (onShowToast) onShowToast('Downloading Fan Art...');
+
+    if (onShowToast) onShowToast('Downloading Fan Art to Gallery...');
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+        await DownloadPlugin.startDownload({
+          item: {
+            id: `fanart_${post.id}`,
+            anilistId: 0,
+            animeTitle: 'AniLove FanArt',
+            episodeNumber: 0,
+            streamUrl: url,
+            pageUrl: url,
+            subtitleUrl: '',
+            audio: 'SFW',
+            serverName: 'FanArt',
+            quality: 'HD',
+            thumbnail: url,
+          }
+        });
+        if (onShowToast) onShowToast('Downloading image to /Pictures/AniLove/ in Gallery!');
+        return;
+      } catch (e) {
+        console.warn('Native download plugin fallback:', e);
+      }
+    }
 
     try {
       const response = await fetch(url);
@@ -124,12 +152,12 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `fanart_${post.id || Date.now()}.${url.split('.').pop()?.split('?')[0] || 'jpg'}`;
+      a.download = `AniLove_FanArt_${post.id || Date.now()}.${url.split('.').pop()?.split('?')[0] || 'jpg'}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
-      if (onShowToast) onShowToast('Fan Art downloaded successfully!');
+      if (onShowToast) onShowToast('Fan Art saved successfully!');
     } catch (e) {
       window.open(url, '_blank');
     }
@@ -296,10 +324,8 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               className="relative w-full max-w-4xl bg-slate-950 border border-white/20 rounded-3xl shadow-2xl overflow-hidden z-10 my-auto flex flex-col max-h-[90vh]"
             >
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/40">
-                <span className="text-xs font-bold text-white capitalize">
-                  {selectedPost.tag_string_character
-                    ? selectedPost.tag_string_character.replace(/_/g, ' ')
-                    : 'Danbooru Fan Art'}
+                <span className="text-xs sm:text-sm font-bold text-white">
+                  {cleanTagTitle(selectedPost.tag_string, selectedPost.tag_string_character, selectedPost.tag_string_copyright)}
                 </span>
                 <button
                   onClick={() => setSelectedPost(null)}
@@ -311,8 +337,16 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
 
               <div className="p-4 flex-1 overflow-y-auto custom-scrollbar flex items-center justify-center bg-black/80">
                 <img
-                  src={selectedPost.large_file_url || selectedPost.file_url}
+                  src={selectedPost.large_file_url || selectedPost.file_url || selectedPost.preview_file_url}
                   alt="Fan Art Preview"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    const fallback = selectedPost.file_url || selectedPost.preview_file_url;
+                    if (target.src !== fallback && fallback) {
+                      target.src = fallback;
+                    }
+                  }}
                   className="max-h-[65vh] w-auto object-contain rounded-xl shadow-2xl"
                 />
               </div>
@@ -322,23 +356,13 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
                   Resolution: {selectedPost.image_width} × {selectedPost.image_height}
                 </span>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleShare(selectedPost)}
-                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>Copy Link</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleDownload(selectedPost)}
-                    className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Image</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleDownload(selectedPost)}
+                  className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Image</span>
+                </button>
               </div>
             </motion.div>
           </div>

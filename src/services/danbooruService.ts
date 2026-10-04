@@ -58,7 +58,7 @@ export async function fetchDanbooruFanArts(
   const cleanTag = query.trim().toLowerCase().replace(/\s+/g, '_');
   const INVALID_EXTS = new Set(['zip', 'webm', 'mp4', 'gif', 'swf', 'ugoira', 'rar', '7z']);
 
-  // 1. Primary: Safebooru (100% SFW Danbooru-compatible API - Zero 403 blocks)
+  // 1. SFW Provider: Safebooru (100% SFW Danbooru-compatible API - Zero 403 blocks)
   try {
     const safebooruTag = cleanTag ? `${cleanTag}*` : 'rating:safe';
     const safebooruUrl = `https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit=30&pid=${page - 1}&tags=${encodeURIComponent(safebooruTag)}`;
@@ -97,6 +97,45 @@ export async function fetchDanbooruFanArts(
     }
   } catch (err) {
     console.warn('[Safebooru] FanArts fetch warning:', err);
+  }
+
+  // 2. 18+ NSFW Provider: Gelbooru & Yandere (Active when allowNsfw is true)
+  if (allowNsfw) {
+    try {
+      const nsfwTag = cleanTag ? `${cleanTag}*` : 'rating:explicit';
+      const gelbooruUrl = `https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=30&pid=${page - 1}&tags=${encodeURIComponent(nsfwTag)}`;
+      const gelRes = await fetch(gelbooruUrl);
+      if (gelRes.ok) {
+        const gelData = await gelRes.json();
+        const items = Array.isArray(gelData) ? gelData : (gelData && Array.isArray(gelData.post) ? gelData.post : []);
+        if (Array.isArray(items)) {
+          items.forEach((item: any) => {
+            if (item.file_url) {
+              const ext = (item.file_url.split('.').pop() || 'jpg').toLowerCase();
+              if (INVALID_EXTS.has(ext)) return;
+              posts.push({
+                id: item.id || Math.floor(Math.random() * 1000000),
+                created_at: String(item.change || Date.now()),
+                score: item.score || 0,
+                rating: 'e',
+                tag_string: item.tags || '',
+                tag_string_character: item.tags || '',
+                tag_string_copyright: '',
+                tag_string_artist: 'Artist',
+                file_url: item.file_url,
+                large_file_url: item.sample_url || item.file_url,
+                preview_file_url: item.preview_url || item.sample_url || item.file_url,
+                image_width: item.width || 1200,
+                image_height: item.height || 1600,
+                file_ext: ext,
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[Gelbooru 18+] FanArts fetch warning:', e);
+    }
   }
 
   // 2. Secondary: Danbooru API (with fallback if 403 occurs)
