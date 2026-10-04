@@ -955,21 +955,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <span className="px-2 py-0.5 rounded bg-amber-950/70 border border-amber-500/40 text-[10px] text-amber-300 font-black">Rank 1</span>
                     </div>
                     <select
-                      value={String(settings.preferredLanguages?.[0] || settings.preferredAudio || 'DUB').toUpperCase()}
+                      value={String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase()}
                       onChange={e => {
                         const first = e.target.value as any;
-                        const second = String(settings.preferredLanguages?.[1] || (first === 'DUB' ? 'SUB' : 'DUB')).toUpperCase();
+                        const second = String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || (first === 'DUB' ? 'SUB' : 'DUB')).toUpperCase();
                         onSaveSettings({
                           ...settings,
+                          preferredPrimaryLanguage: first,
+                          preferredSecondaryLanguage: second as any,
                           preferredAudio: (first === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
-                          preferredLanguages: [first, second],
+                          preferredLanguages: [first, second as any],
                         });
                         onShowToast('success', `Primary audio set to ${first.toUpperCase()}.`, 'Audio Updated');
                       }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
                     >
                       <option value="DUB">🇺🇸 English Voice Dubbing (DUB) — Default</option>
-                      <option value="SUB">🇯🇵 Japanese Audio with English Subtitles (SUB)</option>
+                      <option value="SUB">🇯🇵 Japanese Audio with Subtitles (SUB)</option>
+                      <option value="HIN">🇮🇳 Hindi Dub (HIN)</option>
+                      <option value="TAM">🇮🇳 Tamil Dub (TAM)</option>
+                      <option value="TEL">🇮🇳 Telugu Dub (TEL)</option>
+                      <option value="MAL">🇮🇳 Malayalam Dub (MAL)</option>
+                      <option value="KAN">🇮🇳 Kannada Dub (KAN)</option>
+                      <option value="BEN">🇮🇳 Bengali Dub (BEN)</option>
                     </select>
                   </div>
 
@@ -980,20 +988,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <span className="px-2 py-0.5 rounded bg-indigo-950/70 border border-indigo-500/40 text-[10px] text-indigo-300 font-black">Rank 2</span>
                     </div>
                     <select
-                      value={String(settings.preferredLanguages?.[1] || (settings.preferredLanguages?.[0] === 'DUB' ? 'SUB' : 'DUB')).toUpperCase()}
+                      value={String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || (settings.preferredPrimaryLanguage === 'DUB' ? 'SUB' : 'DUB')).toUpperCase()}
                       onChange={e => {
                         const second = e.target.value as any;
-                        const first = String(settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
+                        const first = String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
                         onSaveSettings({
                           ...settings,
-                          preferredLanguages: [first, second],
+                          preferredPrimaryLanguage: first as any,
+                          preferredSecondaryLanguage: second,
+                          preferredLanguages: [first as any, second],
                         });
                         onShowToast('success', `Secondary fallback audio set to ${second.toUpperCase()}.`, 'Audio Updated');
                       }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
                     >
-                      <option value="SUB">🇯🇵 Japanese Audio with English Subtitles (SUB)</option>
+                      <option value="SUB">🇯🇵 Japanese Audio with Subtitles (SUB)</option>
                       <option value="DUB">🇺🇸 English Voice Dubbing (DUB)</option>
+                      <option value="HIN">🇮🇳 Hindi Dub (HIN)</option>
+                      <option value="TAM">🇮🇳 Tamil Dub (TAM)</option>
+                      <option value="TEL">🇮🇳 Telugu Dub (TEL)</option>
+                      <option value="MAL">🇮🇳 Malayalam Dub (MAL)</option>
+                      <option value="KAN">🇮🇳 Kannada Dub (KAN)</option>
+                      <option value="BEN">🇮🇳 Bengali Dub (BEN)</option>
                     </select>
                   </div>
                 </div>

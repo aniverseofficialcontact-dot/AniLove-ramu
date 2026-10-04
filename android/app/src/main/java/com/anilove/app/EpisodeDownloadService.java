@@ -31,7 +31,6 @@ import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -81,6 +80,7 @@ public class EpisodeDownloadService extends Service {
         public String pageUrl;
         public String streamUrl;
         public String subtitleUrl;
+        public String subtitleUrl2;
         public String audio; // SUB or DUB
         public String serverName;
         public String quality;
@@ -91,6 +91,7 @@ public class EpisodeDownloadService extends Service {
         public long totalBytes;
         public String localFilePath;
         public String localSubPath;
+        public String localSubPath2;
         public String speed;
         public String error;
         public boolean isHls;
@@ -193,6 +194,7 @@ public class EpisodeDownloadService extends Service {
         item.streamUrl = obj.optString("streamUrl", "");
         item.pageUrl = obj.optString("pageUrl", item.streamUrl);
         item.subtitleUrl = obj.optString("subtitleUrl", "");
+        item.subtitleUrl2 = obj.optString("subtitleUrl2", "");
         item.audio = obj.optString("audio", "DUB");
         item.serverName = obj.optString("serverName", "Standard");
         item.quality = obj.optString("quality", "1080p");
@@ -286,34 +288,13 @@ public class EpisodeDownloadService extends Service {
                 item.subtitleUrl = cachedSub;
             }
         } else if (!item.streamUrl.contains(".m3u8") && !item.streamUrl.contains(".mp4") && !item.streamUrl.contains(".m4s")
+                   && !item.streamUrl.contains("hakunaymatata.com")
                    && !item.streamUrl.contains("drive.google.com") && !item.streamUrl.contains("drive.usercontent.google.com") && !item.streamUrl.contains("export=download")) {
-            // Check if streamUrl is an embed link already unpacked for the target audio language
-            boolean isAlreadyUnpackedEmbed = item.streamUrl.contains("abyssplayer.com") ||
-                                              item.streamUrl.contains("iqsmart") ||
-                                              item.streamUrl.contains("rubystm") ||
-                                              item.streamUrl.contains("vidsrc") ||
-                                              item.streamUrl.contains("vidlink") ||
-                                              item.streamUrl.contains("autoembed");
-
-            if (!isAlreadyUnpackedEmbed) {
-                Log.i(TAG, "Resolving stream via backend for: " + item.animeTitle + " EP" + item.episodeNumber + " [" + item.audio + "]");
-                String[] serverResult = tryServerSideExtractFull(item);
-
-                if (serverResult != null && serverResult[0] != null && !serverResult[0].isEmpty()) {
-                    String resolvedUrl = serverResult[0];
-                    Log.i(TAG, "Backend returned URL: " + resolvedUrl);
-                    item.pageUrl = item.streamUrl;
-                    item.streamUrl = resolvedUrl;
-                    if (serverResult[1] != null && !serverResult[1].isEmpty()
-                            && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
-                        item.subtitleUrl = serverResult[1];
-                    }
-                }
-            }
 
             boolean isDirect = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".mp4")
                     || item.streamUrl.contains(".m4s") || item.streamUrl.contains(".m3u")
                     || item.streamUrl.contains(".txt")
+                    || item.streamUrl.contains("hakunaymatata.com")
                     || item.streamUrl.contains("drive.google.com")
                     || item.streamUrl.contains("drive.usercontent.google.com")
                     || item.streamUrl.contains("export=download");
@@ -332,14 +313,25 @@ public class EpisodeDownloadService extends Service {
 
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
 
-        // 2. Download Subtitle if present
+        // 2a. Download Primary Subtitle if present
         if (item.subtitleUrl != null && !item.subtitleUrl.isEmpty()) {
             try {
                 File subFile = new File(downloadDir, "ep_" + item.episodeNumber + ".vtt");
                 downloadFileDirect(item.subtitleUrl, subFile, referer);
                 item.localSubPath = subFile.getAbsolutePath();
             } catch (Exception subErr) {
-                Log.w(TAG, "Non-critical: Subtitle download failed: " + subErr.getMessage());
+                Log.w(TAG, "Non-critical: Primary subtitle download failed: " + subErr.getMessage());
+            }
+        }
+
+        // 2b. Download Secondary Subtitle if present
+        if (item.subtitleUrl2 != null && !item.subtitleUrl2.isEmpty()) {
+            try {
+                File subFile2 = new File(downloadDir, "ep_" + item.episodeNumber + "_2.vtt");
+                downloadFileDirect(item.subtitleUrl2, subFile2, referer);
+                item.localSubPath2 = subFile2.getAbsolutePath();
+            } catch (Exception subErr) {
+                Log.w(TAG, "Non-critical: Secondary subtitle download failed: " + subErr.getMessage());
             }
         }
 
@@ -486,90 +478,6 @@ public class EpisodeDownloadService extends Service {
         return rawUrl;
     }
 
-    /**
-     * Calls the AnimeWorld India v1 PHP Stream API's /stream.php endpoint
-     * to get direct stream links/embeds for downloading.
-     */
-    private String[] tryServerSideExtractFull(DownloadItem item) {
-        try {
-            StringBuilder urlBuilder = new StringBuilder("https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?");
-            if (item.anilistId > 0) {
-                urlBuilder.append("anilistId=").append(item.anilistId).append("&ep=").append(item.episodeNumber);
-            } else {
-                String safeSlug = item.animeTitle != null
-                    ? item.animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
-                    : "anime";
-                String episodeSlug = safeSlug + "-season-1-1x" + item.episodeNumber;
-                urlBuilder.append("id=").append(URLEncoder.encode(episodeSlug, "UTF-8"));
-            }
-
-            if (item.isOngoing) {
-                urlBuilder.append("&ongoing=true");
-            }
-
-            Log.i(TAG, "[ServerExtract] Querying AnimeWorld v1 API: " + urlBuilder.toString());
-
-            URL url = new URL(urlBuilder.toString());
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(35000);
-            conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
-
-            int responseCode = conn.getResponseCode();
-            Log.i(TAG, "[ServerExtract] AnimeWorld response code: " + responseCode);
-
-            if (responseCode == 200) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                br.close();
-
-                JSONObject resObj = new JSONObject(sb.toString());
-                if (resObj.optBoolean("success", false)) {
-                    JSONObject streamObj = resObj.optJSONObject("stream");
-                    if (streamObj != null) {
-                        JSONArray serversArr = streamObj.optJSONArray("servers");
-                        String rawUrl = null;
-
-                        if (serversArr != null && serversArr.length() > 0) {
-                            String reqServer = item.serverName != null ? item.serverName.toLowerCase() : "server 1";
-                            for (int i = 0; i < serversArr.length(); i++) {
-                                JSONObject s = serversArr.optJSONObject(i);
-                                if (s != null) {
-                                    String sName = s.optString("name", "");
-                                    if (sName.toLowerCase().equals(reqServer)) {
-                                        rawUrl = s.optString("url", "");
-                                        break;
-                                    }
-                                }
-                            }
-                            if (rawUrl == null || rawUrl.isEmpty()) {
-                                JSONObject s0 = serversArr.optJSONObject(0);
-                                if (s0 != null) rawUrl = s0.optString("url", "");
-                            }
-                        }
-
-                        if (rawUrl == null || rawUrl.isEmpty()) {
-                            rawUrl = streamObj.optString("streamLink", streamObj.optString("file", ""));
-                        }
-
-                        if (rawUrl != null && !rawUrl.isEmpty()) {
-                            String unpacked = unpackServerUrlInJava(rawUrl, item.audio);
-                            Log.i(TAG, "[ServerExtract] Selected raw server URL: " + rawUrl + " -> unpacked: " + unpacked);
-                            return new String[]{unpacked, ""};
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "[ServerExtract] Exception: " + e.getMessage());
-        }
-        return null;
-    }
-
     private void downloadDirectVideo(DownloadItem item, File targetFile) throws Exception {
         long existingLength = targetFile.exists() ? targetFile.length() : 0;
         item.bytesDownloaded = existingLength;
@@ -647,6 +555,9 @@ public class EpisodeDownloadService extends Service {
     private String getRefererForUrl(String streamUrl, String pageUrl) {
         if (streamUrl != null) {
             String lower = streamUrl.toLowerCase();
+            if (lower.contains("hakunaymatata.com") || lower.contains("netfilm.world")) {
+                return "https://netfilm.world/";
+            }
             if (lower.contains("justanime.to")) {
                 return "https://justanime.to/";
             }
@@ -1187,6 +1098,12 @@ public class EpisodeDownloadService extends Service {
                     item.localSubPath = sFile.getAbsolutePath();
                 }
             }
+            if (item.localSubPath2 == null || item.localSubPath2.isEmpty()) {
+                File sFile2 = new File(dir, "ep_" + item.episodeNumber + "_2.vtt");
+                if (sFile2.exists()) {
+                    item.localSubPath2 = sFile2.getAbsolutePath();
+                }
+            }
 
             JSONObject obj = new JSONObject();
             obj.put("id", item.id);
@@ -1202,6 +1119,7 @@ public class EpisodeDownloadService extends Service {
             obj.put("totalBytes", item.totalBytes);
             obj.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
             obj.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
+            obj.put("localSubPath2", item.localSubPath2 != null ? item.localSubPath2 : "");
             obj.put("thumbnail", item.thumbnail);
             obj.put("completedAt", System.currentTimeMillis());
 

@@ -42,7 +42,8 @@ public class VideoSniffer {
     // Notice: .ts and .m4s are purposely excluded so we capture .m3u8 playlists or .mp4 files, not individual 2-second transport/fragment chunks
     private static final List<String> VIDEO_EXTENSIONS = Arrays.asList(
             ".m3u8", ".mp4", ".mpd", ".m4v", "googlevideo.com",
-            "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u"
+            "manifest.m3u8", "playlist.m3u8", "master.m3u8", "index.m3u8", ".m3u",
+            "anixx.cloud", "dramahot.top", "hakunaymatata.com"
     );
 
     public interface OnVideoFoundListener {
@@ -246,12 +247,8 @@ public class VideoSniffer {
 
         boolean hasDirectMediaExt = lowerUrl.contains(".m3u8") || lowerUrl.contains(".mp4") ||
                                     lowerUrl.contains(".mpd") || lowerUrl.contains("manifest.m3u8") ||
-                                    lowerUrl.contains("master.m3u8") || lowerUrl.contains("index.m3u8");
-
-        // Block dummy wrapper token URLs on tryembed and vidnest that return HTTP 400 to non-browser requests
-        if (lowerUrl.contains("tryembed.us.cc/s/") || lowerUrl.contains("vidnest.fun/s/")) {
-            return false;
-        }
+                                    lowerUrl.contains("master.m3u8") || lowerUrl.contains("index.m3u8") ||
+                                    lowerUrl.contains("anixx.cloud") || lowerUrl.contains("dramahot.top");
 
         // Reject audio-only track variants (e.g. index-a1.m3u8, -v1-a1.m3u8, audio.m3u8, audio_only)
         if (lowerUrl.contains("-a1.m3u8") || lowerUrl.contains("-a2.m3u8") ||

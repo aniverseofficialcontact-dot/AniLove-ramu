@@ -960,12 +960,15 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   </div>
                 </div>
                 <select
-                  value={String(settings.preferredPrimaryLanguage || 'DUB').toUpperCase()}
+                  value={String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase()}
                   onChange={e => {
                     const primary = e.target.value as any;
+                    const secondary = String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase();
                     onSaveSettings({
                       ...settings,
                       preferredPrimaryLanguage: primary,
+                      preferredSecondaryLanguage: secondary as any,
+                      preferredLanguages: [primary, secondary as any],
                       preferredAudio: (primary === 'SUB' ? 'sub' : 'dub') as 'sub' | 'dub',
                     });
                     onShowToast('success', `Primary audio set to ${primary}.`, 'Audio Updated');
@@ -977,6 +980,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   <option value="HIN">🇮🇳 Hindi Dub</option>
                   <option value="TAM">🇮🇳 Tamil Dub</option>
                   <option value="TEL">🇮🇳 Telugu Dub</option>
+                  <option value="MAL">🇮🇳 Malayalam Dub</option>
+                  <option value="KAN">🇮🇳 Kannada Dub</option>
+                  <option value="BEN">🇮🇳 Bengali Dub</option>
                 </select>
               </div>
 
@@ -992,12 +998,15 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   </div>
                 </div>
                 <select
-                  value={String(settings.preferredSecondaryLanguage || 'SUB').toUpperCase()}
+                  value={String(settings.preferredSecondaryLanguage || settings.preferredLanguages?.[1] || 'SUB').toUpperCase()}
                   onChange={e => {
                     const secondary = e.target.value as any;
+                    const primary = String(settings.preferredPrimaryLanguage || settings.preferredLanguages?.[0] || 'DUB').toUpperCase();
                     onSaveSettings({
                       ...settings,
+                      preferredPrimaryLanguage: primary as any,
                       preferredSecondaryLanguage: secondary,
+                      preferredLanguages: [primary as any, secondary],
                     });
                     onShowToast('success', `Secondary audio set to ${secondary}.`, 'Audio Updated');
                   }}
@@ -1008,6 +1017,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
                   <option value="HIN">🇮🇳 Hindi Dub</option>
                   <option value="TAM">🇮🇳 Tamil Dub</option>
                   <option value="TEL">🇮🇳 Telugu Dub</option>
+                  <option value="MAL">🇮🇳 Malayalam Dub</option>
+                  <option value="KAN">🇮🇳 Kannada Dub</option>
+                  <option value="BEN">🇮🇳 Bengali Dub</option>
                 </select>
               </div>
 

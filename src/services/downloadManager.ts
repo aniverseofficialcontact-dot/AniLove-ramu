@@ -129,12 +129,42 @@ export function subscribeToDownloads(callback: DownloadSubscriber): () => void {
   };
 }
 
+function getMovieBoxAudioLabel(audio: StreamLanguage): string {
+  switch (audio) {
+    case 'SUB': return 'Japanese';
+    case 'DUB': return 'English';
+    case 'HIN': return 'Hindi';
+    case 'TAM': return 'Tamil';
+    case 'TEL': return 'Telugu';
+    case 'MAL': return 'Malayalam';
+    case 'KAN': return 'Kannada';
+    case 'BEN': return 'Bengali';
+    default: return 'English';
+  }
+}
+
+function getSubLangCode(lang: string): string {
+  const lower = lang.toLowerCase();
+  if (lower.includes('eng')) return 'en';
+  if (lower.includes('spa') || lower.includes('spanish')) return 'es';
+  if (lower.includes('fre') || lower.includes('french')) return 'fr';
+  if (lower.includes('ger') || lower.includes('german')) return 'de';
+  if (lower.includes('ita') || lower.includes('italian')) return 'it';
+  if (lower.includes('por') || lower.includes('portuguese')) return 'pt';
+  if (lower.includes('rus') || lower.includes('russian')) return 'ru';
+  if (lower.includes('ara') || lower.includes('arabic')) return 'ar';
+  if (lower.includes('jap') || lower.includes('japanese')) return 'ja';
+  if (lower.includes('hin') || lower.includes('hindi')) return 'hi';
+  return 'en';
+}
+
 export async function queueBatchEpisodeDownloads(
   anime: Anime,
   episodes: Episode[],
   audio: StreamLanguage = 'DUB',
   serverName: string = 'Server 1',
-  quality: string = '1080p'
+  quality: string = '1080p',
+  subtitleLang: string = 'English'
 ): Promise<{ queuedCount: number; errors: string[] }> {
   let queuedCount = 0;
   const errors: string[] = [];
@@ -142,84 +172,114 @@ export async function queueBatchEpisodeDownloads(
   const displayTitle =
     anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
 
-  const isSubOrDub = audio === 'SUB' || audio === 'DUB';
+  const targetEpNumbers = episodes.map(e => e.number);
+  const epsListStr = targetEpNumbers.join(',');
+  const subLangCode = getSubLangCode(subtitleLang);
+
+  // 1. Batch Subtitles Pre-fetch
+  const subtitlesMap: Record<number, { sub1?: string; sub2?: string }> = {};
+  try {
+    const subRes = await fetch(
+      `https://subtitles-l8cm.onrender.com/batch_subtitles.php?anilistId=${anime.id}&eps=${epsListStr}&lang=${subLangCode}&format=vtt`
+    );
+    if (subRes.ok) {
+      const subData = await subRes.json();
+      if (subData && Array.isArray(subData.episodes)) {
+        for (const epObj of subData.episodes) {
+          const epNum = Number(epObj.episode);
+          const tracks = epObj.subtitles || [];
+          subtitlesMap[epNum] = {
+            sub1: tracks[0]?.downloadUrl || '',
+            sub2: tracks[1]?.downloadUrl || '',
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Batch subtitle fetch warning:', e);
+  }
+
+  // 2. MovieBox (Multi-Lang) Batch Streams Pre-fetch
+  const movieBoxMap: Record<number, string> = {};
+  const isMovieBox = serverName.toLowerCase().includes('multi-lang') || serverName.toLowerCase().includes('moviebox');
+
+  if (isMovieBox) {
+    try {
+      const audioLabel = getMovieBoxAudioLabel(audio);
+      const mbRes = await fetch(
+        `https://moviebox-api-mklm.onrender.com/api/anime/batch-download?title=${encodeURIComponent(displayTitle)}&episodes=${epsListStr}&se=1&audio=${encodeURIComponent(audioLabel)}&quality=${quality}`
+      );
+      if (mbRes.ok) {
+        const mbData = await mbRes.json();
+        if (mbData && Array.isArray(mbData.episodes)) {
+          for (const epItem of mbData.episodes) {
+            if (epItem.direct_download_url) {
+              movieBoxMap[epItem.ep] = epItem.direct_download_url;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('MovieBox batch stream fetch warning:', e);
+    }
+  }
 
   for (const ep of episodes) {
     try {
       let streamUrl = '';
       let selectedServerName = serverName;
       let effectiveQuality = quality;
-      let effectiveSource = isSubOrDub ? 'HiAnime' : 'Multi-Lang';
 
-      // RULE 1: Japanese (SUB) and English (DUB) downloads are LOCKED to HiAnime source at 1080p quality
-      if (isSubOrDub) {
-        effectiveSource = 'HiAnime';
-        effectiveQuality = '1080p';
-        selectedServerName = serverName.toLowerCase().includes('server 2') ? 'Server 2' : serverName.toLowerCase().includes('server 3') ? 'Server 3' : 'Server 1';
+      // Subtitles from batch map
+      const epSubs = subtitlesMap[ep.number] || {};
+      let subtitleUrl = epSubs.sub1 || '';
+      let subtitleUrl2 = epSubs.sub2 || '';
+
+      // Fallback to single subtitle fetch if batch returned nothing
+      if (!subtitleUrl) {
+        try {
+          const subs = await fetchUnifiedSubtitles(anime.id, ep.number, 3000);
+          if (subs && subs.length > 0) {
+            const formatted = anonymizeAndSortSubtitleTracks(subs, subtitleLang, `${subtitleLang} 2`);
+            if (formatted && formatted.length > 0) {
+              subtitleUrl = formatted[0].url;
+              if (formatted.length > 1) subtitleUrl2 = formatted[1].url;
+            }
+          }
+        } catch (e) {
+          console.warn(`Fallback subtitle fetch warning for EP ${ep.number}:`, e);
+        }
       }
 
-      // RULE 7: Fetch & embed WebVTT subtitles with every episode download
-      let subtitleUrl = '';
-      try {
-        const subs = await fetchUnifiedSubtitles(anime.id, ep.number, 3000);
-        if (subs && subs.length > 0) {
-          const formatted = anonymizeAndSortSubtitleTracks(subs, 'English', 'English 2');
-          if (formatted && formatted.length > 0) {
-            subtitleUrl = formatted[0].url;
+      // STREAM RESOLUTION
+      if (isMovieBox) {
+        if (movieBoxMap[ep.number]) {
+          streamUrl = movieBoxMap[ep.number];
+        } else {
+          // Fallback to single episode MovieBox resolve
+          const res = await resolveEpisodeSource({
+            anime,
+            episodeNumber: ep.number,
+            providerId: 'anime-world-v1',
+            language: audio,
+            resolution: (effectiveQuality as any) || '1080p',
+            serverName: 'Multi-Lang-Server-1',
+            sourceName: 'Multi-Lang',
+          });
+          if (res && res.status === 'available' && res.source?.url) {
+            streamUrl = res.source.url;
           }
         }
-      } catch (e) {
-        console.warn(`Subtitle fetch warning for EP ${ep.number}:`, e);
-      }
-
-      // RESOLVE STREAM BASED ON SOURCE RULES
-      if (effectiveSource === 'HiAnime') {
-        const hi = resolveHiAnimeSource(anime.id, ep.number, audio, selectedServerName);
-        if (hi && hi.selectedUrl) {
-          streamUrl = hi.selectedUrl;
-        } else {
-          errors.push(`EP ${ep.number}: HiAnime 1080p ${audio} stream is not available. Download skipped.`);
-          continue;
-        }
-      } else if (effectiveSource === 'AnimeSalt') {
+      } else if (serverName.toLowerCase().includes('animesalt')) {
         const salt = await resolveAnimeSaltSource(displayTitle, ep.number, anime.id);
         if (salt && salt.selectedUrl) {
           streamUrl = salt.selectedUrl;
-        } else {
-          errors.push(`EP ${ep.number}: AnimeSalt stream is not available. Download skipped.`);
-          continue;
         }
       } else {
-        // Multi-Lang (MovieBox API)
-        const res = await resolveEpisodeSource({
-          anime,
-          episodeNumber: ep.number,
-          providerId: 'anime-world-v1',
-          language: audio,
-          resolution: (effectiveQuality as any) || '1080p',
-          serverName: 'Multi-Lang-Server-1',
-          sourceName: 'Multi-Lang',
-        });
-
-        if (res && res.status === 'available' && res.source?.url) {
-          // RULE 6: Strict Quality & Audio Availability Check Per Episode
-          const availableLangs = res.source.availableLanguages || [];
-          if (availableLangs.length > 0 && !availableLangs.includes(audio)) {
-            const langLabel = SUPPORTED_LANGUAGES.find(l => l.code === audio)?.label || audio;
-            errors.push(`EP ${ep.number}: ${langLabel} audio track is not available on Multi-Lang. Download skipped.`);
-            continue; // DO NOT PROCEED
-          }
-
-          const availableRes = res.source.availableResolutions || [];
-          if (availableRes.length > 0 && !availableRes.includes(effectiveQuality as any)) {
-            errors.push(`EP ${ep.number}: ${effectiveQuality} quality in ${audio} audio is not available on Multi-Lang. Download skipped.`);
-            continue; // DO NOT PROCEED
-          }
-
-          streamUrl = res.source.url;
-        } else {
-          errors.push(`EP ${ep.number}: Multi-Lang stream is not available. Download skipped.`);
-          continue;
+        // HiAnime
+        const hi = resolveHiAnimeSource(anime.id, ep.number, audio, selectedServerName);
+        if (hi && hi.selectedUrl) {
+          streamUrl = hi.selectedUrl;
         }
       }
 
@@ -236,8 +296,9 @@ export async function queueBatchEpisodeDownloads(
         animeTitle: displayTitle,
         episodeNumber: ep.number,
         streamUrl,
-        pageUrl: streamUrl,
+        pageUrl: isMovieBox ? 'https://netfilm.world/' : streamUrl,
         subtitleUrl: subtitleUrl || '',
+        subtitleUrl2: subtitleUrl2 || '',
         audio,
         serverName: selectedServerName,
         quality: effectiveQuality,
