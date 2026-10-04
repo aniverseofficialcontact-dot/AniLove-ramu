@@ -28,7 +28,26 @@ export async function fetchAnimeWallpapers(
   // Helper for ratings tag
   const ratingTag = allowNsfw ? '' : ' rating:safe';
 
-  const cleanQuery = query.trim().toLowerCase().replace(/\s+/g, '_');
+  let cleanQuery = query.trim().toLowerCase().replace(/\s+/g, '_');
+
+  // Smart Tag Resolution for Yandere / Konachan (e.g. "rimuru" -> "rimuru_tempest")
+  if (cleanQuery) {
+    try {
+      const tagRes = await fetch(`https://yande.re/tag.json?name=${encodeURIComponent(cleanQuery)}&limit=5`);
+      if (tagRes.ok) {
+        const tagList = await tagRes.json();
+        if (Array.isArray(tagList) && tagList.length > 0) {
+          const topMatch = tagList.sort((a: any, b: any) => (b.count || 0) - (a.count || 0))[0];
+          if (topMatch && topMatch.name) {
+            cleanQuery = topMatch.name;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Yandere] Tag autocomplete warning:', e);
+    }
+  }
+
   const tagQuery = cleanQuery ? `${cleanQuery}${ratingTag}` : ratingTag.trim() || 'order:score';
 
   // 1. Fetch from Yandere

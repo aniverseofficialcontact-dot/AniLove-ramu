@@ -24,18 +24,39 @@ export async function fetchDanbooruFanArts(
   allowNsfw = false
 ): Promise<DanbooruPost[]> {
   try {
-    let tagsParam = 'limit=30';
+    let resolvedTag = '';
 
     if (query.trim()) {
       const cleanTag = query.trim().toLowerCase().replace(/\s+/g, '_');
-      tagsParam += `&tags=${encodeURIComponent(cleanTag)}`;
+      resolvedTag = cleanTag;
+
+      // Smart Tag Resolution: Autocomplete short queries (e.g. "rimuru" -> "rimuru_tempest")
+      try {
+        const tagRes = await fetch(`https://danbooru.donmai.us/tags.json?search[name_matches]=*${encodeURIComponent(cleanTag)}*&search[order]=count&limit=5`);
+        if (tagRes.ok) {
+          const tagList = await tagRes.json();
+          if (Array.isArray(tagList) && tagList.length > 0) {
+            // Find top character or copyright tag matching the query
+            const bestMatch = tagList.find((t: any) => t.category === 4 || t.category === 3 || t.category === 0) || tagList[0];
+            if (bestMatch && bestMatch.name) {
+              resolvedTag = bestMatch.name;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Danbooru] Tag autocomplete warning:', e);
+      }
+    }
+
+    let tagsParam = 'limit=30';
+    if (resolvedTag) {
+      tagsParam += `&tags=${encodeURIComponent(resolvedTag)}`;
     } else {
       tagsParam += '&tags=order:score';
     }
 
     if (!allowNsfw) {
-      // Strictly enforce safe/general rating
-      tagsParam += '+rating:g,s';
+      tagsParam += '+rating:g';
     }
 
     tagsParam += `&page=${page}`;

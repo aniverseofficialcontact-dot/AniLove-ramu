@@ -1949,13 +1949,18 @@ public class NativePlayerActivity extends AppCompatActivity {
                 Window window = getWindow();
                 if (window != null) {
                     View decorView = window.getDecorView();
-                    if (decorView.getVisibility() != View.VISIBLE) {
-                        decorView.setVisibility(View.VISIBLE);
-                    }
-                    WindowManager.LayoutParams params = window.getAttributes();
-                    if (params.y != 0) {
-                        params.y = 0;
-                        window.setAttributes(params);
+                    if (y < 0) {
+                        // Hide native player overlay window when y < 0 (e.g., modal dialog opened)
+                        decorView.setVisibility(View.GONE);
+                    } else {
+                        if (decorView.getVisibility() != View.VISIBLE) {
+                            decorView.setVisibility(View.VISIBLE);
+                        }
+                        WindowManager.LayoutParams params = window.getAttributes();
+                        if (params.y != y) {
+                            params.y = y;
+                            window.setAttributes(params);
+                        }
                     }
                 }
             } catch (Exception ignored) {}
