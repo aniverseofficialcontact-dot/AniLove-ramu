@@ -150,6 +150,16 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void switchEngine(PluginCall call) {
+        String mode = call.getString("mode", "exo");
+        if (NativePlayerActivity.currentInstance != null) {
+            boolean useWeb = "web".equalsIgnoreCase(mode);
+            NativePlayerActivity.currentInstance.switchPlayerEngine(useWeb);
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
     public void close(PluginCall call) {
         lastPlayUrl = null;
         lastPlayTime = 0;

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, ThumbnailAppearance, StreamServerId, UserSettings, FranchiseWatchOrder } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
+import { NativePlayer } from '../services/nativePlayer';
 import { STREAM_PROVIDERS, DEFAULT_STREAM_PROVIDER_ID, SUPPORTED_LANGUAGES, StreamLanguage } from '../services/streamingProviders';
 import { NativePlayer, launchNativePlayer } from '../services/nativePlayer';
 import { ProVideoPlayer } from './ProVideoPlayer';
@@ -176,6 +177,16 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const availableSources = useMemo<StreamSourceId[]>(() => {
     return is18PlusActive ? ['HentaiOcean'] : ['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'];
   }, [is18PlusActive]);
+
+  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>('exo');
+
+  const handleToggleEngine = () => {
+    const nextEngine = playerEngineMode === 'exo' ? 'web' : 'exo';
+    setPlayerEngineMode(nextEngine);
+    if (Capacitor.isNativePlatform()) {
+      NativePlayer.switchEngine({ mode: nextEngine }).catch(() => {});
+    }
+  };
 
   // Strict 7-Day Airing Check for HiAnime Auto-Priority
   const isFreshEpisode = useMemo(() => {
@@ -573,8 +584,28 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         )}
 
-        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: SOURCES, SERVERS & REFRESH */}
+        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: ENGINE, REFRESH, SOURCES, SERVERS */}
         <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
+          {/* PLAYER ENGINE SWITCHER Button */}
+          <div className="relative flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+              ENGINE
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleEngine}
+              title="Switch Player Engine Mode (EXO <-> WEB)"
+              className={`border rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 ${
+                playerEngineMode === 'web'
+                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+                  : 'bg-neutral-900/90 border-neutral-800 text-amber-300 hover:border-amber-500/50'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{playerEngineMode === 'web' ? '🌐 WEB' : '⚡ EXO'}</span>
+            </button>
+          </div>
+
           {/* REFRESH PLAYER Button */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">

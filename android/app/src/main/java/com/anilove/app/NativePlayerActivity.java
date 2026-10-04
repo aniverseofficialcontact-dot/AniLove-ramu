@@ -923,6 +923,75 @@ public class NativePlayerActivity extends AppCompatActivity {
             exoPlayerView.setVisibility(View.VISIBLE);
         }
 
+        btnEngineToggle = findViewById(R.id.btn_engine_toggle);
+        if (btnEngineToggle != null) {
+            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
+        }
+
+        playerWebView = findViewById(R.id.player_webview);
+        if (playerWebView != null) {
+            WebSettings settings = playerWebView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            settings.setSupportMultipleWindows(false);
+            settings.setJavaScriptCanOpenWindowsAutomatically(false);
+
+            playerWebView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onShowCustomView(View view, CustomViewCallback callback) {
+                    if (callback != null) {
+                        try { callback.onCustomViewHidden(); } catch (Exception ignored) {}
+                    }
+                }
+                @Override
+                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                    return false;
+                }
+            });
+
+            playerWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (is18PlusActive()) {
+                        return super.shouldInterceptRequest(view, request);
+                    }
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString();
+                        if (isAdUrl(url)) {
+                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString().toLowerCase();
+                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
+
+                        if (is18PlusActive()) {
+                            if (url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("whatsapp://") || url.startsWith("tg://")) {
+                                return true;
+                            }
+                            return false;
+                        }
+
+                        if (host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg") ||
+                            url.startsWith("intent://") || url.startsWith("market://") || url.startsWith("itmss://") ||
+                            url.startsWith("whatsapp://") || url.startsWith("tg://") || isAdUrl(url)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            });
+        }
+
         loadingProgress = findViewById(R.id.loading_progress);
         controlsOverlay = findViewById(R.id.controls_overlay);
         
@@ -2376,7 +2445,90 @@ public class NativePlayerActivity extends AppCompatActivity {
             switchBoost.setOnCheckedChangeListener((b, checked) -> { isVolumeBoosted = checked; applyVolumeBoost(checked); });
         }
 
+        // 6. Player Engine Switch (ExoPlayer <-> Web Player)
+        SwitchCompat switchEngine = view.findViewById(R.id.switch_player_engine);
+        if (switchEngine != null) {
+            switchEngine.setChecked(isWebViewPlayerMode);
+            switchEngine.setOnCheckedChangeListener((b, checked) -> {
+                dialog.dismiss();
+                switchPlayerEngine(checked);
+            });
+        }
+
         dialog.show();
+    }
+
+    public void switchPlayerEngine(boolean useWebView) {
+        isWebViewPlayerMode = useWebView;
+        VideoSniffer.cancelActiveSniffers();
+        runOnUiThread(() -> {
+            View touchWall = findViewById(R.id.touch_wall);
+            if (btnEngineToggle != null) {
+                btnEngineToggle.setText(useWebView ? "🌐 WEB" : "⚡ EXO");
+                btnEngineToggle.setTextColor(useWebView ? Color.parseColor("#34D399") : Color.parseColor("#FFD700"));
+                btnEngineToggle.bringToFront();
+            }
+            if (useWebView) {
+                if (exoPlayer != null) {
+                    try {
+                        exoPlayer.pause();
+                        exoPlayer.setPlayWhenReady(false);
+                    } catch (Exception ignored) {}
+                }
+                if (exoPlayerView != null) exoPlayerView.setVisibility(View.GONE);
+                if (playerWebView != null) {
+                    playerWebView.setVisibility(View.VISIBLE);
+                    playerWebView.bringToFront();
+                    if (btnEngineToggle != null) btnEngineToggle.bringToFront();
+
+                    String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
+                    if (targetUrl != null && !targetUrl.trim().isEmpty()) {
+                        Log.i("AniLove_Engine", "Switching to Embedded Web View Player -> " + targetUrl);
+                        if (isDirectMediaStream(targetUrl) || targetUrl.toLowerCase().contains(".mp4")) {
+                            String videoHtml = "<!DOCTYPE html>" +
+                                    "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                                    "<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;}video{width:100%;height:100vh;object-fit:contain;}</style>" +
+                                    "</head><body>" +
+                                    "<video src='" + targetUrl.replace("'", "\\'") + "' controls autoplay playsinline style='width:100%;height:100vh;'></video>" +
+                                    "</body></html>";
+                            playerWebView.loadDataWithBaseURL(targetUrl, videoHtml, "text/html", "UTF-8", null);
+                        } else {
+                            playerWebView.loadUrl(targetUrl);
+                        }
+                    }
+                }
+                if (touchWall != null) {
+                    touchWall.setVisibility(View.GONE);
+                    touchWall.setClickable(false);
+                }
+                if (controlsOverlay != null) {
+                    controlsOverlay.setVisibility(View.GONE);
+                }
+                if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
+                Toast.makeText(this, "Switched to Web Player Mode", Toast.LENGTH_SHORT).show();
+            } else {
+                if (playerWebView != null) {
+                    playerWebView.setVisibility(View.GONE);
+                    playerWebView.loadUrl("about:blank");
+                }
+                if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
+                if (touchWall != null) {
+                    touchWall.setVisibility(View.VISIBLE);
+                    touchWall.setClickable(true);
+                }
+                if (controlsOverlay != null) {
+                    controlsOverlay.setVisibility(View.VISIBLE);
+                }
+                if (exoPlayer != null) {
+                    try {
+                        exoPlayer.play();
+                        exoPlayer.setPlayWhenReady(true);
+                    } catch (Exception ignored) {}
+                }
+                showControlsExplicitly();
+                Toast.makeText(this, "Switched to Media3 ExoPlayer Mode", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void showCaptionMenu() {

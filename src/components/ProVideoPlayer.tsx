@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   RefreshCw,
   AlertCircle,
+  Globe,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';
@@ -106,6 +107,15 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const [audioMode, setAudioMode] = useState<StreamLanguage>(currentAudioLanguage || 'DUB');
   const [quality, setQuality] = useState<StreamResolution>('1080p');
   const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>('exo');
+
+  const handleToggleEngine = () => {
+    const nextEngine = playerEngineMode === 'exo' ? 'web' : 'exo';
+    setPlayerEngineMode(nextEngine);
+    if (Capacitor.isNativePlatform()) {
+      NativePlayer.switchEngine({ mode: nextEngine }).catch(() => {});
+    }
+  };
 
   // Stream connection state
   const [streamSource, setStreamSource] = useState<StreamSource | null>(null);
@@ -887,8 +897,22 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Only Refresh Button */}
+          {/* Right: Engine Switcher & Refresh Buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleEngine}
+              className={`px-3 py-2 rounded-xl border text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5 ${
+                playerEngineMode === 'web'
+                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+                  : 'bg-neutral-900 border-neutral-700/80 text-amber-300 hover:bg-neutral-800'
+              }`}
+              title="Switch Player Engine Mode (EXO <-> WEB)"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{playerEngineMode === 'web' ? '🌐 WEB' : '⚡ EXO'}</span>
+            </button>
+
             <button
               type="button"
               onClick={handleReloadStream}
