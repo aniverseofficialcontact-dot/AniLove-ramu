@@ -91,7 +91,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
   const [episodeSearchQuery, setEpisodeSearchQuery] = useState<string>('');
   const [selectedEpisodeRange, setSelectedEpisodeRange] = useState<string>('all');
   const initialLayout = settings?.preferredEpisodeLayout || 'grid';
-  const [episodeViewMode, setEpisodeViewMode] = useState<'grid' | 'list' | 'compact'>(initialLayout);
+  const [episodeViewMode, setEpisodeViewMode] = useState<'grid' | 'list' | 'compact'>('list');
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [showFullSynopsis, setShowFullSynopsis] = useState<boolean>(false);
   const [thumbnailStyle, setThumbnailStyle] = useState<ThumbnailAppearance>('snapshot');
@@ -620,23 +620,23 @@ export const WatchView: React.FC<WatchViewProps> = ({
             </div>
           )}
 
-          {/* PLAYER ENGINE SWITCHER Button */}
+          {/* LANDSCAPE FULL VIEW Button */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
-              ENGINE
+              FULL VIEW
             </span>
             <button
               type="button"
-              onClick={handleToggleEngine}
-              title="Switch Player Engine Mode (EXO <-> WEB)"
-              className={`border rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 ${
-                playerEngineMode === 'web'
-                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
-                  : 'bg-neutral-900/90 border-neutral-800 text-amber-300 hover:border-amber-500/50'
-              }`}
+              onClick={() => {
+                if (Capacitor.isNativePlatform()) {
+                  NativePlayer.toggleLandscape().catch(() => {});
+                }
+              }}
+              title="Rotate Screen & Watch in Landscape Full View"
+              className="bg-indigo-950/80 border border-indigo-500/50 hover:bg-indigo-900/80 text-indigo-300 rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{playerEngineMode === 'web' ? '🌐 WEB' : '⚡ EXO'}</span>
+              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Landscape</span>
             </button>
           </div>
 
@@ -743,12 +743,12 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
         {/* Episode metadata & Description with Background Banner Image */}
         <section className="relative mx-3 sm:mx-0 rounded-3xl overflow-hidden border border-neutral-800/80 shadow-2xl bg-[#08080b]">
-          {/* Full Background Banner Image */}
-          {(anime.bannerImage || coverUrl) && (
+          {/* Full Background Banner Image using Episode Thumbnail */}
+          {(currentEpisodeData.thumbnail || anime.bannerImage || coverUrl) && (
             <img
-              src={anime.bannerImage || coverUrl}
-              alt={`${title} background`}
-              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-50 scale-105"
+              src={currentEpisodeData.thumbnail || anime.bannerImage || coverUrl}
+              alt={`${currentEpisodeData.title || title} background`}
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-45 scale-105"
             />
           )}
           {/* Dark Gradient Overlay for perfect readability */}
@@ -758,25 +758,32 @@ export const WatchView: React.FC<WatchViewProps> = ({
           <div className="relative z-10 p-4 sm:p-6 w-full min-w-0">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-400">
               <Film className="w-3.5 h-3.5" />
-              <span>Episode {currentEpisodeData.number}</span>
+              <span>{title} • Episode {currentEpisodeData.number}</span>
             </div>
-            <h2 className="mt-1 text-2xl sm:text-4xl font-black leading-tight text-white drop-shadow-md">{title}</h2>
+
+            {/* Episode Title as Main Heading */}
+            <h2 className="mt-1 text-2xl sm:text-3xl font-black leading-tight text-white drop-shadow-md">
+              {currentEpisodeData.title || `Episode ${currentEpisodeData.number}`}
+            </h2>
+
             <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs font-bold text-neutral-200">
               <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/20 px-2.5 py-1 text-yellow-300 border border-yellow-500/30 backdrop-blur-md">
                 <Star className="w-3.5 h-3.5 fill-yellow-300" />
                 {score ? `${score}%` : 'N/A'}
               </span>
-              <span className="rounded-full bg-black/60 px-3 py-1 border border-white/10 backdrop-blur-md text-white">
-                {currentEpisodeData.title}
-              </span>
               {anime.format && (
                 <span className="rounded-full bg-black/60 px-3 py-1 border border-white/10 backdrop-blur-md text-white">{anime.format}</span>
               )}
+              {currentEpisodeData.filler && (
+                <span className="rounded-full bg-amber-500/90 text-black font-black px-2.5 py-0.5 text-[10px] tracking-wider uppercase shadow-md">FILLER</span>
+              )}
             </div>
+
+            {/* Episode Synopsis as Description */}
             <p className={`mt-3 text-xs sm:text-sm leading-relaxed text-neutral-300 drop-shadow ${showFullSynopsis ? '' : 'line-clamp-3'}`}>
-              {synopsis}
+              {currentEpisodeData.synopsis || synopsis}
             </p>
-            {synopsis.length > 180 && (
+            {((currentEpisodeData.synopsis || synopsis).length > 180) && (
               <button
                 type="button"
                 onClick={() => setShowFullSynopsis(value => !value)}
@@ -811,10 +818,10 @@ export const WatchView: React.FC<WatchViewProps> = ({
 
         {/* Episode Catalog Browser (Seamless Borderless Design) */}
         <div className="w-full text-left px-3 sm:px-0 space-y-4">
-          {/* Section Header */}
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2.5">
-              <Tv className="w-5 h-5 text-indigo-400" />
+          {/* Unified Action Bar: Episodes Title & Count on Left, Control Buttons on Right */}
+          <div className="flex items-center justify-between gap-3">
+            {/* Left: Episodes Text & Total Count Badge */}
+            <div className="flex items-center gap-2.5 shrink-0">
               <h3 className="font-black text-base sm:text-lg text-white tracking-tight">
                 Episodes
               </h3>
@@ -822,44 +829,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 {episodeList.length}
               </span>
             </div>
-          </div>
 
-          {/* Episode Search Filter & Action Bar */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
-                <input
-                  id="watch-episode-search-input"
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder={`Search ${episodeList.length} episodes by # or name...`}
-                  value={episodeSearchQuery}
-                  onInput={e => {
-                    const val = (e.target as HTMLInputElement).value;
-                    setEpisodeSearchQuery(val);
-                  }}
-                  onChange={e => setEpisodeSearchQuery(e.target.value)}
-                  onKeyDown={e => e.stopPropagation()}
-                  onKeyUp={e => e.stopPropagation()}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-[#0d101a] border border-white/10 text-xs sm:text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-red-500/80 transition shadow-inner select-text cursor-text pointer-events-auto"
-                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
-                />
-                {episodeSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEpisodeSearchQuery('');
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 cursor-pointer z-10"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
+            {/* Right: Download, Sort Order & Layout Switcher */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               {/* Download Episodes Modal Trigger */}
               <button
                 type="button"
@@ -1061,10 +1033,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
               })}
             </div>
           ) : (
-            <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[650px] overflow-y-auto pr-1">
               {filteredEpisodes.map(ep => {
                 const isCurrent = ep.number === episodeNumber;
-                const isWatched = ep.number <= currentProgress;
 
                 return (
                   <div
@@ -1074,14 +1045,14 @@ export const WatchView: React.FC<WatchViewProps> = ({
                       onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
                       handleSourceChange(selectedSource);
                     }}
-                    className={`group flex items-start gap-3.5 sm:gap-4 p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer select-none ${
+                    className={`group flex items-center gap-4 p-3 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
                       isCurrent
-                        ? 'bg-[#151228]/90 border-pink-500/70 shadow-xl shadow-pink-500/10 ring-1 ring-pink-500/50'
-                        : 'bg-[#0d101a]/90 hover:bg-[#131726] border-white/10 hover:border-white/20'
+                        ? 'bg-[#141226] border border-indigo-500/40 shadow-xl'
+                        : 'bg-transparent hover:bg-white/5 border border-transparent'
                     }`}
                   >
-                    {/* 16:9 Thumbnail */}
-                    <div className="relative w-36 sm:w-44 md:w-48 aspect-video rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 shadow-md">
+                    {/* 16:9 Thumbnail Image with EP Badge */}
+                    <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 shadow-md">
                       {ep.thumbnail ? (
                         <img
                           src={ep.thumbnail}
@@ -1095,105 +1066,38 @@ export const WatchView: React.FC<WatchViewProps> = ({
                           <Film className="w-6 h-6" />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-                      {/* Live Playing Indicator */}
-                      {isCurrent && (
-                        <div className="absolute top-2 left-2 flex items-center justify-center">
-                          <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-600 ring-2 ring-white/40" />
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Filler 'F' Badge */}
-                      {ep.filler && (
-                        <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[9px] shadow-sm">
-                          F
-                        </span>
-                      )}
-
-                      {/* EP Number Badge */}
-                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-sm text-white font-black text-[11px] border border-white/10 tracking-tight">
+                      {/* EP Number Badge in bottom right of thumbnail */}
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-sm text-white font-black text-[10px] border border-white/10 tracking-tight">
                         EP {ep.number}
                       </div>
 
                       {/* Hover Play Button Overlay */}
                       {!isCurrent && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                          <div className="w-8 h-8 rounded-full bg-indigo-600/90 flex items-center justify-center text-white shadow-lg">
-                            <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                          <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                            <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
                           </div>
                         </div>
                       )}
                     </div>
 
                     {/* Right Details */}
-                    <div className="flex-1 min-w-0 py-0.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <h4
-                          className={`font-bold text-sm sm:text-base leading-snug truncate ${
-                            isCurrent
-                              ? 'text-pink-400 font-extrabold'
-                              : 'text-white group-hover:text-indigo-200'
-                          }`}
-                        >
-                          {ep.title}
-                        </h4>
+                    <div className="flex-1 min-w-0">
+                      <h4
+                        className={`font-black text-sm sm:text-base leading-snug truncate ${
+                          isCurrent
+                            ? 'text-white'
+                            : 'text-neutral-100 group-hover:text-white'
+                        }`}
+                      >
+                        {ep.title}
+                      </h4>
 
-                        {ep.filler && (
-                          <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shrink-0 shadow-sm">
-                            FILLER
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-neutral-400 text-xs sm:text-sm line-clamp-2 mt-1 leading-relaxed">
-                        {ep.synopsis || `Episode ${ep.number} of ${title}. Stream in high definition with original multi-track audio and subtitles.`}
+                      <p className={`text-xs sm:text-sm font-semibold mt-1 ${isCurrent ? 'text-indigo-400 font-extrabold' : 'text-neutral-400'}`}>
+                        {isCurrent ? 'Now playing' : `Episode ${ep.number}`}
                       </p>
-
-                      <div className="flex items-center gap-3 mt-2 text-[11px]">
-                        {isCurrent ? (
-                          <span className="font-bold text-pink-400 flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse" />
-                            Currently playing
-                          </span>
-                        ) : isWatched ? (
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Watched
-                          </span>
-                        ) : (
-                          <span className="text-neutral-400">24m • HD</span>
-                        )}
-
-                        {isEpisodeDownloaded(anime.id, ep.number) && (
-                          <span className="text-violet-400 font-semibold flex items-center gap-1">
-                            <Download className="w-3.5 h-3.5 text-violet-400" />
-                            <span>Downloaded</span>
-                          </span>
-                        )}
-                      </div>
                     </div>
-
-                    {/* Watched Checkmark Toggle */}
-                    <button
-                      type="button"
-                      onClick={e => {
-                        e.stopPropagation();
-                        const nextProgress = isWatched ? ep.number - 1 : ep.number;
-                        onUpdateProgress(anime, nextProgress);
-                      }}
-                      className={`p-2 rounded-xl transition shrink-0 ${
-                        isWatched
-                          ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 bg-emerald-950/20 border border-emerald-500/30'
-                          : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 border border-neutral-800'
-                      }`}
-                      title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                    >
-                      <Eye className={`w-4 h-4 ${isWatched ? 'text-emerald-400 fill-emerald-400/20' : ''}`} />
-                    </button>
                   </div>
                 );
               })}

@@ -179,7 +179,6 @@ public class NativePlayerActivity extends AppCompatActivity {
     private static final Pattern VIDLINK_EXTRACT_PATTERN = Pattern.compile("vidlink\\.pro/anime/(\\d+)/(\\d+)");
 
     private WebView playerWebView;
-    private TextView btnEngineToggle;
     private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
     private String currentActiveServerName = "";
@@ -946,11 +945,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         exoPlayerView = findViewById(R.id.player_exoplayer);
         if (exoPlayerView != null) {
             exoPlayerView.setVisibility(View.VISIBLE);
-        }
-
-        btnEngineToggle = findViewById(R.id.btn_engine_toggle);
-        if (btnEngineToggle != null) {
-            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
         }
 
         View btnLandscapeToggle = findViewById(R.id.btn_landscape_toggle);
@@ -2562,11 +2556,8 @@ public class NativePlayerActivity extends AppCompatActivity {
         VideoSniffer.cancelActiveSniffers();
         runOnUiThread(() -> {
             View touchWall = findViewById(R.id.touch_wall);
-            if (btnEngineToggle != null) {
-                btnEngineToggle.setText(useWebView ? "🌐 WEB" : "⚡ EXO");
-                btnEngineToggle.setTextColor(useWebView ? Color.parseColor("#34D399") : Color.parseColor("#FFD700"));
-                btnEngineToggle.bringToFront();
-            }
+            View topBar = findViewById(R.id.top_center_button_bar);
+            if (topBar != null) topBar.bringToFront();
             if (useWebView) {
                 if (exoPlayer != null) {
                     try {
@@ -2578,9 +2569,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (playerWebView != null) {
                     playerWebView.setVisibility(View.VISIBLE);
                     playerWebView.bringToFront();
-                    View topBar = findViewById(R.id.top_center_button_bar);
                     if (topBar != null) topBar.bringToFront();
-                    if (btnEngineToggle != null) btnEngineToggle.bringToFront();
 
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
                     if (targetUrl != null && !targetUrl.trim().isEmpty()) {

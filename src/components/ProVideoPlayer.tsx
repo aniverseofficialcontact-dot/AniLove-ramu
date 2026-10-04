@@ -901,7 +901,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Home (18+ only), Engine Switcher & Refresh Buttons */}
+          {/* Right: Home (18+ only), Landscape, Engine Switcher & Refresh Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {is18PlusActive && (
               <button
@@ -922,16 +922,16 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
             <button
               type="button"
-              onClick={handleToggleEngine}
-              className={`px-3 py-2 rounded-xl border text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5 ${
-                playerEngineMode === 'web'
-                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
-                  : 'bg-neutral-900 border-neutral-700/80 text-amber-300 hover:bg-neutral-800'
-              }`}
-              title="Switch Player Engine Mode (EXO <-> WEB)"
+              onClick={() => {
+                if (Capacitor.isNativePlatform()) {
+                  NativePlayer.toggleLandscape().catch(() => {});
+                }
+              }}
+              className="px-3 py-2 rounded-xl border border-indigo-500/50 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
+              title="Rotate Screen & Watch in Landscape Full View"
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{playerEngineMode === 'web' ? '🌐 WEB' : '⚡ EXO'}</span>
+              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Landscape</span>
             </button>
 
             <button
