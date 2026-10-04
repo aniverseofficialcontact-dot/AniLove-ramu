@@ -3,10 +3,10 @@ export interface ReactionItem {
   url: string;
   category: string;
   artistName?: string;
-  sourceApi: string;
 }
 
 export const REACTION_CATEGORIES = [
+  { id: 'favorites', label: 'Favorites', emoji: '❤️' },
   { id: 'hug', label: 'Hug', emoji: '🫂' },
   { id: 'pat', label: 'Pat', emoji: '👋' },
   { id: 'dance', label: 'Dance', emoji: '💃' },
@@ -23,90 +23,115 @@ export const REACTION_CATEGORIES = [
   { id: 'chibi', label: 'Chibi & Chars', emoji: '🧸' },
 ];
 
-/**
- * Fetch reaction GIFs and stickers from Waifu.pics, Nekos.best, Nekos.life, NekoBot, Catboys & Animu APIs
- */
-export async function fetchAnimeReactions(category = 'hug'): Promise<ReactionItem[]> {
-  const items: ReactionItem[] = [];
+// Category endpoint mapping for Nekos.best
+const NEKOS_BEST_MAP: Record<string, string> = {
+  hug: 'hug',
+  pat: 'pat',
+  dance: 'dance',
+  smile: 'smile',
+  wink: 'wink',
+  cry: 'pout',
+  blush: 'blush',
+  cuddle: 'hug',
+  slap: 'slap',
+  bite: 'biteme',
+  poke: 'wave',
+  neko: 'neko',
+  catboy: 'neko',
+  chibi: 'happy',
+};
 
-  // 1. Fetch from Nekos.best (Ultra-fast CDN)
+// Category endpoint mapping for Waifu.pics
+const WAIFU_PICS_MAP: Record<string, string> = {
+  hug: 'hug',
+  pat: 'pat',
+  dance: 'dance',
+  smile: 'smile',
+  wink: 'wink',
+  cry: 'cry',
+  blush: 'blush',
+  cuddle: 'cuddle',
+  slap: 'slap',
+  bite: 'bite',
+  poke: 'poke',
+  neko: 'neko',
+  catboy: 'neko',
+  chibi: 'happy',
+};
+
+/**
+ * Fetch reaction GIFs and stickers with multi-page support for seamless scrolling.
+ */
+export async function fetchAnimeReactions(category = 'hug', page = 1): Promise<ReactionItem[]> {
+  if (category === 'favorites') return [];
+
+  const items: ReactionItem[] = [];
+  const nekosCategory = NEKOS_BEST_MAP[category] || 'hug';
+  const waifuCategory = WAIFU_PICS_MAP[category] || 'hug';
+
+  // 1. Fetch batch from Nekos.best (20 items)
   try {
-    const res = await fetch(`https://nekos.best/api/v2/${category}?amount=12`);
+    const res = await fetch(`https://nekos.best/api/v2/${nekosCategory}?amount=20`);
     if (res.ok) {
       const json = await res.json();
       if (json.results && Array.isArray(json.results)) {
         json.results.forEach((item: any, idx: number) => {
           if (item.url) {
             items.push({
-              id: `nekosbest-${category}-${idx}-${Date.now()}`,
+              id: `gif-${category}-nb-${page}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
               url: item.url,
               category,
-              artistName: item.artist_name || 'Nekos.best',
-              sourceApi: 'Nekos.best',
+              artistName: item.artist_name || undefined,
             });
           }
         });
       }
     }
   } catch (err) {
-    console.warn('Nekos.best API fetch skipped:', err);
+    // Silent failover
   }
 
-  // 2. Fetch from Waifu.pics
+  // 2. Fetch parallel batch from Waifu.pics to enrich variety
   try {
-    const type = category === 'neko' || category === 'catboy' ? 'neko' : category;
-    const res = await fetch(`https://api.waifu.pics/sfw/${type}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.url) {
+    const waifuPromises = Array.from({ length: 6 }).map(() =>
+      fetch(`https://api.waifu.pics/sfw/${waifuCategory}`)
+        ? fetch(`https://api.waifu.pics/sfw/${waifuCategory}`)
+            .then((r) => r.json())
+            .then((j) => j.url)
+            .catch(() => null)
+        : null
+    );
+
+    const waifuUrls = await Promise.all(waifuPromises);
+    waifuUrls.forEach((url, idx) => {
+      if (url && typeof url === 'string') {
         items.push({
-          id: `waifupics-${category}-${Date.now()}`,
-          url: json.url,
+          id: `gif-${category}-wp-${page}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+          url,
           category,
-          sourceApi: 'Waifu.pics',
         });
       }
-    }
+    });
   } catch (err) {
-    console.warn('Waifu.pics API fetch skipped:', err);
+    // Silent failover
   }
 
-  // 3. Fetch from Nekos.life
-  try {
-    const endpoint = category === 'neko' ? 'neko' : 'hug';
-    const res = await fetch(`https://nekos.life/api/v2/img/${endpoint}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json.url) {
-        items.push({
-          id: `nekoslife-${category}-${Date.now()}`,
-          url: json.url,
-          category,
-          sourceApi: 'Nekos.life',
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('Nekos.life API fetch skipped:', err);
-  }
-
-  // 4. Fetch from Catboys API if category is catboy
-  if (category === 'catboy') {
+  // 3. Fetch from Nekos.life if category is neko or hug
+  if (category === 'neko' || category === 'hug') {
     try {
-      const res = await fetch('https://api.catboys.com/img');
+      const res = await fetch(`https://nekos.life/api/v2/img/${category === 'neko' ? 'neko' : 'hug'}`);
       if (res.ok) {
         const json = await res.json();
         if (json.url) {
           items.push({
-            id: `catboys-${Date.now()}`,
+            id: `gif-${category}-nl-${page}-${Math.random().toString(36).substring(2, 7)}`,
             url: json.url,
-            category: 'catboy',
-            sourceApi: 'Catboys.com',
+            category,
           });
         }
       }
     } catch (err) {
-      console.warn('Catboys API fetch skipped:', err);
+      // Silent failover
     }
   }
 

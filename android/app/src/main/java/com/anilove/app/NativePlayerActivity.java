@@ -178,6 +178,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     private static final Pattern SERVER2_EXTRACT_PATTERN = Pattern.compile("(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)");
     private static final Pattern VIDLINK_EXTRACT_PATTERN = Pattern.compile("vidlink\\.pro/anime/(\\d+)/(\\d+)");
 
+    private WebView playerWebView;
+    private TextView btnEngineToggle;
+    private boolean isWebViewPlayerMode = false;
     private String currentEmbedUrl = null;
     private String currentActiveServerName = "";
     private String currentActiveSourceName = "";

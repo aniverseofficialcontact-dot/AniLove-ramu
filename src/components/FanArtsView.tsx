@@ -161,7 +161,7 @@ export const FanArtsView: React.FC<FanArtsViewProps> = ({ settings, onShowToast 
               Anime <span className="text-pink-400">Fan Arts</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-500/20 text-pink-300 border border-pink-500/30">
-              DANBOORU
+              ARTWORKS
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">

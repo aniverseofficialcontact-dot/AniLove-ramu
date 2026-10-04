@@ -7,7 +7,7 @@ This document serves as the **authoritative developer manual** for maintaining, 
 
 ## 🏗️ 1. High-Level Architecture Overview
 
-AniLove is engineered as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** application. While the primary UI (Home, Search, Details, Anime Lists, Account, Settings, Downloads View) is managed in React/TypeScript inside Capacitor's WebView, the core video player engine, hardware decoding, stream sniffing, multi-audio/quality switching, background downloading, and file management are handled **natively in Java** using **AndroidX Media3 ExoPlayer** and an **Android Foreground Service**.
+AniLove is engineered as a hybrid **Capacitor + Pure Native Media3 ExoPlayer** application. While the primary UI (Home, Search, Details, Anime Lists, Account, Settings, Downloads View, Anime Express, Fan Arts) is managed in React/TypeScript inside Capacitor's WebView, the core video player engine, hardware decoding, stream sniffing, multi-audio/quality switching, background downloading, and file management are handled **natively in Java** using **AndroidX Media3 ExoPlayer** and an **Android Foreground Service**.
 
 ```
                ┌──────────────────────────────────────────────────┐
@@ -138,6 +138,13 @@ The download system in AniLove is designed for **high-speed, resilient, multi-th
                                                   └── Merge & Save to Local Disk
 ```
 
+### Flow & Lifecycle:
+1. **User triggers download**: In `BatchDownloadModal.tsx`, the user selects quality, audio track, and episodes.
+2. **Download Queueing**: `downloadManager.ts` formats the request payload and calls `DownloadPlugin.startDownload(...)`.
+3. **Service Launch**: `DownloadPlugin.java` starts `EpisodeDownloadService` as an Android Foreground Service with ongoing system notification.
+4. **HLS/MP4 Parallel Downloader**: `EpisodeDownloadService` spawns 10 worker threads to stream segment chunks, merging them locally into `/Android/data/com.anilove.app/files/downloads/`.
+5. **Offline Playback**: In `DownloadsView.tsx`, clicking a downloaded episode invokes `DownloadPlugin.playLocalEpisode(...)` which launches `NativePlayerActivity` pointing directly to the local file path `file:///...`.
+
 ---
 
 ## 🛠️ 6. Build, Sync & Deployment Protocol
@@ -150,4 +157,10 @@ Whenever making changes to frontend code or native player files:
 2. Compile debug APK:
    ```cmd
    gradlew assembleDebug
+   ```
+3. Commit and push code:
+   ```cmd
+   git add .
+   git commit -m "update message"
+   git push origin main
    ```
