@@ -95,29 +95,24 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     setSelectedEpNumbers(new Set(slice.map(e => e.number)));
   };
 
-  const handleStartDownloads = async () => {
+  const isHiAnimeLocked = selectedAudio === 'DUB' || selectedAudio === 'SUB';
+
+  useEffect(() => {
+    if (isHiAnimeLocked) {
+      if (!selectedServer.startsWith('Server')) {
+        setSelectedServer('Server 1');
+      }
+      setSelectedQuality('1080p');
+    }
+  }, [selectedAudio, isHiAnimeLocked, selectedServer]);
+
+  const handleStartDownloads = () => {
     if (selectedEpNumbers.size === 0) return;
-    setIsSubmitting(true);
-    setResultMessage(null);
 
     const targetEpisodes = episodes.filter(e => selectedEpNumbers.has(e.number));
-    const targetEpNumbers = targetEpisodes.map(e => e.number);
 
-    // Verify target subtitle language availability across all selected episodes
-    setResultMessage(`Checking ${selectedSubtitleLang} subtitle availability for selected episodes...`);
-    const checkRes = await verifyBatchSubtitleAvailability(anime.id, targetEpNumbers, selectedSubtitleLang);
-
-    if (!checkRes.valid) {
-      setIsSubmitting(false);
-      setResultMessage(
-        `Download halted: Episode ${checkRes.missingEpisode} does not have "${selectedSubtitleLang}" subtitles available. Please select another subtitle language or adjust the selected episode range to proceed.`
-      );
-      return;
-    }
-
-    setResultMessage(`Subtitles verified! Queuing background downloads...`);
-
-    const res = await queueBatchEpisodeDownloads(
+    // Fire background queue asynchronously without blocking UI
+    queueBatchEpisodeDownloads(
       anime,
       targetEpisodes,
       selectedAudio,
@@ -126,32 +121,10 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
       selectedSubtitleLang
     );
 
-    setIsSubmitting(false);
-
-    if (res.errors && res.errors.length > 0) {
-      if (res.queuedCount > 0) {
-        setResultMessage(
-          `Queued ${res.queuedCount} episode(s). Note: ${res.errors.join(' ')}`
-        );
-      } else {
-        setResultMessage(`Download skipped: ${res.errors.join(' ')}`);
-      }
-      setTimeout(() => {
-        if (res.queuedCount > 0) {
-          onClose();
-          if (onOpenDownloadsView) onOpenDownloadsView();
-        }
-      }, 3500);
-    } else if (res.queuedCount > 0) {
-      setResultMessage(
-        `Successfully queued ${res.queuedCount} episode(s) for background download!`
-      );
-      setTimeout(() => {
-        onClose();
-        if (onOpenDownloadsView) onOpenDownloadsView();
-      }, 1200);
-    } else {
-      setResultMessage(`Could not start download: ${res.errors[0] || 'Unknown error'}`);
+    // IMMEDIATELY close modal and open Downloads view (0ms delay)
+    onClose();
+    if (onOpenDownloadsView) {
+      onOpenDownloadsView();
     }
   };
 
@@ -230,25 +203,40 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedServer(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
-              <option value="Server 1">🌸 HiAnime (Server 1)</option>
-              <option value="Server 2">🌸 HiAnime (Server 2)</option>
-              <option value="Server 3">🌸 HiAnime (Server 3)</option>
-              <option value="AnimeSalt">🧂 AnimeSalt</option>
+              {isHiAnimeLocked ? (
+                <>
+                  <option value="Server 1">🌸 HiAnime (Server 1)</option>
+                  <option value="Server 2">🌸 HiAnime (Server 2)</option>
+                  <option value="Server 3">🌸 HiAnime (Server 3)</option>
+                </>
+              ) : (
+                <>
+                  <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
+                  <option value="Server 1">🌸 HiAnime (Server 1)</option>
+                  <option value="Server 2">🌸 HiAnime (Server 2)</option>
+                  <option value="Server 3">🌸 HiAnime (Server 3)</option>
+                  <option value="AnimeSalt">🧂 AnimeSalt</option>
+                </>
+              )}
             </select>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Video Quality</span>
             <select
-              value={selectedQuality}
+              value="1080p"
+              disabled={isHiAnimeLocked}
               onChange={e => setSelectedQuality(e.target.value)}
-              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-75"
             >
-              <option value="1080p">1080p Full HD</option>
-              <option value="720p">720p HD</option>
-              <option value="480p">480p SD</option>
-              <option value="360p">360p Low</option>
+              <option value="1080p">1080p Full HD {isHiAnimeLocked ? '(Adaptive HLS Stream)' : ''}</option>
+              {!isHiAnimeLocked && (
+                <>
+                  <option value="720p">720p HD</option>
+                  <option value="480p">480p SD</option>
+                  <option value="360p">360p Low</option>
+                </>
+              )}
             </select>
           </div>
 

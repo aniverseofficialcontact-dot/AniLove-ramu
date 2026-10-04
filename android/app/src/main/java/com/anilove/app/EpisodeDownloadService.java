@@ -314,12 +314,46 @@ public class EpisodeDownloadService extends Service {
 
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
 
+        // On-device Subtitle Fetch Fallback if subtitleUrl is missing
+        if ((item.subtitleUrl == null || item.subtitleUrl.isEmpty()) && item.anilistId > 0) {
+            try {
+                String subApiUrl = "https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=" + item.anilistId + "&ep=" + item.episodeNumber;
+                HttpURLConnection conn = (HttpURLConnection) new URL(subApiUrl).openConnection();
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    JSONObject subJson = new JSONObject(sb.toString());
+                    if (subJson.optBoolean("success", false) && subJson.has("subtitles")) {
+                        JSONArray arr = subJson.getJSONArray("subtitles");
+                        if (arr.length() > 0) {
+                            JSONObject firstTrack = arr.getJSONObject(0);
+                            item.subtitleUrl = firstTrack.optString("url", "");
+                            if (arr.length() > 1) {
+                                JSONObject secondTrack = arr.getJSONObject(1);
+                                item.subtitleUrl2 = secondTrack.optString("url", "");
+                            }
+                        }
+                    }
+                }
+            } catch (Exception subFetchErr) {
+                Log.w(TAG, "On-device subtitle fetch fallback warning: " + subFetchErr.getMessage());
+            }
+        }
+
         // 2a. Download Primary Subtitle if present
         if (item.subtitleUrl != null && !item.subtitleUrl.isEmpty()) {
             try {
                 File subFile = new File(downloadDir, "ep_" + item.episodeNumber + ".vtt");
-                downloadFileDirect(item.subtitleUrl, subFile, referer);
+                String subReferer = item.subtitleUrl.contains("subtitles-l8cm") ? null : getRefererForUrl(item.subtitleUrl, null);
+                downloadFileDirect(item.subtitleUrl, subFile, subReferer);
                 item.localSubPath = subFile.getAbsolutePath();
+                Log.i(TAG, "Primary subtitle downloaded successfully to: " + item.localSubPath);
             } catch (Exception subErr) {
                 Log.w(TAG, "Non-critical: Primary subtitle download failed: " + subErr.getMessage());
             }
@@ -329,8 +363,10 @@ public class EpisodeDownloadService extends Service {
         if (item.subtitleUrl2 != null && !item.subtitleUrl2.isEmpty()) {
             try {
                 File subFile2 = new File(downloadDir, "ep_" + item.episodeNumber + "_2.vtt");
-                downloadFileDirect(item.subtitleUrl2, subFile2, referer);
+                String subReferer2 = item.subtitleUrl2.contains("subtitles-l8cm") ? null : getRefererForUrl(item.subtitleUrl2, null);
+                downloadFileDirect(item.subtitleUrl2, subFile2, subReferer2);
                 item.localSubPath2 = subFile2.getAbsolutePath();
+                Log.i(TAG, "Secondary subtitle downloaded successfully to: " + item.localSubPath2);
             } catch (Exception subErr) {
                 Log.w(TAG, "Non-critical: Secondary subtitle download failed: " + subErr.getMessage());
             }
