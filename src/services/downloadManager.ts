@@ -1,6 +1,6 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { resolveEpisodeSource, resolveHiAnimeSource, resolveAnimeSaltSource, STREAM_PROVIDERS, StreamLanguage, SUPPORTED_LANGUAGES } from './streamingProviders';
+import { resolveEpisodeSource, STREAM_PROVIDERS, StreamLanguage, SUPPORTED_LANGUAGES } from './streamingProviders';
 import { fetchUnifiedSubtitles, anonymizeAndSortSubtitleTracks } from './subtitleService';
 
 export interface DownloadItemInfo {
@@ -185,45 +185,23 @@ export async function queueBatchEpisodeDownloads(
       let subtitleUrl = '';
       let subtitleUrl2 = '';
 
-      const isMovieBox = serverName.toLowerCase().includes('multi-lang') ||
-                         serverName.toLowerCase().includes('moviebox') ||
-                         (!serverName.toLowerCase().includes('server') && !serverName.toLowerCase().includes('animesalt'));
-
       // Concurrent fetch: Subtitles + Stream URL
       const [subs, streamRes] = await Promise.all([
         fetchUnifiedSubtitles(anime.id, ep.number, 2500).catch(() => []),
-        (async () => {
-          if (isMovieBox) {
-            const res = await resolveEpisodeSource({
-              anime,
-              episodeNumber: ep.number,
-              providerId: 'anime-world-v1',
-              language: audio,
-              resolution: (effectiveQuality as any) || '1080p',
-              serverName: 'Multi-Lang-Server-1',
-              sourceName: 'Multi-Lang',
-            });
-            return res && res.status === 'available' && res.source?.url ? res.source.url : '';
-          } else if (serverName.toLowerCase().includes('animesalt')) {
-            const salt = await resolveAnimeSaltSource(displayTitle, ep.number, anime.id);
-            return salt && salt.selectedUrl ? salt.selectedUrl : '';
-          } else {
-            // HiAnime
-            const hi = resolveHiAnimeSource(anime.id, ep.number, audio, selectedServerName);
-            if (hi && hi.selectedUrl) return hi.selectedUrl;
-
-            // Deterministic HiAnime Fallback Route
-            const mode = audio === 'SUB' ? 'sub' : 'dub';
-            if (selectedServerName.includes('2')) {
-              return `https://tryembed.us.cc/embed/anime/${anime.id}/${ep.number}/${mode}`;
-            } else if (selectedServerName.includes('3')) {
-              return `https://vidnest.fun/animepahe/${anime.id}/${ep.number}/${mode}`;
-            } else {
-              return `https://vidnest.fun/anime/${anime.id}/${ep.number}/${mode}`;
-            }
-          }
-        })().catch(() => '')
+        resolveEpisodeSource({
+          anime,
+          episodeNumber: ep.number,
+          providerId: 'anime-world-v1',
+          language: audio,
+          resolution: (effectiveQuality as any) || '1080p',
+          serverName,
+        }).catch(() => null),
       ]);
+
+      if (streamRes && streamRes.status === 'available' && streamRes.source?.url) {
+        streamUrl = streamRes.source.url;
+        selectedServerName = streamRes.source.selectedServerName || serverName;
+      }
 
       // Format Subtitles
       if (subs && subs.length > 0) {

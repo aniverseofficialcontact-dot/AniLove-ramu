@@ -165,19 +165,13 @@ export const WatchView: React.FC<WatchViewProps> = ({
           { displayName: 'Server 3', internalCode: 'HiAnime-Server-3' },
         ],
       },
-      AnimeSalt: {
-        label: 'AnimeSalt',
-        servers: [
-          { displayName: 'Server 1', internalCode: 'AnimeSalt-Server-1' },
-        ],
-      },
     };
   }, [is18PlusActive]);
 
-  type StreamSourceId = 'Multi-Lang' | 'AnimeDekho' | 'HiAnime' | 'AnimeSalt' | 'HentaiOcean';
+  type StreamSourceId = 'Multi-Lang' | 'HiAnime' | 'HentaiOcean';
 
   const availableSources = useMemo<StreamSourceId[]>(() => {
-    return is18PlusActive ? ['HentaiOcean'] : ['Multi-Lang', 'AnimeDekho', 'HiAnime', 'AnimeSalt'];
+    return is18PlusActive ? ['HentaiOcean'] : ['Multi-Lang', 'HiAnime'];
   }, [is18PlusActive]);
 
   const [playerEngineMode, setPlayerEngineMode] = useState<'exo' | 'web'>(is18PlusActive ? 'web' : 'exo');
@@ -595,7 +589,7 @@ export const WatchView: React.FC<WatchViewProps> = ({
           </div>
         )}
 
-        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: HOME (18+ only), ENGINE, REFRESH, SOURCES, SERVERS */}
+        {/* Compact Right-Aligned Expandable Dual Selector Dropdowns: HOME & LANDSCAPE (18+ only), REFRESH, SOURCES, SERVERS */}
         <div className="flex items-center justify-end gap-3 px-3 sm:px-0 mt-5 mb-2">
           {/* HOME BUTTON (ONLY IN 18+ PROFILE) */}
           {is18PlusActive && (
@@ -620,47 +614,29 @@ export const WatchView: React.FC<WatchViewProps> = ({
             </div>
           )}
 
-          {/* ENGINE SWITCH Button */}
-          <div className="relative flex flex-col items-end">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
-              ENGINE
-            </span>
-            <button
-              type="button"
-              onClick={handleToggleEngine}
-              title="Switch Player Engine (ExoPlayer vs WebPlayer)"
-              className={`rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 border ${
-                playerEngineMode === 'exo'
-                  ? 'bg-emerald-950/80 border-emerald-500/50 hover:bg-emerald-900/80 text-emerald-300'
-                  : 'bg-cyan-950/80 border-cyan-500/50 hover:bg-cyan-900/80 text-cyan-300'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{playerEngineMode === 'exo' ? 'Exo' : 'Web'}</span>
-            </button>
-          </div>
-
-          {/* LANDSCAPE FULL VIEW Button */}
-          <div className="relative flex flex-col items-end">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
-              FULL VIEW
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                if (Capacitor.isNativePlatform()) {
-                  NativePlayer.toggleLandscape().catch(() => {});
-                } else {
-                  window.dispatchEvent(new CustomEvent('toggleWebFullscreen'));
-                }
-              }}
-              title="Rotate Screen & Watch in Landscape Full View"
-              className="bg-indigo-950/80 border border-indigo-500/50 hover:bg-indigo-900/80 text-indigo-300 rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Landscape</span>
-            </button>
-          </div>
+          {/* LANDSCAPE FULL VIEW Button (ONLY IN 18+ PROFILE at Top Right) */}
+          {is18PlusActive && (
+            <div className="relative flex flex-col items-end">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+                FULL VIEW
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (Capacitor.isNativePlatform()) {
+                    NativePlayer.toggleLandscape().catch(() => {});
+                  } else {
+                    window.dispatchEvent(new CustomEvent('toggleWebFullscreen'));
+                  }
+                }}
+                title="Rotate Screen & Watch in Landscape Full View"
+                className="bg-indigo-950/80 border border-indigo-500/50 hover:bg-indigo-900/80 text-indigo-300 rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Landscape</span>
+              </button>
+            </div>
+          )}
 
           {/* REFRESH PLAYER Button */}
           <div className="relative flex flex-col items-end">
@@ -865,33 +841,32 @@ export const WatchView: React.FC<WatchViewProps> = ({
                 <span className="hidden sm:inline">Download</span>
               </button>
 
-              {/* Sort Asc/Desc Button */}
+              {/* Sort Asc/Desc Button (Boxless Minimal Icon) */}
               <button
                 type="button"
                 onClick={() => setSortAsc(prev => !prev)}
-                className="p-2.5 rounded-2xl bg-[#0d101a] hover:bg-[#141926] border border-white/10 text-neutral-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                className="p-2 text-neutral-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
                 title={sortAsc ? 'Sort Descending (Newest first)' : 'Sort Ascending (Oldest first)'}
               >
-                <ArrowUpDown className="w-4 h-4 text-neutral-300" />
-                <span className="hidden md:inline text-xs">{sortAsc ? '1-N' : 'N-1'}</span>
+                <ArrowUpDown className="w-4 h-4 text-indigo-400" />
               </button>
 
-              {/* Grid / List / Compact Layout Cycling Button */}
+              {/* Single Cycling Layout Toggle Button (Boxless Minimal Icon) */}
               <button
                 type="button"
                 onClick={() => {
                   setEpisodeViewMode(prev => {
-                    if (prev === 'grid') return 'list';
-                    if (prev === 'list') return 'compact';
-                    return 'grid';
+                    if (prev === 'list') return 'grid';
+                    if (prev === 'grid') return 'compact';
+                    return 'list';
                   });
                 }}
-                className="p-2.5 rounded-2xl bg-[#0d101a] hover:bg-[#141926] border border-white/10 text-neutral-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                className="p-2 text-neutral-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
                 title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
               >
-                {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-neutral-300" />}
-                {episodeViewMode === 'list' && <List className="w-4 h-4 text-neutral-300" />}
-                {episodeViewMode === 'compact' && <Hash className="w-4 h-4 text-neutral-300" />}
+                {episodeViewMode === 'list' && <List className="w-4 h-4 text-indigo-400" />}
+                {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-indigo-400" />}
+                {episodeViewMode === 'compact' && <Hash className="w-4 h-4 text-indigo-400" />}
               </button>
             </div>
 

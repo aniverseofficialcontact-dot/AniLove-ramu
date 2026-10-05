@@ -584,39 +584,7 @@ export async function resolveEpisodeSource({
     };
   }
 
-  // ROUTE 1: Multi-Lang (MovieBox) Source
-  if (combined.includes('multi-lang') || combined.includes('multilang') || combined.includes('moviebox')) {
-    const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);
-    if (!ml.selectedUrl) {
-      return {
-        status: 'error',
-        message: `Multi-Lang stream is not available for Episode ${episodeNumber}. Please switch to AnimeDekho or HiAnime.`,
-      };
-    }
-    return {
-      status: 'available',
-      source: {
-        provider: DEFAULT_PROVIDER,
-        url: ml.selectedUrl,
-        subtitleUrl: undefined,
-        subtitleLang: 'English',
-        language,
-        resolution,
-        isEmbeddable: true,
-        external: false,
-        skipData: { intro: [0, 0], outro: [0, 0] },
-        availableServers: ml.availableServers,
-        availableLanguages: ml.availableLanguages as any,
-        availableResolutions: ml.availableResolutions,
-        qualityMap: ml.qualityMap,
-        languageQualityMap: ml.languageQualityMap,
-        selectedServerName: ml.selectedServerName,
-        isDubAvailable: true,
-      },
-    };
-  }
-
-  // ROUTE 2: HiAnime Source
+  // ROUTE 1: HiAnime Source
   if (combined.includes('hianime')) {
     const hi = resolveHiAnimeSource(anilistId, episodeNumber, language, serverName);
     return {
@@ -638,44 +606,26 @@ export async function resolveEpisodeSource({
     };
   }
 
-  // ROUTE 3: AnimeSalt Source
-  if (combined.includes('animesalt')) {
-    const salt = await resolveAnimeSaltSource(englishTitle, episodeNumber, anilistId, refresh);
-    return {
-      status: 'available',
-      source: {
-        provider: DEFAULT_PROVIDER,
-        url: salt.selectedUrl,
-        language,
-        resolution,
-        isEmbeddable: true,
-        external: false,
-        skipData: { intro: [0, 0], outro: [0, 0] },
-        availableServers: salt.availableServers,
-        availableLanguages: ['SUB'],
-        availableResolutions: ['1080p'],
-        selectedServerName: salt.selectedServerName,
-        isDubAvailable: true,
-      },
-    };
-  }
-
-  // ROUTE 4: AnimeDekho Source (Default)
-  const dekho = await resolveAnimeDekhoSource(anilistId, episodeNumber, englishTitle, serverName, refresh);
+  // ROUTE 2: Multi-Lang (MovieBox) Source (Default)
+  const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);
   return {
     status: 'available',
     source: {
       provider: DEFAULT_PROVIDER,
-      url: dekho.selectedUrl,
+      url: ml.selectedUrl,
+      subtitleUrl: undefined,
+      subtitleLang: 'English',
       language,
       resolution,
       isEmbeddable: true,
       external: false,
       skipData: { intro: [0, 0], outro: [0, 0] },
-      availableServers: dekho.availableServers,
-      availableLanguages: ['SUB', 'DUB', 'HIN', 'TAM', 'TEL'],
-      availableResolutions: ['1080p', '720p', '480p'],
-      selectedServerName: dekho.selectedServerName,
+      availableServers: ml.availableServers,
+      availableLanguages: ml.availableLanguages as any,
+      availableResolutions: ml.availableResolutions,
+      qualityMap: ml.qualityMap,
+      languageQualityMap: ml.languageQualityMap,
+      selectedServerName: ml.selectedServerName,
       isDubAvailable: true,
     },
   };

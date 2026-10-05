@@ -6,6 +6,7 @@ import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSo
 import { queueBatchEpisodeDownloads, isEpisodeDownloaded } from '../services/downloadManager';
 import { verifyBatchSubtitleAvailability } from '../services/subtitleService';
 import { NativePlayer } from '../services/nativePlayer';
+import { getStoredSettings } from '../services/storage';
 
 interface BatchDownloadModalProps {
   anime: Anime;
@@ -74,29 +75,15 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
       }
     };
   }, []);
-
-  const isHiAnimeLocked = selectedAudio === 'DUB' || selectedAudio === 'SUB';
-  const isHindiSelected = selectedAudio === 'HIN';
-
-  const filteredLanguages = useMemo(() => {
-    if (!availableLanguages || availableLanguages.length === 0) return SUPPORTED_LANGUAGES;
-    return SUPPORTED_LANGUAGES.filter(lang => availableLanguages.includes(lang.code));
-  }, [availableLanguages]);
+  const is18PlusMode = Boolean(getStoredSettings().is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
 
   useEffect(() => {
-    if (isHiAnimeLocked) {
-      if (!selectedServer.startsWith('Server')) {
-        setSelectedServer('Server 1');
-      }
-      setSelectedQuality('1080p');
+    if (is18PlusMode) {
+      setSelectedServer('HentaiOcean Engine');
     } else {
-      if (selectedServer.startsWith('Server') && !isHindiSelected) {
-        setSelectedServer('Multi-Lang');
-      } else if (!selectedServer.includes('Multi-Lang') && !selectedServer.includes('AnimeSalt')) {
-        setSelectedServer('Multi-Lang');
-      }
+      setSelectedServer('Multi-Lang');
     }
-  }, [selectedAudio, isHiAnimeLocked, isHindiSelected, selectedServer]);
+  }, [is18PlusMode]);
 
   const toggleEpisode = (epNum: number) => {
     setSelectedEpNumbers(prev => {
@@ -223,21 +210,10 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedServer(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              {isHiAnimeLocked ? (
-                <>
-                  <option value="Server 1">🌸 HiAnime (Server 1)</option>
-                  <option value="Server 2">🌸 HiAnime (Server 2)</option>
-                  <option value="Server 3">🌸 HiAnime (Server 3)</option>
-                </>
-              ) : isHindiSelected ? (
-                <>
-                  <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
-                  <option value="AnimeSalt">🧂 AnimeSalt</option>
-                </>
+              {is18PlusMode ? (
+                <option value="HentaiOcean Engine">🔞 HentaiOcean Engine</option>
               ) : (
-                <>
-                  <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
-                </>
+                <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
               )}
             </select>
           </div>
@@ -245,18 +221,13 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Video Quality</span>
             <select
-              value={isHiAnimeLocked ? '1080p' : selectedQuality}
-              disabled={isHiAnimeLocked}
+              value={selectedQuality}
               onChange={e => setSelectedQuality(e.target.value)}
-              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-75"
+              className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              {isHiAnimeLocked ? (
-                <option value="1080p">1080p Full HD (Adaptive HLS Stream)</option>
-              ) : (
-                (movieBoxLangQualMap[selectedAudio] || ['1080p', '720p', '480p', '360p']).map(q => (
-                  <option key={q} value={q}>{q} {q === '1080p' ? 'Full HD' : q === '720p' ? 'HD' : q === '480p' ? 'SD' : 'Low'}</option>
-                ))
-              )}
+              <option value="1080p">1080p Full HD</option>
+              <option value="720p">720p HD</option>
+              <option value="480p">480p SD</option>
             </select>
           </div>
 

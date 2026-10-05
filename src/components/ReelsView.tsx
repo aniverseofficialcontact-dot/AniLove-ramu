@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronLeft,
   Film,
-  RotateCw,
   Download,
   Check,
   Crop,
@@ -115,6 +114,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const seekbarRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const was2xHoldingRef = useRef<boolean>(false);
+  const is2xSpeedRef = useRef<boolean>(false);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
     if (videoRef.current && typeof videoRef.current.play === 'function') {
@@ -398,7 +398,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const performPlay = (muted: boolean) => {
       v.muted = muted;
       if (!muted) v.volume = 1.0;
-      v.playbackRate = is2xSpeed ? 2.0 : 1.0;
+      v.playbackRate = is2xSpeedRef.current ? 2.0 : 1.0;
       const p = v.play();
       if (p !== undefined) {
         return p.then(() => {
@@ -421,7 +421,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         performPlay(true).catch(() => {});
       });
     }
-  }, [getActiveVideo, is2xSpeed]);
+  }, [getActiveVideo]);
 
   const setVideoElementRef = useCallback((el: HTMLVideoElement | null) => {
     if (el) {
@@ -438,6 +438,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [playVideoSafely]);
 
+  // Smoothly update video playback rate on 2x hold/release without resetting playback time!
+  useEffect(() => {
+    is2xSpeedRef.current = is2xSpeed;
+    const v = getActiveVideo();
+    if (v) {
+      v.playbackRate = is2xSpeed ? 2.0 : 1.0;
+    }
+  }, [is2xSpeed, getActiveVideo]);
+
   useEffect(() => {
     setIsFrameRendered(false);
     setIs2xSpeed(false);
@@ -449,13 +458,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
-    video.playbackRate = is2xSpeed ? 2.0 : 1.0;
+    video.playbackRate = is2xSpeedRef.current ? 2.0 : 1.0;
     video.currentTime = 0;
     setProgress(0);
     setCurrentTime(0);
 
     playVideoSafely(video);
-  }, [historyIndex, currentReel?.id, getActiveVideo, playVideoSafely, is2xSpeed]);
+  }, [historyIndex, currentReel?.id, getActiveVideo, playVideoSafely]);
 
   // Robust Watchdog / Playback Keeper: Auto-resumes and self-heals stalled network streams
   useEffect(() => {
@@ -657,31 +666,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       prevRefreshTriggerRef.current = refreshTrigger;
     }
   }, [refreshTrigger, shuffleReel]);
-
-  const handleRefreshCurrentReel = useCallback(() => {
-    const video = getActiveVideo();
-    if (!video || !currentReel) return;
-
-    setIsFrameRendered(false);
-    setIsBuffering(true);
-    isManuallyPausedRef.current = false;
-
-    video.currentTime = 0;
-    try {
-      video.load();
-    } catch {}
-
-    playVideoSafely(video);
-    reelMediaCache.preloadReel(currentReel.id, 'high').then(objUrl => {
-      if (objUrl && feedHistoryRef.current[historyIndexRef.current]?.id === currentReel.id) {
-        setActiveVideoUrl(objUrl);
-      }
-    }).catch(() => {});
-
-    if (onShowToast) {
-      onShowToast('info', `Reloaded ${currentReel.cleanTitle || 'Reel'}`, 'Reel Refreshed');
-    }
-  }, [getActiveVideo, currentReel, playVideoSafely, onShowToast]);
 
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
@@ -1267,16 +1251,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           <div />
         )}
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          {/* Reload Active Reel Button */}
-          <button
-            onClick={handleRefreshCurrentReel}
-            title="Reload active reel stream"
-            className="p-2 text-white/80 hover:text-white transition active:scale-90 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-          >
-            <RotateCw className="w-5 h-5 text-pink-400" />
-          </button>
-        </div>
+        <div />
       </div>
 
       {/* 2x Speed White Text Badge Indicator */}
@@ -1301,7 +1276,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full h-full flex items-center justify-center overflow-hidden select-none cursor-grab active:cursor-grabbing pb-16 lg:pb-0 pt-0 lg:pt-16"
+        className="relative w-full h-full flex items-center justify-center overflow-hidden select-none cursor-grab active:cursor-grabbing p-0"
       >
         {isLoading ? (
           <div className="flex flex-col items-center justify-center space-y-3 text-slate-400">
@@ -1357,7 +1332,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     // @ts-ignore
                     fetchPriority="high"
                     className={`relative z-10 w-full h-full ${
-                      aspectFitMode === 'cover' ? 'object-cover w-full h-full' : 'object-contain max-w-[420px] md:max-w-[540px] max-h-[92vh]'
+                      aspectFitMode === 'cover' ? 'object-cover w-full h-full' : 'object-contain w-full h-full'
                     }`}
                   />
                   {isBuffering && (
@@ -1367,7 +1342,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   )}
                 </div>
 
-                {isLandscape && (
+                {(isLandscape || aspectFitMode === 'contain') && (
                   <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
                     <img
                       src={`https://lh3.googleusercontent.com/d/${currentReel.id}`}
@@ -1546,7 +1521,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               )}
             </AnimatePresence>
 
-            <div className="absolute right-3 sm:right-4 bottom-28 lg:bottom-24 flex flex-col items-center gap-5 sm:gap-6 z-30 pointer-events-auto">
+            <div className="absolute right-3 sm:right-4 bottom-24 lg:bottom-20 flex flex-col items-center gap-4 sm:gap-5 z-30 pointer-events-auto">
               <button
                 data-interactive="true"
                 onTouchStart={(e) => e.stopPropagation()}
@@ -1622,7 +1597,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
                   setAspectFitMode(nextMode);
                   if (onShowToast) {
-                    onShowToast('info', nextMode === 'cover' ? 'Switched to Full Screen Cover' : 'Switched to Fit Screen', 'Aspect Ratio');
+                    onShowToast('info', nextMode === 'cover' ? 'Full Screen Cover' : 'Original Reel Fit (Full View)', 'Aspect Ratio');
                   }
                 }}
                 onClick={(e) => {
@@ -1631,11 +1606,13 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   const nextMode = aspectFitMode === 'contain' ? 'cover' : 'contain';
                   setAspectFitMode(nextMode);
                   if (onShowToast) {
-                    onShowToast('info', nextMode === 'cover' ? 'Switched to Full Screen Cover' : 'Switched to Fit Screen', 'Aspect Ratio');
+                    onShowToast('info', nextMode === 'cover' ? 'Full Screen Cover' : 'Original Reel Fit (Full View)', 'Aspect Ratio');
                   }
                 }}
-                title={aspectFitMode === 'contain' ? 'Cover Full Screen' : 'Fit Screen'}
-                className="p-1.5 text-white/90 hover:text-white transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                title={aspectFitMode === 'contain' ? 'Cover Full Screen' : 'Fit Entire Original Reel'}
+                className={`p-1.5 transition-all duration-200 active:scale-75 cursor-pointer drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${
+                  aspectFitMode === 'cover' ? 'text-pink-400' : 'text-white/90 hover:text-white'
+                }`}
               >
                 <Crop className="w-7 h-7 stroke-[2.2]" />
               </button>
@@ -1686,7 +1663,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             </div>
 
             {/* Bottom Metadata & Scrubber Progress Bar */}
-            <div className="absolute bottom-16 lg:bottom-4 inset-x-4 sm:inset-x-6 z-20 space-y-2 pointer-events-auto">
+            <div className="absolute bottom-4 sm:bottom-6 inset-x-4 sm:inset-x-6 z-20 space-y-2 pointer-events-auto">
               <div className="pr-16 space-y-1">
                 <h2 className="text-sm sm:text-base font-bold text-white line-clamp-2 drop-shadow-md">
                   {renderTitleWithPinkNumber(currentReel.cleanTitle)}

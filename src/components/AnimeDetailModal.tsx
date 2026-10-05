@@ -1399,15 +1399,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                           )}
                         </div>
 
-                        {/* List vs Grid Switcher */}
+                        {/* Single Cycling Layout Toggle Button (Boxless Minimal Icon) */}
                         <button
                           type="button"
                           onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
-                          className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                          className="p-2 text-slate-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
                           title="Toggle Episode Layout"
                         >
-                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
-                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
+                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-indigo-400" />}
+                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-indigo-400" />}
                         </button>
                       </div>
 
@@ -1525,15 +1525,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                           )}
                         </div>
 
-                        {/* List vs Grid Switcher */}
+                        {/* Single Cycling Layout Toggle Button (Boxless Minimal Icon) */}
                         <button
                           type="button"
                           onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
-                          className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                          className="p-2 text-slate-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
                           title="Toggle Episode Layout"
                         >
-                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
-                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
+                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-indigo-400" />}
+                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-indigo-400" />}
                         </button>
                       </div>
 

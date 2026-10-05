@@ -996,7 +996,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Home (18+ only), Landscape, Engine Switcher & Refresh Buttons */}
+          {/* Right: Home & Landscape (18+ only) & Refresh Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {is18PlusActive && (
               <button
@@ -1015,35 +1015,23 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleToggleEngine}
-              className={`px-3 py-2 rounded-xl border text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5 ${
-                playerEngineMode === 'exo'
-                  ? 'border-emerald-500/50 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300'
-                  : 'border-cyan-500/50 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300'
-              }`}
-              title="Switch Player Engine (ExoPlayer vs WebPlayer)"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{playerEngineMode === 'exo' ? 'ExoPlayer' : 'WebPlayer'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (Capacitor.isNativePlatform()) {
-                  NativePlayer.toggleLandscape().catch(() => {});
-                } else {
-                  toggleFullscreen();
-                }
-              }}
-              className="px-3 py-2 rounded-xl border border-indigo-500/50 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
-              title="Rotate Screen & Watch in Landscape Full View"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Landscape</span>
-            </button>
+            {is18PlusActive && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (Capacitor.isNativePlatform()) {
+                    NativePlayer.toggleLandscape().catch(() => {});
+                  } else {
+                    toggleFullscreen();
+                  }
+                }}
+                className="px-3 py-2 rounded-xl border border-indigo-500/50 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
+                title="Rotate Screen & Watch in Landscape Full View"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Landscape</span>
+              </button>
+            )}
 
             <button
               type="button"
