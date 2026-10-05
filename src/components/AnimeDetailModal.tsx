@@ -1397,12 +1397,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                               <X className="w-3.5 h-3.5" />
                             </button>
                           )}
+                        </div>
+
                         {/* List vs Grid Switcher */}
                         <button
                           type="button"
                           onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
                           className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
-                          title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
+                          title="Toggle Episode Layout"
                         >
                           {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
                           {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
@@ -1528,7 +1530,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                           type="button"
                           onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
                           className="p-2.5 rounded-xl bg-[#121628] hover:bg-[#1a2038] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
-                          title={`Layout: ${episodeViewMode.toUpperCase()} (Click to toggle)`}
+                          title="Toggle Episode Layout"
                         >
                           {episodeViewMode === 'list' && <List className="w-4 h-4 text-slate-300" />}
                           {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-slate-300" />}
@@ -1654,7 +1656,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                               </div>
 
                               {/* Content */}
-                              <div className="p-3 flex-1 flex flex-col justify-between gap-1">
+                              <div className="p-3 flex-1 flex flex-col justify-between gap-2">
                                 <div>
                                   <h4 className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition line-clamp-2 leading-snug">
                                     {ep.title}
@@ -1662,6 +1664,28 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   <p className="text-[11px] text-slate-400 mt-1 font-medium">
                                     Episode {ep.number}
                                   </p>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 mt-auto">
+                                  <span className="text-[10px] text-slate-500">
+                                    {isWatched ? 'Completed' : 'Unwatched'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      const nextProgress = isWatched ? ep.number - 1 : ep.number;
+                                      onUpdateProgress(currentAnime, nextProgress);
+                                    }}
+                                    className={`p-1.5 rounded-lg transition ${
+                                      isWatched
+                                        ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40'
+                                        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                                    }`}
+                                    title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                                  >
+                                    <Eye className={`w-4 h-4 ${isWatched ? 'text-indigo-400 fill-indigo-400/20' : ''}`} />
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -1687,48 +1711,63 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   }, 100);
                                 }
                               }}
-                              className="group relative flex items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-300 cursor-pointer shadow-xl bg-[#080b18]"
+                              className="group flex items-center justify-between gap-4 p-3 rounded-2xl bg-[#101424] hover:bg-[#151a30] border border-slate-800/80 hover:border-slate-700 transition cursor-pointer select-none"
                             >
-                              {/* Full Embedded Background Thumbnail Image */}
-                              {(ep.thumbnail || coverUrl) && (
-                                <img
-                                  src={ep.thumbnail || coverUrl}
-                                  alt={ep.title}
-                                  className="absolute inset-0 w-full h-full object-cover object-center opacity-40 group-hover:opacity-65 transition-opacity duration-300 scale-105 pointer-events-none"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                />
-                              )}
-
-                              {/* Dark Gradient Overlay for Readability */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-[#08080c]/95 via-[#08080c]/80 to-[#08080c]/40 group-hover:via-[#08080c]/70 transition-colors pointer-events-none" />
-
-                              {/* Foreground Content sitting ON TOP of Background Image */}
-                              <div className="relative z-10 flex-1 min-w-0 pr-2">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <div className="px-2.5 py-0.5 rounded-md bg-indigo-600/90 text-white text-[10px] font-black uppercase tracking-wider shadow-md">
-                                    EP {ep.number}
+                              {/* Left: Thumbnail with EP Badge */}
+                              <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-800/80">
+                                {ep.thumbnail ? (
+                                  <img
+                                    src={ep.thumbnail}
+                                    alt={ep.title}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900">
+                                    <Film className="w-6 h-6" />
                                   </div>
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                                <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/85 text-[10px] sm:text-xs font-bold text-white tracking-tight">
+                                  EP {ep.number}
+                                </div>
+                              </div>
+
+                              {/* Middle: Title & Episode Number Subtitle */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-xs sm:text-sm text-slate-100 group-hover:text-indigo-300 transition line-clamp-1 leading-snug">
+                                    {ep.title}
+                                  </h4>
                                   {ep.filler && (
                                     <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0">
                                       FILLER
                                     </span>
                                   )}
-                                  {isWatched && (
-                                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                                      Watched
-                                    </span>
-                                  )}
                                 </div>
-
-                                <h4 className="font-black text-sm sm:text-base text-white group-hover:text-indigo-300 transition line-clamp-1 leading-snug drop-shadow-md">
-                                  {ep.title}
-                                </h4>
-
-                                <p className="text-xs text-slate-300/80 font-medium mt-0.5">
-                                  Episode {ep.number} {ep.duration ? `• ${ep.duration}` : ''}
+                                <p className="text-xs text-slate-400 mt-1">
+                                  Episode {ep.number}
                                 </p>
                               </div>
+
+                              {/* Right: Eye Icon for Watched Progress */}
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  const nextProgress = isWatched ? ep.number - 1 : ep.number;
+                                  onUpdateProgress(currentAnime, nextProgress);
+                                }}
+                                className={`p-2 rounded-xl transition ${
+                                  isWatched
+                                    ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40'
+                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                                }`}
+                                title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                              >
+                                <Eye className={`w-5 h-5 ${isWatched ? 'text-indigo-400 fill-indigo-400/20' : ''}`} />
+                              </button>
                             </div>
                           );
                         })}
