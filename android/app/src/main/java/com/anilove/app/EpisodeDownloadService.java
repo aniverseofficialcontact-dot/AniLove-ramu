@@ -606,9 +606,16 @@ public class EpisodeDownloadService extends Service {
             else if ("TAM".equalsIgnoreCase(audioParam)) audioParam = "Tamil";
             else if ("TEL".equalsIgnoreCase(audioParam)) audioParam = "Telugu";
 
+            // Resolve mapped title and episode number via AniZip
+            AniZipHelper.Mapping mapping = AniZipHelper.getMapping(item.anilistId);
+            String searchTitle = AniZipHelper.getMappedTitle(mapping, item.animeTitle);
+            int searchEp = AniZipHelper.getMappedEpisode(mapping, item.episodeNumber);
+
+            Log.i(TAG, "MovieBox query for AniList ID " + item.anilistId + ": title='" + searchTitle + "', ep=" + searchEp + " (original ep=" + item.episodeNumber + ")");
+
             String urlStr = "https://moviebox-api-mklm.onrender.com/api/anime/batch-download?title="
-                + URLEncoder.encode(item.animeTitle, "UTF-8")
-                + "&episodes=" + item.episodeNumber
+                + URLEncoder.encode(searchTitle, "UTF-8")
+                + "&episodes=" + searchEp
                 + "&se=1&audio=" + URLEncoder.encode(audioParam, "UTF-8")
                 + "&quality=" + (item.quality != null ? item.quality : "1080p");
 
@@ -631,6 +638,37 @@ public class EpisodeDownloadService extends Service {
                     JSONObject first = eps.optJSONObject(0);
                     if (first != null) {
                         return first.optString("direct_download_url", "");
+                    }
+                }
+            } else if (mapping != null && !searchTitle.equals(AniZipHelper.cleanTitle(item.animeTitle))) {
+                // Fallback attempt: Cleaned original title if mapped title returns error
+                String cleanTitleStr = AniZipHelper.cleanTitle(item.animeTitle);
+                String fallbackUrlStr = "https://moviebox-api-mklm.onrender.com/api/anime/batch-download?title="
+                    + URLEncoder.encode(cleanTitleStr, "UTF-8")
+                    + "&episodes=" + searchEp
+                    + "&se=1&audio=" + URLEncoder.encode(audioParam, "UTF-8")
+                    + "&quality=" + (item.quality != null ? item.quality : "1080p");
+
+                HttpURLConnection fc = (HttpURLConnection) new URL(fallbackUrlStr).openConnection();
+                fc.setConnectTimeout(25000);
+                fc.setReadTimeout(35000);
+                fc.setRequestProperty("User-Agent", "Mozilla/5.0");
+                fc.setRequestProperty("Accept", "application/json");
+
+                if (fc.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(fc.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+
+                    JSONObject obj = new JSONObject(sb.toString());
+                    JSONArray eps = obj.optJSONArray("episodes");
+                    if (eps != null && eps.length() > 0) {
+                        JSONObject first = eps.optJSONObject(0);
+                        if (first != null) {
+                            return first.optString("direct_download_url", "");
+                        }
                     }
                 }
             }

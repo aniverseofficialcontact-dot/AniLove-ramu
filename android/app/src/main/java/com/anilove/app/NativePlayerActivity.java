@@ -3360,22 +3360,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             // 1. Resolve MAL ID via AniZip API if idMal <= 0
             if (targetMalId <= 0 && anilistId > 0) {
                 try {
-                    URL zipUrl = new URL("https://api.ani.zip/mappings?anilist_id=" + anilistId);
-                    HttpURLConnection zipConn = (HttpURLConnection) zipUrl.openConnection();
-                    zipConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
-                    zipConn.setConnectTimeout(4000);
-                    zipConn.setReadTimeout(4000);
-                    if (zipConn.getResponseCode() == 200) {
-                        BufferedReader in = new BufferedReader(new InputStreamReader(zipConn.getInputStream()));
-                        StringBuilder sb = new StringBuilder();
-                        String line;
-                        while ((line = in.readLine()) != null) sb.append(line);
-                        in.close();
-                        JSONObject obj = new JSONObject(sb.toString());
-                        JSONObject mappings = obj.optJSONObject("mappings");
-                        if (mappings != null) {
-                            targetMalId = mappings.optInt("mal_id", mappings.optInt("mal", 0));
-                        }
+                    AniZipHelper.Mapping m = AniZipHelper.getMapping(anilistId);
+                    if (m != null && m.malId > 0) {
+                        targetMalId = m.malId;
                     }
                 } catch (Exception ignored) {}
             }
