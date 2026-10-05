@@ -37,9 +37,9 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
     return aniZipCache.get(anilistId)!;
   }
 
-  // 2. LocalStorage cache
+  // 2. LocalStorage cache (v3 schema to purge stale historical keys)
   try {
-    const local = localStorage.getItem(`anizip_map_${anilistId}`);
+    const local = localStorage.getItem(`anizip_map_v3_${anilistId}`);
     if (local) {
       const parsed = JSON.parse(local);
       if (parsed && typeof parsed === 'object') {
@@ -49,10 +49,10 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
     }
   } catch (ignored) {}
 
-  // 3. Fast network fetch with 1000ms timeout
+  // 3. Fast network fetch with 2500ms timeout
   try {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 1000) : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 2500) : null;
 
     const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
       headers: { 'Accept': 'application/json' },
@@ -90,7 +90,7 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
 
       aniZipCache.set(anilistId, mapping);
       try {
-        localStorage.setItem(`anizip_map_${anilistId}`, JSON.stringify(mapping));
+        localStorage.setItem(`anizip_map_v3_${anilistId}`, JSON.stringify(mapping));
       } catch (ignored) {}
 
       return mapping;
@@ -104,12 +104,22 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
 
 export function resolveMappedEpisode(mapping: AniZipMapping | null, originalEp: number): number {
   if (!mapping) return originalEp;
+
   if (mapping.episodeMap && typeof mapping.episodeMap[originalEp] === 'number') {
-    return mapping.episodeMap[originalEp];
+    const mapped = mapping.episodeMap[originalEp];
+    if (mapped !== originalEp) {
+      return mapped;
+    }
   }
+
   if (mapping.episodeOffset > 0) {
     return originalEp + mapping.episodeOffset;
   }
+
+  if (mapping.episodeMap && typeof mapping.episodeMap[originalEp] === 'number') {
+    return mapping.episodeMap[originalEp];
+  }
+
   return originalEp;
 }
 

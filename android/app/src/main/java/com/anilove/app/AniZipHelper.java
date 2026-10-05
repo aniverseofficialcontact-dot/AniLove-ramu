@@ -125,10 +125,14 @@ public class AniZipHelper {
         if (mapping == null) return originalEp;
         if (mapping.episodeMap.containsKey(originalEp)) {
             Integer mapped = mapping.episodeMap.get(originalEp);
-            if (mapped != null && mapped > 0) return mapped;
+            if (mapped != null && mapped > 0 && mapped != originalEp) return mapped;
         }
         if (mapping.episodeOffset > 0) {
             return originalEp + mapping.episodeOffset;
+        }
+        if (mapping.episodeMap.containsKey(originalEp)) {
+            Integer mapped = mapping.episodeMap.get(originalEp);
+            if (mapped != null && mapped > 0) return mapped;
         }
         return originalEp;
     }
