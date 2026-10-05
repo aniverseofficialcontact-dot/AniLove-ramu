@@ -11,7 +11,7 @@ export interface AniZipMapping {
 const aniZipCache = new Map<number, AniZipMapping>();
 
 /**
- * Cleans anime title by stripping release tags, years (e.g. 2021), Cour/Part/Season indicators.
+ * Cleans anime title by stripping release tags, years like (2021), (Cour 1, Cour 2, Part 1, Part 2, etc.)
  */
 export function cleanAnimeTitleForQuery(title: string): string {
   if (!title) return 'Anime';
@@ -27,18 +27,39 @@ export function cleanAnimeTitleForQuery(title: string): string {
 }
 
 /**
- * Fetches AniZip mappings for a given AniList ID (cached in memory)
+ * Fetches AniZip mappings for a given AniList ID (cached in memory and localStorage for 0ms access)
  */
 export async function getAniZipMapping(anilistId?: number): Promise<AniZipMapping | null> {
   if (!anilistId || anilistId <= 0) return null;
+
+  // 1. In-memory cache
   if (aniZipCache.has(anilistId)) {
     return aniZipCache.get(anilistId)!;
   }
 
+  // 2. LocalStorage cache
   try {
+    const local = localStorage.getItem(`anizip_map_${anilistId}`);
+    if (local) {
+      const parsed = JSON.parse(local);
+      if (parsed && typeof parsed === 'object') {
+        aniZipCache.set(anilistId, parsed);
+        return parsed;
+      }
+    }
+  } catch (ignored) {}
+
+  // 3. Fast network fetch with 1000ms timeout
+  try {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 1000) : null;
+
     const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${anilistId}`, {
       headers: { 'Accept': 'application/json' },
+      signal: controller?.signal,
     });
+    if (timeoutId) clearTimeout(timeoutId);
+
     if (res.ok) {
       const data = await res.json();
       const episodeMap: Record<number, number> = {};
@@ -68,10 +89,14 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
       };
 
       aniZipCache.set(anilistId, mapping);
+      try {
+        localStorage.setItem(`anizip_map_${anilistId}`, JSON.stringify(mapping));
+      } catch (ignored) {}
+
       return mapping;
     }
   } catch (err) {
-    console.warn(`[AniZip] Failed fetching mapping for AniList ID ${anilistId}:`, err);
+    // Timeout or network error fallback
   }
 
   return null;

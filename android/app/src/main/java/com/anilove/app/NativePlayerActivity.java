@@ -851,19 +851,12 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             });
         } else {
-            // PORTRAIT STREAMING: Full Activity with top video + bottom controls/details
+            // PORTRAIT STREAMING: Top Video Overlay sitting above the web WatchView page
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
-
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
-            params.gravity = Gravity.FILL;
-            params.x = 0;
-            params.y = 0;
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
 
             int physicalWidth = getPhysicalScreenWidth();
             int videoHeight = (int) (physicalWidth * 0.5625);
@@ -872,10 +865,19 @@ public class NativePlayerActivity extends AppCompatActivity {
             int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
             if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
 
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = videoHeight + statusBarHeight;
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = 0;
+            params.y = currentY;
+
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
                 int curWidth = getPhysicalScreenWidth();
                 int curVideoHeight = (int) (curWidth * 0.5625);
+                params.width = WindowManager.LayoutParams.MATCH_PARENT;
+                params.height = curVideoHeight + finalStatusBarHeight;
+                window.setAttributes(params);
 
                 View videoRoot = findViewById(R.id.video_root_container);
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
@@ -889,7 +891,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lp.height = curVideoHeight + finalStatusBarHeight;
                     videoRoot.setLayoutParams(lp);
                 }
-                if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
+                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
                 if (topCenterBar != null) topCenterBar.setVisibility(View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
