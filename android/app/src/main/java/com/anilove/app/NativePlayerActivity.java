@@ -851,13 +851,19 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             });
         } else {
-            // PORTRAIT STREAMING: Floating Top Overlay over web view
+            // PORTRAIT STREAMING: Full Activity with top video + bottom controls/details
             NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
-            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
+            window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            findViewById(android.R.id.content).setBackgroundColor(Color.BLACK);
+
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            params.gravity = Gravity.FILL;
+            params.x = 0;
+            params.y = 0;
 
             int physicalWidth = getPhysicalScreenWidth();
             int videoHeight = (int) (physicalWidth * 0.5625);
@@ -865,20 +871,11 @@ public class NativePlayerActivity extends AppCompatActivity {
             int statusBarHeight = 0;
             int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
             if (resourceId > 0) statusBarHeight = getResources().getDimensionPixelSize(resourceId);
-            
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = videoHeight + statusBarHeight;
-            params.gravity = Gravity.TOP | Gravity.START;
-            params.x = 0;
-            params.y = currentY;
 
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
                 int curWidth = getPhysicalScreenWidth();
                 int curVideoHeight = (int) (curWidth * 0.5625);
-                params.width = WindowManager.LayoutParams.MATCH_PARENT;
-                params.height = curVideoHeight + finalStatusBarHeight;
-                window.setAttributes(params);
 
                 View videoRoot = findViewById(R.id.video_root_container);
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
@@ -892,8 +889,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     lp.height = curVideoHeight + finalStatusBarHeight;
                     videoRoot.setLayoutParams(lp);
                 }
-                if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
-                if (topCenterBar != null) topCenterBar.setVisibility(is18PlusActive() ? View.VISIBLE : View.GONE);
+                if (portraitBottom != null) portraitBottom.setVisibility(View.VISIBLE);
+                if (topCenterBar != null) topCenterBar.setVisibility(View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -904,21 +901,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                     topBar.setVisibility(View.VISIBLE);
                     int padTop = (int) (10 * getResources().getDisplayMetrics().density);
                     topBar.setPadding(topBar.getPaddingLeft(), padTop, topBar.getPaddingRight(), topBar.getPaddingBottom());
-                }
-
-                // Notify Capacitor webview to refresh CSS dimensions
-                try {
-                    if (MainActivity.instance != null && MainActivity.instance.getBridge() != null && MainActivity.instance.getBridge().getWebView() != null) {
-                        MainActivity.instance.getBridge().getWebView().evaluateJavascript("window.dispatchEvent(new Event('resize'));", null);
-                    }
-                } catch (Exception ignored) {}
-
-                // Re-ensure touch interception is active after window layout changes
-                View tw = findViewById(R.id.touch_wall);
-                if (tw != null) {
-                    tw.setClickable(true);
-                    tw.setFocusable(true);
-                    tw.setVisibility(View.VISIBLE);
                 }
             });
         }
@@ -3899,9 +3881,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (!isFullscreenMode && !isOfflineMode) {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-        }
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         if (exoPlayerView != null && exoPlayer != null) {
             try {
                 exoPlayerView.setPlayer(exoPlayer);
