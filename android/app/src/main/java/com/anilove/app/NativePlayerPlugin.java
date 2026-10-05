@@ -96,6 +96,26 @@ public class NativePlayerPlugin extends Plugin {
                         });
                     }
                 }
+
+                @Override
+                public void onHome() {
+                    // Send signal to Web App to navigate to 18+ Home Screen
+                    notifyListeners("onHomeButtonPressed", new JSObject(), true);
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            try {
+                                if (getBridge() != null && getBridge().getWebView() != null) {
+                                    getBridge().getWebView().evaluateJavascript(
+                                        "window.dispatchEvent(new CustomEvent('nativePlayerHomeButtonPressed'));", 
+                                        null
+                                    );
+                                }
+                            } catch (Exception e) {
+                                Log.e("NativePlayerPlugin", "Error dispatching home event", e);
+                            }
+                        });
+                    }
+                }
             };
 
             Intent intent = new Intent(getActivity(), NativePlayerActivity.class);

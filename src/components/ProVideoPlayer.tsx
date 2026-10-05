@@ -465,6 +465,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
     (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
     (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
+    (NativePlayer as any).removeAllListeners?.('onHomeButtonPressed');
     (NativePlayer as any).removeAllListeners?.('onQualityChange');
     (NativePlayer as any).removeAllListeners?.('onLanguageChange');
 
@@ -474,6 +475,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     });
     NativePlayer.addListener('onBackButtonPressed', () => {
       if (onClosePlayer) onClosePlayer();
+    });
+    NativePlayer.addListener('onHomeButtonPressed', () => {
+      window.dispatchEvent(new CustomEvent('navigateToHome'));
     });
     NativePlayer.addListener('onQualityChange', (data: any) => {
       if (data && data.quality) {
@@ -996,7 +1000,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             </div>
           </div>
 
-          {/* Right: Home & Landscape (18+ only) & Refresh Buttons */}
+          {/* Right: Home (18+ only) & Refresh Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {is18PlusActive && (
               <button
@@ -1005,6 +1009,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
                   if (Capacitor.isNativePlatform()) {
                     NativePlayer.close().catch(() => {});
                   }
+                  window.dispatchEvent(new CustomEvent('navigateToHome'));
                   if (onClosePlayer) onClosePlayer();
                 }}
                 className="px-3 py-2 rounded-xl border border-rose-500/50 bg-rose-950/80 hover:bg-rose-900 text-rose-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
@@ -1012,24 +1017,6 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
               >
                 <Home className="w-3.5 h-3.5 text-rose-400" />
                 <span>Home</span>
-              </button>
-            )}
-
-            {is18PlusActive && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (Capacitor.isNativePlatform()) {
-                    NativePlayer.toggleLandscape().catch(() => {});
-                  } else {
-                    toggleFullscreen();
-                  }
-                }}
-                className="px-3 py-2 rounded-xl border border-indigo-500/50 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
-                title="Rotate Screen & Watch in Landscape Full View"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Landscape</span>
               </button>
             )}
 

@@ -141,6 +141,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     public interface PlayerNavigationListener {
         void onNavigate(boolean next);
         void onBack();
+        void onHome();
     }
     public static PlayerNavigationListener navigationListener;
 
@@ -883,7 +884,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                     videoRoot.setLayoutParams(lp);
                 }
                 if (portraitBottom != null) portraitBottom.setVisibility(View.GONE);
-                if (topCenterBar != null) topCenterBar.setVisibility(View.VISIBLE);
+                if (topCenterBar != null) topCenterBar.setVisibility(is18PlusActive() ? View.VISIBLE : View.GONE);
                 if (statusBarFiller != null) {
                     statusBarFiller.setVisibility(View.VISIBLE);
                     ViewGroup.LayoutParams lp = statusBarFiller.getLayoutParams();
@@ -974,14 +975,12 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         TextView btnEngineToggle = findViewById(R.id.btn_engine_toggle);
         if (btnEngineToggle != null) {
-            btnEngineToggle.setText(isWebViewPlayerMode ? "🌐 Web" : "⚡ Exo");
-            btnEngineToggle.setTextColor(isWebViewPlayerMode ? Color.parseColor("#38BDF8") : Color.parseColor("#34D399"));
-            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
+            btnEngineToggle.setVisibility(View.GONE);
         }
 
         View btnLandscapeToggle = findViewById(R.id.btn_landscape_toggle);
         if (btnLandscapeToggle != null) {
-            btnLandscapeToggle.setOnClickListener(v -> toggleFullscreenInPlace());
+            btnLandscapeToggle.setVisibility(View.GONE);
         }
 
         TextView btnHome18Plus = findViewById(R.id.btn_home_18plus);
@@ -991,7 +990,7 @@ public class NativePlayerActivity extends AppCompatActivity {
                 btnHome18Plus.setOnClickListener(v -> {
                     NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
                     if (navigationListener != null) {
-                        navigationListener.onBack();
+                        navigationListener.onHome();
                     }
                     finish();
                 });

@@ -28,6 +28,7 @@ export interface NativePlayerPlugin {
   close(): Promise<void>;
   addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
   addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;
+  addListener(eventName: 'onHomeButtonPressed', listenerFunc: () => void): Promise<any>;
 }
 
 export const NativePlayer = registerPlugin<NativePlayerPlugin>('NativePlayer');

@@ -1466,24 +1466,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                 </p>
                               </div>
 
-                              {/* Watched Action */}
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  const nextProgress = isWatched ? ep.number - 1 : ep.number;
-                                  onUpdateProgress(currentAnime, nextProgress);
-                                }}
-                                className={`p-2 rounded-xl transition ${
-                                  isWatched
-                                    ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40'
-                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                                }`}
-                                title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                              >
-                                <Eye className={`w-5 h-5 ${isWatched ? 'text-indigo-400 fill-indigo-400/20' : ''}`} />
-                              </button>
-                            </div>
+                              </div>
                           );
                         })}
                       </div>
@@ -1667,25 +1650,9 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                 </div>
 
                                 <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 mt-auto">
-                                  <span className="text-[10px] text-slate-500">
+                                  <span className={`text-[10px] font-medium ${isWatched ? 'text-emerald-400' : 'text-slate-500'}`}>
                                     {isWatched ? 'Completed' : 'Unwatched'}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      const nextProgress = isWatched ? ep.number - 1 : ep.number;
-                                      onUpdateProgress(currentAnime, nextProgress);
-                                    }}
-                                    className={`p-1.5 rounded-lg transition ${
-                                      isWatched
-                                        ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40'
-                                        : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                                    }`}
-                                    title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                                  >
-                                    <Eye className={`w-4 h-4 ${isWatched ? 'text-indigo-400 fill-indigo-400/20' : ''}`} />
-                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -1711,63 +1678,52 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   }, 100);
                                 }
                               }}
-                              className="group flex items-center justify-between gap-4 p-3 rounded-2xl bg-[#101424] hover:bg-[#151a30] border border-slate-800/80 hover:border-slate-700 transition cursor-pointer select-none"
+                              className="relative group flex items-center justify-between gap-4 p-4 rounded-2xl overflow-hidden bg-[#0a0d1a] border border-slate-800/80 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer select-none shadow-lg min-h-[82px]"
                             >
-                              {/* Left: Thumbnail with EP Badge */}
-                              <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-800/80">
-                                {ep.thumbnail ? (
-                                  <img
-                                    src={ep.thumbnail}
-                                    alt={ep.title}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                    referrerPolicy="no-referrer"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900">
-                                    <Film className="w-6 h-6" />
-                                  </div>
-                                )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                                <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/85 text-[10px] sm:text-xs font-bold text-white tracking-tight">
-                                  EP {ep.number}
-                                </div>
-                              </div>
+                              {/* Full Background Banner Image using Episode Thumbnail */}
+                              {(ep.thumbnail || currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || currentAnime.coverImage?.large) && (
+                                <img
+                                  src={ep.thumbnail || currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || currentAnime.coverImage?.large}
+                                  alt={ep.title || `Episode ${ep.number}`}
+                                  className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-40 group-hover:opacity-60 group-hover:scale-105 transition-all duration-500"
+                                  referrerPolicy="no-referrer"
+                                  loading="lazy"
+                                />
+                              )}
 
-                              {/* Middle: Title & Episode Number Subtitle */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-bold text-xs sm:text-sm text-slate-100 group-hover:text-indigo-300 transition line-clamp-1 leading-snug">
-                                    {ep.title}
-                                  </h4>
+                              {/* Dark Gradient Overlay for perfect readability */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-[#0a0d1a] via-[#0a0d1a]/85 via-50% to-[#0a0d1a]/40 group-hover:via-[#0a0d1a]/75 transition-colors duration-300 pointer-events-none" />
+
+                              {/* Details on top of background */}
+                              <div className="relative z-10 flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-600/30 border border-indigo-500/40 text-[10px] font-black text-indigo-300 tracking-wider uppercase">
+                                    EPISODE {ep.number}
+                                  </span>
                                   {ep.filler && (
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0">
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0 shadow">
                                       FILLER
                                     </span>
                                   )}
+                                  {isWatched && (
+                                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-bold text-emerald-300 flex items-center gap-1">
+                                      ✓ Watched
+                                    </span>
+                                  )}
                                 </div>
-                                <p className="text-xs text-slate-400 mt-1">
-                                  Episode {ep.number}
-                                </p>
+                                <h4 className="font-bold text-sm sm:text-base text-white group-hover:text-indigo-200 transition-colors line-clamp-1 leading-snug drop-shadow-md">
+                                  {ep.title || `Episode ${ep.number}`}
+                                </h4>
+                                {ep.synopsis ? (
+                                  <p className="text-xs text-slate-300/80 line-clamp-1 mt-1 font-normal drop-shadow">
+                                    {ep.synopsis}
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-slate-400 mt-1 font-medium">
+                                    Episode {ep.number}
+                                  </p>
+                                )}
                               </div>
-
-                              {/* Right: Eye Icon for Watched Progress */}
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  const nextProgress = isWatched ? ep.number - 1 : ep.number;
-                                  onUpdateProgress(currentAnime, nextProgress);
-                                }}
-                                className={`p-2 rounded-xl transition ${
-                                  isWatched
-                                    ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40'
-                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                                }`}
-                                title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
-                              >
-                                <Eye className={`w-5 h-5 ${isWatched ? 'text-indigo-400 fill-indigo-400/20' : ''}`} />
-                              </button>
                             </div>
                           );
                         })}

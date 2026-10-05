@@ -67,9 +67,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     <>
       <header
         id="main-app-header"
-        className={`relative lg:sticky top-0 z-50 w-full transition-all duration-300 ${
-          isScrolled
-            ? 'bg-slate-950/90 lg:backdrop-blur-xl border-b border-white/10 shadow-xl shadow-black/60 py-1'
+        className={`w-full transition-all duration-300 ${
+          isScrolled || currentTab !== 'home'
+            ? 'bg-slate-950/90 backdrop-blur-xl border-b border-white/10 shadow-xl shadow-black/60 py-1'
             : 'bg-transparent border-b border-transparent shadow-none py-1'
         }`}
       >

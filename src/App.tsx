@@ -720,6 +720,25 @@ export function App() {
     };
   }, []);
 
+  // Handle native Android player home button navigation -> Close player & modals, redirect to Home tab
+  useEffect(() => {
+    const handleNativeHome = () => {
+      setActiveWatchEpisode(null);
+      setIsDetailModalOpen(false);
+      setSelectedAnime(null);
+      setAnimeDetailsHistory([]);
+      handleSelectTab('home');
+    };
+
+    window.addEventListener('nativePlayerHomeButtonPressed', handleNativeHome);
+    window.addEventListener('navigateToHome', handleNativeHome);
+
+    return () => {
+      window.removeEventListener('nativePlayerHomeButtonPressed', handleNativeHome);
+      window.removeEventListener('navigateToHome', handleNativeHome);
+    };
+  }, []);
+
   // Comprehensive System Back-Button Navigation Handler
   useEffect(() => {
     const handleHardwareBack = (): boolean => {
@@ -1124,7 +1143,7 @@ export function App() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Persistent App Header (Visible on desktop so user can navigate/refresh tabs; hidden on mobile during Reels, and hidden when watching an episode for clean top-docked player) */}
-      <div className={isReelsActive ? 'hidden lg:block' : activeWatchEpisode ? 'hidden' : 'block'}>
+      <div className={`${isReelsActive ? 'hidden lg:block' : activeWatchEpisode ? 'hidden' : 'block'} ${currentTab === 'home' ? 'absolute top-0 left-0 right-0 z-50' : 'sticky top-0 z-50'}`}>
         <Navbar
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
@@ -1147,7 +1166,7 @@ export function App() {
       </div>
 
       {/* Main View Container */}
-      <main className="flex-1 relative z-10 pt-1 sm:pt-2">
+      <main className="flex-1 relative z-10 pt-0">
         {/* VIEW 0: DEDICATED FULL-PAGE WATCH VIEW */}
         {activeWatchEpisode ? (
           <WatchView
@@ -1180,7 +1199,7 @@ export function App() {
           <>
             {/* VIEW 1: HOME (Hero Spotlight, Continue Watching, Categories: Trending, Popular, Top Rated, Newest) */}
             {currentTab === 'home' && (
-              <div className={`space-y-8 pb-12 ${trendingAnime.length > 0 ? '-mt-16' : 'pt-4'}`}>
+              <div className="space-y-8 pb-12">
                 {/* Hero Carousel Spotlight */}
                 {trendingAnime.length > 0 && (
                   <HeroSpotlight
