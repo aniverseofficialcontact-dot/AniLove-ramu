@@ -981,10 +981,9 @@ export const WatchView: React.FC<WatchViewProps> = ({
               })}
             </div>
           ) : (
-            <div className="space-y-2.5 max-h-[650px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[650px] overflow-y-auto pr-1">
               {filteredEpisodes.map(ep => {
                 const isCurrent = ep.number === episodeNumber;
-                const isWatched = ep.number <= currentProgress;
 
                 return (
                   <div
@@ -994,79 +993,58 @@ export const WatchView: React.FC<WatchViewProps> = ({
                       onUpdateProgress(anime, Math.max(currentProgress, ep.number - 1));
                       handleSourceChange(selectedSource);
                     }}
-                    className={`relative group flex items-center justify-between gap-4 p-4 rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer select-none shadow-md min-h-[82px] border ${
+                    className={`group flex items-center gap-4 p-3 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
                       isCurrent
-                        ? 'bg-[#141226] border-indigo-500 shadow-indigo-500/20 shadow-lg'
-                        : 'bg-[#0a0d1a] border-neutral-800/80 hover:border-neutral-700'
+                        ? 'bg-[#141226] border border-indigo-500/40 shadow-xl'
+                        : 'bg-transparent hover:bg-white/5 border border-transparent'
                     }`}
                   >
-                    {/* Full Background Banner Image using Episode Thumbnail */}
-                    {(ep.thumbnail || anime.bannerImage || coverUrl) && (
-                      <img
-                        src={ep.thumbnail || anime.bannerImage || coverUrl}
-                        alt={ep.title || `Episode ${ep.number}`}
-                        className={`absolute inset-0 w-full h-full object-cover object-center pointer-events-none transition-all duration-500 ${
-                          isCurrent
-                            ? 'opacity-55 scale-105'
-                            : 'opacity-35 group-hover:opacity-55 group-hover:scale-105'
-                        }`}
-                        referrerPolicy="no-referrer"
-                        loading="lazy"
-                      />
-                    )}
+                    {/* 16:9 Thumbnail Image with EP Badge */}
+                    <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 shadow-md">
+                      {ep.thumbnail ? (
+                        <img
+                          src={ep.thumbnail}
+                          alt={ep.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-600 bg-neutral-900">
+                          <Film className="w-6 h-6" />
+                        </div>
+                      )}
 
-                    {/* Dark Gradient Overlay */}
-                    <div
-                      className={`absolute inset-0 transition-colors duration-300 pointer-events-none ${
-                        isCurrent
-                          ? 'bg-gradient-to-r from-[#0c0f1f]/95 via-[#0c0f1f]/85 via-50% to-[#0c0f1f]/40'
-                          : 'bg-gradient-to-r from-[#0a0d1a]/95 via-[#0a0d1a]/85 via-50% to-[#0a0d1a]/40 group-hover:via-[#0a0d1a]/75'
-                      }`}
-                    />
-
-                    {/* Content */}
-                    <div className="relative z-10 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase border ${
-                            isCurrent
-                              ? 'bg-pink-500/30 text-pink-300 border-pink-500/40'
-                              : 'bg-indigo-600/30 text-indigo-300 border-indigo-500/40'
-                          }`}
-                        >
-                          EPISODE {ep.number}
-                        </span>
-                        {ep.filler && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0 shadow">
-                            FILLER
-                          </span>
-                        )}
-                        {isCurrent ? (
-                          <span className="px-2 py-0.5 rounded-md bg-pink-500/20 text-pink-300 border border-pink-500/30 text-[10px] font-extrabold flex items-center gap-1">
-                            <Play className="w-2.5 h-2.5 fill-current" /> Now Playing
-                          </span>
-                        ) : isWatched ? (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Watched
-                          </span>
-                        ) : null}
+                      {/* EP Number Badge in bottom right of thumbnail */}
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-sm text-white font-black text-[10px] border border-white/10 tracking-tight">
+                        EP {ep.number}
                       </div>
 
+                      {/* Hover Play Button Overlay */}
+                      {!isCurrent && (
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                          <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                            <Play className="w-3.5 h-3.5 fill-white translate-x-0.5" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Details */}
+                    <div className="flex-1 min-w-0">
                       <h4
-                        className={`font-black text-sm sm:text-base leading-snug line-clamp-1 drop-shadow-md transition-colors ${
+                        className={`font-black text-sm sm:text-base leading-snug truncate ${
                           isCurrent
-                            ? 'text-white font-extrabold'
-                            : 'text-neutral-100 group-hover:text-indigo-200'
+                            ? 'text-white'
+                            : 'text-neutral-100 group-hover:text-white'
                         }`}
                       >
-                        {ep.title || `Episode ${ep.number}`}
+                        {ep.title}
                       </h4>
 
-                      {ep.synopsis && (
-                        <p className="text-xs text-neutral-300/80 line-clamp-1 mt-1 font-normal drop-shadow">
-                          {ep.synopsis}
-                        </p>
-                      )}
+                      <p className={`text-xs sm:text-sm font-semibold mt-1 ${isCurrent ? 'text-indigo-400 font-extrabold' : 'text-neutral-400'}`}>
+                        {isCurrent ? 'Now playing' : `Episode ${ep.number}`}
+                      </p>
                     </div>
                   </div>
                 );

@@ -1678,51 +1678,47 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                   }, 100);
                                 }
                               }}
-                              className="relative group flex items-center justify-between gap-4 p-4 rounded-2xl overflow-hidden bg-[#0a0d1a] border border-slate-800/80 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer select-none shadow-lg min-h-[82px]"
+                              className="group relative flex items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-300 cursor-pointer shadow-xl bg-[#080b18]"
                             >
-                              {/* Full Background Banner Image using Episode Thumbnail */}
-                              {(ep.thumbnail || currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || currentAnime.coverImage?.large) && (
+                              {/* Full Embedded Background Thumbnail Image */}
+                              {(ep.thumbnail || coverUrl) && (
                                 <img
-                                  src={ep.thumbnail || currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || currentAnime.coverImage?.large}
-                                  alt={ep.title || `Episode ${ep.number}`}
-                                  className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none opacity-40 group-hover:opacity-60 group-hover:scale-105 transition-all duration-500"
+                                  src={ep.thumbnail || coverUrl}
+                                  alt={ep.title}
+                                  className="absolute inset-0 w-full h-full object-cover object-center opacity-40 group-hover:opacity-65 transition-opacity duration-300 scale-105 pointer-events-none"
                                   referrerPolicy="no-referrer"
                                   loading="lazy"
                                 />
                               )}
 
-                              {/* Dark Gradient Overlay for perfect readability */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-[#0a0d1a] via-[#0a0d1a]/85 via-50% to-[#0a0d1a]/40 group-hover:via-[#0a0d1a]/75 transition-colors duration-300 pointer-events-none" />
+                              {/* Dark Gradient Overlay for Readability */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-[#08080c]/95 via-[#08080c]/80 to-[#08080c]/40 group-hover:via-[#08080c]/70 transition-colors pointer-events-none" />
 
-                              {/* Details on top of background */}
-                              <div className="relative z-10 flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="px-2 py-0.5 rounded-md bg-indigo-600/30 border border-indigo-500/40 text-[10px] font-black text-indigo-300 tracking-wider uppercase">
-                                    EPISODE {ep.number}
-                                  </span>
+                              {/* Foreground Content sitting ON TOP of Background Image */}
+                              <div className="relative z-10 flex-1 min-w-0 pr-2">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <div className="px-2.5 py-0.5 rounded-md bg-indigo-600/90 text-white text-[10px] font-black uppercase tracking-wider shadow-md">
+                                    EP {ep.number}
+                                  </div>
                                   {ep.filler && (
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0 shadow">
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0">
                                       FILLER
                                     </span>
                                   )}
                                   {isWatched && (
-                                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-bold text-emerald-300 flex items-center gap-1">
-                                      ✓ Watched
+                                    <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                                      Watched
                                     </span>
                                   )}
                                 </div>
-                                <h4 className="font-bold text-sm sm:text-base text-white group-hover:text-indigo-200 transition-colors line-clamp-1 leading-snug drop-shadow-md">
-                                  {ep.title || `Episode ${ep.number}`}
+
+                                <h4 className="font-black text-sm sm:text-base text-white group-hover:text-indigo-300 transition line-clamp-1 leading-snug drop-shadow-md">
+                                  {ep.title}
                                 </h4>
-                                {ep.synopsis ? (
-                                  <p className="text-xs text-slate-300/80 line-clamp-1 mt-1 font-normal drop-shadow">
-                                    {ep.synopsis}
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-slate-400 mt-1 font-medium">
-                                    Episode {ep.number}
-                                  </p>
-                                )}
+
+                                <p className="text-xs text-slate-300/80 font-medium mt-0.5">
+                                  Episode {ep.number} {ep.duration ? `• ${ep.duration}` : ''}
+                                </p>
                               </div>
                             </div>
                           );
