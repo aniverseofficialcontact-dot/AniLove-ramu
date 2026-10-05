@@ -2,6 +2,7 @@ import { Anime, StreamServerId } from '../types';
 import { CapacitorHttp, Capacitor } from '@capacitor/core';
 import { getStoredSettings } from './storage';
 import { getHentaiSlugForEpisode } from './hentaioceanService';
+import { getAniZipMapping, resolveMappedTitle, resolveMappedEpisode, cleanAnimeTitleForQuery } from './aniZipService';
 
 export type StreamLanguage = 'SUB' | 'DUB' | 'HIN' | 'TAM' | 'TEL' | 'MAL' | 'KAN' | 'BEN';
 export type StreamResolution = 'auto' | '1080p' | '720p' | '480p' | '360p';
@@ -200,7 +201,8 @@ async function resolveMultiLangSource(
   episodeNumber: number = 1,
   requestedLanguage: StreamLanguage = 'DUB',
   requestedResolution: StreamResolution = '1080p',
-  refresh: boolean = false
+  refresh: boolean = false,
+  anilistId?: number
 ): Promise<{
   availableServers: AvailableServerOption[];
   selectedUrl: string;
@@ -211,8 +213,12 @@ async function resolveMultiLangSource(
   languageQualityMap: Record<string, Record<string, string>>;
   subtitleUrl?: string;
 }> {
-  const cleanTitle = cleanTitleForQuery(title);
-  const cacheKey = `MultiLang_${cleanTitle}_s${seasonNumber}_ep${episodeNumber}`;
+  const mapping = await getAniZipMapping(anilistId);
+  const queryTitle = resolveMappedTitle(mapping, title);
+  const queryEp = resolveMappedEpisode(mapping, episodeNumber);
+  const querySeason = mapping?.season || seasonNumber;
+
+  const cacheKey = `MultiLang_${queryTitle}_s${querySeason}_ep${queryEp}`;
 
   let cachedData = null;
   if (!refresh) {
@@ -220,8 +226,18 @@ async function resolveMultiLangSource(
   }
 
   if (!cachedData) {
-    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(cleanTitle)}&se=${seasonNumber}&ep=${episodeNumber}&_t=${Date.now()}`;
-    const res = await fetchWithTimeout(reqUrl, {}, 15000);
+    const reqUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(queryTitle)}&se=${querySeason}&ep=${queryEp}&_t=${Date.now()}`;
+    let res = await fetchWithTimeout(reqUrl, {}, 15000);
+
+    // Fallback attempt: if mapped query returned no audio tracks, try with cleaned original title
+    if ((!res || !Array.isArray(res.audio_tracks) || res.audio_tracks.length === 0) && mapping && queryTitle !== cleanAnimeTitleForQuery(title)) {
+      const cleanTitle = cleanAnimeTitleForQuery(title);
+      const fallbackUrl = `https://moviebox-api-mklm.onrender.com/api/stream-all-languages?title=${encodeURIComponent(cleanTitle)}&se=${querySeason}&ep=${queryEp}&_t=${Date.now()}`;
+      const fallbackRes = await fetchWithTimeout(fallbackUrl, {}, 15000);
+      if (fallbackRes && Array.isArray(fallbackRes.audio_tracks) && fallbackRes.audio_tracks.length > 0) {
+        res = fallbackRes;
+      }
+    }
 
     if (res && Array.isArray(res.audio_tracks) && res.audio_tracks.length > 0) {
       const languageQualityMap: Record<string, Record<string, string>> = {};
@@ -607,7 +623,7 @@ export async function resolveEpisodeSource({
   }
 
   // ROUTE 2: Multi-Lang (MovieBox) Source (Default)
-  const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);
+  const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh, anilistId);
   if (ml && ml.selectedUrl) {
     return {
       status: 'available',
@@ -683,12 +699,12 @@ export function createDirectStreamSource(
 /**
  * Probe MovieBox API for live available audio languages and qualities
  */
-export async function probeMovieBoxAvailability(title: string, episodeNumber: number = 1): Promise<{
+export async function probeMovieBoxAvailability(title: string, episodeNumber: number = 1, anilistId?: number): Promise<{
   availableLanguages: StreamLanguage[];
   languageQualityMap: Record<string, string[]>;
 }> {
   try {
-    const res = await resolveMultiLangSource(title, 1, episodeNumber, 'DUB', '1080p');
+    const res = await resolveMultiLangSource(title, 1, episodeNumber, 'DUB', '1080p', false, anilistId);
     if (res && res.languageQualityMap) {
       const langs: StreamLanguage[] = ['SUB', 'DUB'];
       const langQualMap: Record<string, string[]> = {
