@@ -229,8 +229,22 @@ export async function queueBatchEpisodeDownloads(
       if (subs && subs.length > 0) {
         const formatted = anonymizeAndSortSubtitleTracks(subs, subtitleLang, `${subtitleLang} 2`);
         if (formatted && formatted.length > 0) {
-          subtitleUrl = formatted[0].url;
-          if (formatted.length > 1) subtitleUrl2 = formatted[1].url;
+          const targetLangClean = (subtitleLang || 'English').toLowerCase().trim();
+          const matchingLang = formatted.filter(t => {
+            const l = (t.language || '').toLowerCase().trim();
+            const d = (t.displayLabel || '').toLowerCase().trim();
+            return l === targetLangClean || d.startsWith(targetLangClean) || targetLangClean.includes(l);
+          });
+
+          if (matchingLang.length > 0) {
+            subtitleUrl = matchingLang[0].url;
+            if (matchingLang.length > 1) {
+              subtitleUrl2 = matchingLang[1].url;
+            }
+          } else {
+            subtitleUrl = formatted[0].url;
+            if (formatted.length > 1) subtitleUrl2 = formatted[1].url;
+          }
         }
       }
 

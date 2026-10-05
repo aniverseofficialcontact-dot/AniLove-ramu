@@ -49,6 +49,7 @@ public class DownloadPlugin extends Plugin {
                 data.put("error", error != null ? error : "");
                 data.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
                 data.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
+                data.put("localSubPath2", item.localSubPath2 != null ? item.localSubPath2 : "");
                 notifyListeners("onDownloadStatusChange", data);
             }
         };
@@ -175,6 +176,7 @@ public class DownloadPlugin extends Plugin {
                 obj.put("totalBytes", item.totalBytes);
                 obj.put("localFilePath", item.localFilePath != null ? item.localFilePath : "");
                 obj.put("localSubPath", item.localSubPath != null ? item.localSubPath : "");
+                obj.put("localSubPath2", item.localSubPath2 != null ? item.localSubPath2 : "");
                 obj.put("thumbnail", item.thumbnail);
                 arr.put(obj);
             }
@@ -192,6 +194,7 @@ public class DownloadPlugin extends Plugin {
         try {
             String localFilePath = call.getString("localFilePath");
             String localSubPath = call.getString("localSubPath", "");
+            String localSubPath2 = call.getString("localSubPath2", "");
             String title = call.getString("title", "Offline Episode");
             String animeTitle = call.getString("animeTitle", title);
             int episodeNumber = call.getInt("episodeNumber", 1);
@@ -213,6 +216,10 @@ public class DownloadPlugin extends Plugin {
             intent.putExtra("offlineMode", true);
             intent.putExtra("localFilePath", localFilePath);
             intent.putExtra("localSubPath", localSubPath);
+            intent.putExtra("localSubPath2", localSubPath2);
+            intent.putExtra("subtitleUrl", localSubPath);
+            intent.putExtra("subtitleUrl2", localSubPath2);
+            intent.putExtra("subtitleLang", "English");
             intent.putExtra("title", title);
             intent.putExtra("animeTitle", animeTitle);
             intent.putExtra("episodeNumber", episodeNumber);

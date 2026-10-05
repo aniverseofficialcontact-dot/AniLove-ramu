@@ -22,6 +22,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -43,9 +44,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * High-performance Android Foreground Service for multi-episode background downloading.
@@ -61,6 +67,7 @@ public class EpisodeDownloadService extends Service {
     private static final String TAG = "AniLoveDownloader";
     private static final String CHANNEL_ID = "anilove_downloads_channel";
     private static final int NOTIFICATION_ID = 9901;
+    private static final Pattern SERVER2_EXTRACT_PATTERN = Pattern.compile("(embed/anime|anime|animepahe|v|e)/([a-zA-Z0-9_.-]+)/(\\d+)/(sub|dub)");
 
     public static final String ACTION_START = "com.anilove.app.action.START_DOWNLOAD";
     public static final String ACTION_PAUSE = "com.anilove.app.action.PAUSE_DOWNLOAD";
@@ -302,6 +309,8 @@ public class EpisodeDownloadService extends Service {
             if (isDirect) {
                 item.isHls = item.streamUrl.contains(".m3u8") || item.streamUrl.contains(".m3u") || item.streamUrl.contains(".txt");
                 Log.i(TAG, "Direct stream URL — skipping VideoSniffer");
+            } else if (tryDirectExtractHiAnime(item)) {
+                Log.i(TAG, "Successfully extracted direct HiAnime stream — skipping VideoSniffer");
             } else {
                 // Embed URL — run VideoSniffer on device to capture .m3u8 / .mp4 for the exact audio language
                 Log.i(TAG, "Running on-device VideoSniffer for embed URL [" + item.audio + "]: " + item.streamUrl);
@@ -458,6 +467,79 @@ public class EpisodeDownloadService extends Service {
         } finally {
             snifferSemaphore.release();
         }
+    }
+
+    private boolean tryDirectExtractHiAnime(DownloadItem item) {
+        // The vidnest.fun/api/stream_data and tryembed.us.cc API endpoints do not exist (return 404).
+        // All HiAnime embed URLs go through VideoSniffer which captures the actual HLS stream.
+        return false;
+    }
+
+    @SuppressWarnings("unused")
+    private boolean tryDirectExtractHiAnime_legacy(DownloadItem item) {
+        try {
+            boolean isTryEmbed = item.streamUrl.contains("tryembed.us.cc");
+            String baseHost = isTryEmbed ? "https://tryembed.us.cc" : "https://vidnest.fun";
+            Matcher matcher = SERVER2_EXTRACT_PATTERN.matcher(item.streamUrl);
+            if (!matcher.find()) return false;
+
+            String routeType = matcher.group(1);
+            if ("embed/anime".equals(routeType) || "v".equals(routeType) || "e".equals(routeType)) routeType = "anime";
+            String animeId = matcher.group(2);
+            String epNum = matcher.group(3);
+            String audioType = matcher.group(4);
+
+            String apiUrl = baseHost + "/api/stream_data?id=" + animeId + "&episode=" + epNum + "&audio=" + audioType + "&route=" + routeType + "&player=jw";
+
+            URL u = new URL(apiUrl);
+            HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            conn.setRequestProperty("Referer", baseHost + "/");
+
+            if (conn.getResponseCode() == 200) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = in.readLine()) != null) sb.append(line);
+                in.close();
+
+                JSONObject json = new JSONObject(sb.toString());
+                String streamFile = json.optString("file", "");
+                if (streamFile.isEmpty()) streamFile = json.optString("url", "");
+                if (streamFile.isEmpty()) {
+                    JSONArray sources = json.optJSONArray("sources");
+                    if (sources != null && sources.length() > 0) {
+                        streamFile = sources.getJSONObject(0).optString("file", "");
+                    }
+                }
+
+                if (!streamFile.isEmpty()) {
+                    item.pageUrl = item.streamUrl;
+                    item.streamUrl = streamFile;
+                    item.isHls = streamFile.contains(".m3u8") || streamFile.contains("hls") || streamFile.contains(".m3u");
+                    Log.i(TAG, "Successfully extracted direct HiAnime stream for EP " + item.episodeNumber + ": " + streamFile);
+
+                    JSONArray tracks = json.optJSONArray("tracks");
+                    if (tracks != null && tracks.length() > 0 && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
+                        for (int i = 0; i < tracks.length(); i++) {
+                            JSONObject tr = tracks.getJSONObject(i);
+                            String file = tr.optString("file", "");
+                            String label = tr.optString("label", "").toLowerCase();
+                            if (!file.isEmpty() && (label.contains("eng") || label.contains("sub"))) {
+                                item.subtitleUrl = file;
+                                break;
+                            }
+                        }
+                    }
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Direct HiAnime extraction failed, falling back to VideoSniffer: " + e.getMessage());
+        }
+        return false;
     }
 
     private String unpackServerUrlInJava(String rawUrl, String audio) {
@@ -676,6 +758,17 @@ public class EpisodeDownloadService extends Service {
             if (lower.contains("smashystream.com")) {
                 return "https://player.smashystream.com/";
             }
+            // HiAnime CDN hosts: segments served from anixx.cloud / dramahot.top / echovideo.ru
+            // Their key server requires the embed page origin as Referer
+            if (lower.contains("anixx.cloud") || lower.contains("dramahot.top") || lower.contains("echovideo.ru")) {
+                if (pageUrl != null && !pageUrl.isEmpty()) {
+                    try {
+                        URL pu = new URL(pageUrl);
+                        return pu.getProtocol() + "://" + pu.getHost() + "/";
+                    } catch (Exception ignored) {}
+                }
+                return "https://vidnest.fun/";
+            }
         }
         String ref = (pageUrl != null && !pageUrl.isEmpty()) ? pageUrl : streamUrl;
         try {
@@ -685,6 +778,7 @@ public class EpisodeDownloadService extends Service {
             return "https://vidlink.pro/";
         }
     }
+
 
     private HttpURLConnection openConnectionWithHeaders(String urlStr, String referer) throws Exception {
         String currentUrl = urlStr;
@@ -754,6 +848,13 @@ public class EpisodeDownloadService extends Service {
         int height;
     }
 
+    private static class HlsSegment {
+        int index;
+        String url;
+        String keyUrl;
+        String ivHex;
+    }
+
     private void downloadHlsStream(DownloadItem item, File downloadDir, File targetFile) throws Exception {
         String referer = getRefererForUrl(item.streamUrl, item.pageUrl);
         String currentPlaylistUrl = item.streamUrl;
@@ -767,16 +868,38 @@ public class EpisodeDownloadService extends Service {
         }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        List<String> segmentUrls = new ArrayList<>();
+        List<HlsSegment> segmentObjects = new ArrayList<>();
         List<HlsVariant> variantObjects = new ArrayList<>();
         HlsVariant pendingVariant = null;
         String initMapUrl = null;
         String line;
         boolean isMasterPlaylist = false;
+        String currentKeyUrl = null;
+        String currentIvHex = null;
 
         while ((line = reader.readLine()) != null) {
             line = line.trim();
-            if (line.contains("#EXT-X-MEDIA:TYPE=SUBTITLES") && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
+            if (line.startsWith("#EXT-X-KEY:")) {
+                if (line.contains("METHOD=NONE")) {
+                    currentKeyUrl = null;
+                    currentIvHex = null;
+                } else if (line.contains("METHOD=AES-128")) {
+                    int uriIdx = line.indexOf("URI=\"");
+                    if (uriIdx != -1) {
+                        int endIdx = line.indexOf("\"", uriIdx + 5);
+                        if (endIdx != -1) {
+                            currentKeyUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                        }
+                    }
+                    int ivIdx = line.indexOf("IV=");
+                    if (ivIdx != -1) {
+                        String ivSub = line.substring(ivIdx + 3).split("[,\\s]")[0];
+                        currentIvHex = ivSub.startsWith("0x") || ivSub.startsWith("0X") ? ivSub.substring(2) : ivSub;
+                    } else {
+                        currentIvHex = null;
+                    }
+                }
+            } else if (line.contains("#EXT-X-MEDIA:TYPE=SUBTITLES") && (item.subtitleUrl == null || item.subtitleUrl.isEmpty())) {
                 int uriIdx = line.indexOf("URI=\"");
                 if (uriIdx != -1) {
                     int endIdx = line.indexOf("\"", uriIdx + 5);
@@ -828,7 +951,12 @@ public class EpisodeDownloadService extends Service {
                         }
                     }
                 } else if (!line.startsWith("#") && !line.isEmpty()) {
-                    segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+                    HlsSegment seg = new HlsSegment();
+                    seg.index = segmentObjects.size();
+                    seg.url = resolveHlsUrl(currentPlaylistUrl, line);
+                    seg.keyUrl = currentKeyUrl;
+                    seg.ivHex = currentIvHex;
+                    segmentObjects.add(seg);
                 }
             }
         }
@@ -888,12 +1016,34 @@ public class EpisodeDownloadService extends Service {
             if (conn.getResponseCode() == 200) {
                 currentPlaylistUrl = selectedVariant.url;
                 reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                segmentUrls.clear();
+                segmentObjects.clear();
                 initMapUrl = null;
+                currentKeyUrl = null;
+                currentIvHex = null;
 
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
-                    if (line.contains("#EXT-X-MAP:")) {
+                    if (line.startsWith("#EXT-X-KEY:")) {
+                        if (line.contains("METHOD=NONE")) {
+                            currentKeyUrl = null;
+                            currentIvHex = null;
+                        } else if (line.contains("METHOD=AES-128")) {
+                            int uriIdx = line.indexOf("URI=\"");
+                            if (uriIdx != -1) {
+                                int endIdx = line.indexOf("\"", uriIdx + 5);
+                                if (endIdx != -1) {
+                                    currentKeyUrl = resolveHlsUrl(currentPlaylistUrl, line.substring(uriIdx + 5, endIdx));
+                                }
+                            }
+                            int ivIdx = line.indexOf("IV=");
+                            if (ivIdx != -1) {
+                                String ivSub = line.substring(ivIdx + 3).split("[,\\s]")[0];
+                                currentIvHex = ivSub.startsWith("0x") || ivSub.startsWith("0X") ? ivSub.substring(2) : ivSub;
+                            } else {
+                                currentIvHex = null;
+                            }
+                        }
+                    } else if (line.contains("#EXT-X-MAP:")) {
                         int uriIdx = line.indexOf("URI=\"");
                         if (uriIdx != -1) {
                             int endIdx = line.indexOf("\"", uriIdx + 5);
@@ -902,7 +1052,12 @@ public class EpisodeDownloadService extends Service {
                             }
                         }
                     } else if (!line.startsWith("#") && !line.isEmpty()) {
-                        segmentUrls.add(resolveHlsUrl(currentPlaylistUrl, line));
+                        HlsSegment seg = new HlsSegment();
+                        seg.index = segmentObjects.size();
+                        seg.url = resolveHlsUrl(currentPlaylistUrl, line);
+                        seg.keyUrl = currentKeyUrl;
+                        seg.ivHex = currentIvHex;
+                        segmentObjects.add(seg);
                     }
                 }
                 reader.close();
@@ -910,11 +1065,11 @@ public class EpisodeDownloadService extends Service {
             }
         }
 
-        if (segmentUrls.isEmpty()) {
+        if (segmentObjects.isEmpty()) {
             throw new Exception("No downloadable video segments found in playlist");
         }
 
-        int totalSegments = segmentUrls.size();
+        int totalSegments = segmentObjects.size();
         File partsDir = new File(downloadDir, "segments_ep_" + item.episodeNumber);
         if (!partsDir.exists()) partsDir.mkdirs();
 
@@ -950,19 +1105,20 @@ public class EpisodeDownloadService extends Service {
         AtomicInteger completedCount = new AtomicInteger(0);
         AtomicLong bytesCounter = new AtomicLong(item.bytesDownloaded);
         AtomicLong deltaBytesCounter = new AtomicLong(0);
+        Map<String, byte[]> keyCache = new ConcurrentHashMap<>();
 
         long lastSpeedTime = System.currentTimeMillis();
 
         for (int i = 0; i < totalSegments; i++) {
             final int index = i;
-            final String segUrl = segmentUrls.get(i);
+            final HlsSegment seg = segmentObjects.get(i);
             final File segFile = new File(partsDir, "seg_" + index + ".ts");
 
             segmentPool.submit(() -> {
                 if (item.isPaused || item.isCancelled) return;
                 try {
                     if (!segFile.exists() || segFile.length() == 0) {
-                        downloadFileDirect(segUrl, segFile, referer);
+                        downloadSegmentWithEncryption(seg, segFile, referer, keyCache);
                     }
                     long len = segFile.length();
                     bytesCounter.addAndGet(len);
@@ -1027,6 +1183,119 @@ public class EpisodeDownloadService extends Service {
         if (!item.isPaused && !item.isCancelled) {
             deleteRecursive(partsDir);
         }
+    }
+
+    private void downloadSegmentWithEncryption(HlsSegment seg, File destFile, String referer, Map<String, byte[]> keyCache) throws Exception {
+        Exception lastErr = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            HttpURLConnection c = null;
+            try {
+                c = openConnectionWithHeaders(seg.url, referer);
+                c.connect();
+                int code = c.getResponseCode();
+                if (code != 200 && code != 206) {
+                    throw new Exception("HTTP " + code + " downloading segment: " + seg.url);
+                }
+                InputStream is = c.getInputStream();
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                byte[] buffer = new byte[32 * 1024];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, len);
+                }
+                is.close();
+                c.disconnect();
+
+                byte[] data = baos.toByteArray();
+
+                if (seg.keyUrl != null && !seg.keyUrl.isEmpty()) {
+                    byte[] keyBytes = keyCache.get(seg.keyUrl);
+                    if (keyBytes == null) {
+                        synchronized (keyCache) {
+                            if (!keyCache.containsKey(seg.keyUrl)) {
+                                keyBytes = fetchKeyBytes(seg.keyUrl, referer);
+                                keyCache.put(seg.keyUrl, keyBytes);
+                            } else {
+                                keyBytes = keyCache.get(seg.keyUrl);
+                            }
+                        }
+                    }
+
+                    if (keyBytes != null && keyBytes.length == 16) {
+                        byte[] ivBytes;
+                        if (seg.ivHex != null && !seg.ivHex.isEmpty()) {
+                            ivBytes = hexToBytes(seg.ivHex);
+                        } else {
+                            ivBytes = createSequenceIv(seg.index);
+                        }
+                        Log.d(TAG, "Decrypting seg " + seg.index + " keyUrl=" + seg.keyUrl + " keyLen=" + keyBytes.length + " ivHex=" + seg.ivHex + " dataLen=" + data.length);
+                        Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
+                        SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
+                        IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
+                        cipher.init(Cipher.DECRYPT_MODE, keySpec, ivSpec);
+                        data = cipher.doFinal(data);
+                        Log.d(TAG, "Segment " + seg.index + " decrypted OK, plaintext size=" + data.length);
+                    } else if (seg.keyUrl != null && !seg.keyUrl.isEmpty()) {
+                        Log.e(TAG, "AES key fetch returned invalid key (len=" + (keyBytes == null ? "null" : keyBytes.length) + ") for seg " + seg.index + " keyUrl=" + seg.keyUrl);
+                        throw new Exception("AES key invalid for segment " + seg.index);
+                    }
+                }
+
+                FileOutputStream fos = new FileOutputStream(destFile);
+                fos.write(data);
+                fos.close();
+                return; // Success!
+            } catch (Exception e) {
+                Log.w(TAG, "Seg " + seg.index + " attempt " + attempt + " failed: " + e.getMessage());
+                lastErr = e;
+                if (c != null) try { c.disconnect(); } catch (Exception ignored) {}
+                if (attempt < 3) {
+                    try { Thread.sleep(800L * attempt); } catch (InterruptedException ignored) {}
+                }
+            }
+        }
+        throw lastErr != null ? lastErr : new Exception("Failed to download segment " + seg.index);
+    }
+
+    private byte[] fetchKeyBytes(String keyUrl, String referer) throws Exception {
+        HttpURLConnection conn = openConnectionWithHeaders(keyUrl, referer);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        int code = conn.getResponseCode();
+        if (code != 200) {
+            throw new Exception("HTTP " + code + " fetching AES key from " + keyUrl);
+        }
+        InputStream is = conn.getInputStream();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[256];
+        int r;
+        while ((r = is.read(buf)) != -1) {
+            baos.write(buf, 0, r);
+        }
+        is.close();
+        conn.disconnect();
+        return baos.toByteArray();
+    }
+
+    private static byte[] hexToBytes(String s) {
+        if (s == null) return new byte[0];
+        String clean = s.startsWith("0x") || s.startsWith("0X") ? s.substring(2) : s;
+        int len = clean.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(clean.charAt(i), 16) << 4)
+                                 + Character.digit(clean.charAt(i+1), 16));
+        }
+        return data;
+    }
+
+    private static byte[] createSequenceIv(long seq) {
+        byte[] iv = new byte[16];
+        for (int i = 15; i >= 8; i--) {
+            iv[i] = (byte) (seq & 0xFF);
+            seq >>= 8;
+        }
+        return iv;
     }
 
     private void downloadFileDirect(String urlStr, File destFile, String referer) throws Exception {
@@ -1281,6 +1550,7 @@ public class EpisodeDownloadService extends Service {
                     item.totalBytes = obj.optLong("totalBytes", 0);
                     item.localFilePath = obj.optString("localFilePath", "");
                     item.localSubPath = obj.optString("localSubPath", "");
+                    item.localSubPath2 = obj.optString("localSubPath2", "");
 
                     // Auto-recovery if localFilePath is empty or file moved
                     if (item.localFilePath == null || item.localFilePath.isEmpty() || !new File(item.localFilePath).exists()) {
@@ -1293,6 +1563,12 @@ public class EpisodeDownloadService extends Service {
                         File fallbackSub = new File(dir, "ep_" + item.episodeNumber + ".vtt");
                         if (fallbackSub.exists()) {
                             item.localSubPath = fallbackSub.getAbsolutePath();
+                        }
+                    }
+                    if (item.localSubPath2 == null || item.localSubPath2.isEmpty() || !new File(item.localSubPath2).exists()) {
+                        File fallbackSub2 = new File(dir, "ep_" + item.episodeNumber + "_2.vtt");
+                        if (fallbackSub2.exists()) {
+                            item.localSubPath2 = fallbackSub2.getAbsolutePath();
                         }
                     }
 
@@ -1320,6 +1596,11 @@ public class EpisodeDownloadService extends Service {
             if (item.localSubPath != null && !item.localSubPath.isEmpty()) {
                 File s = new File(item.localSubPath);
                 if (s.exists()) s.delete();
+            }
+
+            if (item.localSubPath2 != null && !item.localSubPath2.isEmpty()) {
+                File s2 = new File(item.localSubPath2);
+                if (s2.exists()) s2.delete();
             }
 
             File parts = new File(dir, "segments_ep_" + item.episodeNumber);

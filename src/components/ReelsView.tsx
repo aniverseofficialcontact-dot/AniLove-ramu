@@ -350,6 +350,94 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   }, [historyIndex, currentReel?.id, nextReel1?.id, nextReel2?.id, nextReel3?.id]);
 
+  const prevVideoElementRef = useRef<HTMLVideoElement | null>(null);
+  const [activeVideoUrl, setActiveVideoUrl] = useState<string>(() => {
+    const session = getStartingReelsFeed(initialReelId, initialFilterMode);
+    const firstReel = session.feed[session.index];
+    if (firstReel?.id) {
+      const syncUrl = reelMediaCache.getSynchronousObjectUrl(firstReel.id);
+      return syncUrl || `https://drive.usercontent.google.com/download?id=${firstReel.id}&export=download&confirm=t`;
+    }
+    return '';
+  });
+
+  // Keep activeVideoUrl in sync with currentReel and real-time cache updates
+  useEffect(() => {
+    if (!currentReel?.id) {
+      setActiveVideoUrl('');
+      return;
+    }
+    const syncUrl = reelMediaCache.getSynchronousObjectUrl(currentReel.id);
+    const directUrl = `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
+    setActiveVideoUrl(syncUrl || directUrl);
+
+    if (!syncUrl) {
+      reelMediaCache.preloadReel(currentReel.id, 'high').then(objUrl => {
+        if (objUrl && feedHistoryRef.current[historyIndexRef.current]?.id === currentReel.id) {
+          setActiveVideoUrl(objUrl);
+        }
+      }).catch(() => {});
+    }
+  }, [currentReel?.id]);
+
+  // Real-time listener for in-memory / storage cache completion
+  useEffect(() => {
+    const unsubscribe = reelMediaCache.subscribe(({ reelId, objectUrl }) => {
+      const activeId = feedHistoryRef.current[historyIndexRef.current]?.id;
+      if (activeId === reelId && objectUrl) {
+        setActiveVideoUrl(objectUrl);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  const playVideoSafely = useCallback((videoEl?: HTMLVideoElement | null) => {
+    const v = videoEl || getActiveVideo();
+    if (!v || isManuallyPausedRef.current) return;
+
+    const performPlay = (muted: boolean) => {
+      v.muted = muted;
+      if (!muted) v.volume = 1.0;
+      v.playbackRate = is2xSpeed ? 2.0 : 1.0;
+      const p = v.play();
+      if (p !== undefined) {
+        return p.then(() => {
+          setIsPlaying(true);
+          setIsBuffering(false);
+          setIsFrameRendered(true);
+        });
+      }
+      setIsPlaying(true);
+      return Promise.resolve();
+    };
+
+    if (hasUnlockedAudioRef.current) {
+      performPlay(false).catch(() => {
+        performPlay(true).catch(() => {});
+      });
+    } else {
+      // First attempt unmuted; if autoplay policy blocks before gesture, fallback immediately to muted!
+      performPlay(false).catch((err) => {
+        performPlay(true).catch(() => {});
+      });
+    }
+  }, [getActiveVideo, is2xSpeed]);
+
+  const setVideoElementRef = useCallback((el: HTMLVideoElement | null) => {
+    if (el) {
+      if (prevVideoElementRef.current && prevVideoElementRef.current !== el) {
+        try {
+          prevVideoElementRef.current.pause();
+          prevVideoElementRef.current.removeAttribute('src');
+          prevVideoElementRef.current.load();
+        } catch {}
+      }
+      prevVideoElementRef.current = el;
+      videoRef.current = el;
+      playVideoSafely(el);
+    }
+  }, [playVideoSafely]);
+
   useEffect(() => {
     setIsFrameRendered(false);
     setIs2xSpeed(false);
@@ -361,44 +449,72 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const video = getActiveVideo();
     if (!video || !currentReel) return;
 
-    video.playbackRate = 1.0;
+    video.playbackRate = is2xSpeed ? 2.0 : 1.0;
     video.currentTime = 0;
     setProgress(0);
     setCurrentTime(0);
 
-    const tryPlay = () => {
-      const p = video.play();
-      if (p !== undefined) {
-        p.then(() => {
-          setIsPlaying(true);
-          setIsBuffering(false);
-        }).catch(() => {
-          // Cold startup fallback: If unmuted autoplay is blocked before gesture, mute temporarily & play!
-          video.muted = true;
-          video.play().then(() => {
-            setIsPlaying(true);
-            setIsBuffering(false);
-          }).catch(() => {
-            // keep retrying
-          });
-        });
+    playVideoSafely(video);
+  }, [historyIndex, currentReel?.id, getActiveVideo, playVideoSafely, is2xSpeed]);
+
+  // Robust Watchdog / Playback Keeper: Auto-resumes and self-heals stalled network streams
+  useEffect(() => {
+    let lastRecordedTime = 0;
+    let freezeTicks = 0;
+
+    const interval = setInterval(() => {
+      const v = getActiveVideo();
+      if (!v || isManuallyPausedRef.current || !currentReel) {
+        freezeTicks = 0;
+        return;
       }
-    };
 
-    video.muted = false;
-    video.volume = 1.0;
-    tryPlay();
+      // 1. If video is paused but user wants it playing and buffer has enough data
+      if (v.paused && !v.ended && v.readyState >= 2) {
+        playVideoSafely(v);
+      }
 
-    const t1 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 50);
-    const t2 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 180);
-    const t3 = setTimeout(() => { if (video.paused && !isManuallyPausedRef.current) tryPlay(); }, 350);
+      // 2. Detect mid-stream stall / network freeze
+      if (!v.paused && !v.ended) {
+        if (v.currentTime > 0 && Math.abs(v.currentTime - lastRecordedTime) < 0.05) {
+          freezeTicks++;
+          if (freezeTicks >= 3) {
+            // Frozen for > 1.2 seconds
+            setIsBuffering(true);
+            const cachedObj = reelMediaCache.getSynchronousObjectUrl(currentReel.id);
+            if (cachedObj && v.src !== cachedObj) {
+              const savedPos = v.currentTime;
+              v.src = cachedObj;
+              v.currentTime = savedPos;
+              playVideoSafely(v);
+              freezeTicks = 0;
+            } else if (freezeTicks >= 6) {
+              // Frozen for > 2.4 seconds, trigger reload & resume
+              const savedPos = v.currentTime;
+              v.load();
+              v.currentTime = savedPos;
+              playVideoSafely(v);
+              freezeTicks = 0;
+            }
+          }
+        } else {
+          freezeTicks = 0;
+          lastRecordedTime = v.currentTime;
+          if (isBuffering && v.readyState >= 3) {
+            setIsBuffering(false);
+          }
+          if (!isFrameRendered && (v.currentTime > 0 || v.readyState >= 2)) {
+            setIsFrameRendered(true);
+          }
+        }
+      } else if (v.paused && !isManuallyPausedRef.current && v.readyState >= 1) {
+        // Not paused by user, but paused by browser buffer underrun: auto kickstart!
+        playVideoSafely(v);
+      }
+    }, 400);
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [historyIndex, currentReel?.id, getActiveVideo]);
+    return () => clearInterval(interval);
+  }, [getActiveVideo, playVideoSafely, currentReel, isBuffering, isFrameRendered]);
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -555,24 +671,17 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       video.load();
     } catch {}
 
-    const p = video.play();
-    if (p !== undefined) {
-      p.then(() => {
-        setIsPlaying(true);
-        setIsBuffering(false);
-      }).catch(() => {
-        video.muted = true;
-        video.play().then(() => {
-          setIsPlaying(true);
-          setIsBuffering(false);
-        }).catch(() => {});
-      });
-    }
+    playVideoSafely(video);
+    reelMediaCache.preloadReel(currentReel.id, 'high').then(objUrl => {
+      if (objUrl && feedHistoryRef.current[historyIndexRef.current]?.id === currentReel.id) {
+        setActiveVideoUrl(objUrl);
+      }
+    }).catch(() => {});
 
     if (onShowToast) {
       onShowToast('info', `Reloaded ${currentReel.cleanTitle || 'Reel'}`, 'Reel Refreshed');
     }
-  }, [getActiveVideo, currentReel, onShowToast]);
+  }, [getActiveVideo, currentReel, playVideoSafely, onShowToast]);
 
   const togglePlay = useCallback(() => {
     const video = getActiveVideo();
@@ -1104,11 +1213,6 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   };
 
   const isLandscape = videoAspectRatio > 1.15;
-  const activeVideoUrl = useMemo(() => {
-    if (!currentReel?.id) return '';
-    const syncUrl = reelMediaCache.getSynchronousObjectUrl(currentReel.id);
-    return syncUrl || `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
-  }, [currentReel?.id]);
 
   const slideVariants = {
     enter: (direction: number) => ({
@@ -1277,20 +1381,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 <video
                   id="active-reel-video"
                   key={currentReel.id}
-                  ref={(el) => {
-                    if (el) {
-                      videoRef.current = el;
-                      el.muted = false;
-                      el.volume = 1.0;
-                      el.playbackRate = is2xSpeed ? 2.0 : 1.0;
-                      if (el.paused && !isManuallyPausedRef.current) {
-                        el.play().then(() => setIsPlaying(true)).catch(() => {
-                          el.muted = true;
-                          el.play().then(() => setIsPlaying(true)).catch(() => {});
-                        });
-                      }
-                    }
-                  }}
+                  ref={setVideoElementRef}
                   src={activeVideoUrl}
                   poster={`https://lh3.googleusercontent.com/d/${currentReel.id}`}
                   autoPlay
@@ -1299,50 +1390,37 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   muted={false}
                   preload="auto"
                   onPlay={(e) => {
-                    e.currentTarget.muted = false;
-                    e.currentTarget.volume = 1.0;
                     e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsPlaying(true);
                     setIsBuffering(false);
+                    setIsFrameRendered(true);
                   }}
                   onPause={(e) => {
                     if (isManuallyPausedRef.current) {
                       setIsPlaying(false);
                     } else {
-                      if (e.currentTarget && typeof e.currentTarget.play === 'function') {
-                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                      }
+                      playVideoSafely(e.currentTarget);
                     }
                   }}
                   onCanPlay={(e) => {
-                    e.currentTarget.volume = 1.0;
-                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
-                    setIsBuffering(false);
-                    if (!isManuallyPausedRef.current) {
-                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {
-                        e.currentTarget.muted = true;
-                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                      });
-                    }
-                  }}
-                  onLoadedData={(e) => {
-                    e.currentTarget.volume = 1.0;
-                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                     setIsFrameRendered(true);
                     if (!isManuallyPausedRef.current) {
-                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {
-                        e.currentTarget.muted = true;
-                        e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
-                      });
+                      playVideoSafely(e.currentTarget);
+                    }
+                  }}
+                  onLoadedData={(e) => {
+                    setIsBuffering(false);
+                    setIsFrameRendered(true);
+                    if (!isManuallyPausedRef.current) {
+                      playVideoSafely(e.currentTarget);
                     }
                   }}
                   onCanPlayThrough={(e) => {
-                    e.currentTarget.volume = 1.0;
-                    e.currentTarget.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
+                    setIsFrameRendered(true);
                     if (!isManuallyPausedRef.current) {
-                      e.currentTarget.play().then(() => setIsPlaying(true)).catch(() => {});
+                      playVideoSafely(e.currentTarget);
                     }
                   }}
                   onLoadedMetadata={e => {
@@ -1351,20 +1429,16 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     if (target.videoWidth && target.videoHeight) {
                       setVideoAspectRatio(target.videoWidth / target.videoHeight);
                     }
-                    target.volume = 1.0;
                     target.playbackRate = is2xSpeed ? 2.0 : 1.0;
                     setIsBuffering(false);
                     if (!isManuallyPausedRef.current) {
-                      target.play().then(() => setIsPlaying(true)).catch(() => {
-                        target.muted = true;
-                        target.play().then(() => setIsPlaying(true)).catch(() => {});
-                      });
+                      playVideoSafely(target);
                     }
                   }}
                   onTimeUpdate={e => {
                     const v = e.currentTarget;
                     if (v && v.duration) {
-                      if (!isFrameRendered && v.currentTime > 0) {
+                      if (!isFrameRendered && (v.currentTime > 0 || v.readyState >= 2)) {
                         setIsFrameRendered(true);
                       }
                       setCurrentTime(v.currentTime);
@@ -1378,27 +1452,38 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                     setIsBuffering(false);
                     setIsFrameRendered(true);
                   }}
-                  onStalled={() => {
-                    const v = getActiveVideo();
-                    if (v && v.readyState >= 3) {
+                  onStalled={(e) => {
+                    const v = e.currentTarget;
+                    if (v.readyState >= 3) {
                       setIsBuffering(false);
+                    } else {
+                      setIsBuffering(true);
+                      if (!isManuallyPausedRef.current) {
+                        playVideoSafely(v);
+                      }
                     }
                   }}
                   onError={(e) => {
                     setIsBuffering(false);
                     const v = e.currentTarget;
-                    const directUrl = `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
-                    if (v.src !== directUrl) {
-                      v.src = directUrl;
-                      v.load();
-                      v.play().catch(() => {});
+                    const cached = reelMediaCache.getSynchronousObjectUrl(currentReel.id);
+                    if (cached && v.src !== cached) {
+                      v.src = cached;
+                      playVideoSafely(v);
+                    } else {
+                      const directUrl = `https://drive.usercontent.google.com/download?id=${currentReel.id}&export=download&confirm=t`;
+                      if (v.src !== directUrl) {
+                        v.src = directUrl;
+                        v.load();
+                        playVideoSafely(v);
+                      }
                     }
                   }}
                   onEnded={e => {
                     const v = e.currentTarget;
                     if (v) {
                       v.currentTime = 0;
-                      v.play().catch(() => {});
+                      playVideoSafely(v);
                     }
                   }}
                   className={`w-full h-full ${

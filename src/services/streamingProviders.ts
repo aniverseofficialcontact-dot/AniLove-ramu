@@ -509,6 +509,7 @@ export async function resolveAnimeSaltSource(
   const slugCandidates = [
     `${cleanTitle}-season-1`,
     cleanTitle,
+    cleanTitle.replace(/-season-\d+/g, ''),
   ];
 
   let embedUrl = `https://animesalt-api-omega.vercel.app/api/stream?id=${encodeURIComponent(slugCandidates[0])}&ep=ep-${episodeNumber}`;
@@ -516,9 +517,12 @@ export async function resolveAnimeSaltSource(
   for (const slug of slugCandidates) {
     const apiUrl = `https://animesalt-api-omega.vercel.app/api/stream?id=${encodeURIComponent(slug)}&ep=ep-${episodeNumber}`;
     const res = await fetchWithTimeout(apiUrl);
-    if (res && res.success && res.data && res.data.embedUrl) {
-      embedUrl = res.data.embedUrl;
-      break;
+    if (res && res.success && res.data) {
+      const candidate = res.data.embedUrl || res.data.streamUrl || res.data.url || res.data.iframe || (Array.isArray(res.data.sources) && res.data.sources[0]?.url) || '';
+      if (candidate) {
+        embedUrl = candidate.startsWith('//') ? `https:${candidate}` : candidate;
+        break;
+      }
     }
   }
 

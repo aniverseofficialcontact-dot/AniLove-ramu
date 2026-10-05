@@ -164,6 +164,22 @@
             android:translationZ="25dp">
 
             <TextView
+                android:id="@+id/btn_engine_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/speed_btn_bg"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="⚡ Exo"
+                android:textColor="#34D399"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="visible" />
+
+            <TextView
                 android:id="@+id/btn_home_18plus"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
@@ -545,6 +561,8 @@
             android:shadowRadius="4"
             android:elevation="10dp"
             android:translationZ="10dp"
+            android:clickable="false"
+            android:focusable="false"
             android:visibility="gone" />
 
         <ProgressBar

@@ -39,28 +39,25 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.GZIPInputStream;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -490,6 +487,61 @@ public class NativePlayerActivity extends AppCompatActivity {
         if (seekBar != null) seekBar.setProgress(0);
         if (btnPlayPause != null) btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
 
+        parsedVttCues.clear();
+        currentSelectedSubtitle = "English";
+
+        int anilistId = intent.getIntExtra("anilistId", 0);
+        int epNum = intent.getIntExtra("episodeNumber", 1);
+        int idMal = intent.getIntExtra("idMal", 0);
+        if ((idMal > 0 || anilistId > 0) && epNum > 0) {
+            fetchAniSkipIntervals(idMal, anilistId, epNum);
+        }
+
+        String subUrl = intent.getStringExtra("subtitleUrl");
+        String subLang = intent.getStringExtra("subtitleLang");
+        if (subLang == null || subLang.isEmpty()) subLang = "English";
+
+        String allSubsJson = intent.getStringExtra("allSubtitles");
+        if (allSubsJson != null && !allSubsJson.isEmpty()) {
+            try {
+                JSONArray arr = new JSONArray(allSubsJson);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    String label = obj.optString("displayLabel", obj.optString("language", ""));
+                    String url = obj.optString("url", "");
+                    if (!label.isEmpty() && !url.isEmpty()) {
+                        capturedServer2BSubtitles.put(label, url);
+                        if (!detectedSubtitles.contains(label)) {
+                            detectedSubtitles.add(label);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (subUrl != null && !subUrl.isEmpty()) {
+            subtitleUrl = subUrl;
+            subtitleLang = subLang;
+            capturedServer2BSubtitles.put(subLang, subUrl);
+            if (!detectedSubtitles.contains(subLang)) {
+                detectedSubtitles.add(subLang);
+            }
+            downloadAndParseVttFile(subUrl);
+        } else if (anilistId > 0 && epNum > 0 && !intent.getBooleanExtra("offlineMode", false)) {
+            fetchUnifiedSubtitlesJava(anilistId, epNum);
+        }
+
+        String subUrl2 = intent.getStringExtra("subtitleUrl2");
+        if (subUrl2 == null || subUrl2.isEmpty()) {
+            subUrl2 = intent.getStringExtra("localSubPath2");
+        }
+        if (subUrl2 != null && !subUrl2.isEmpty()) {
+            capturedServer2BSubtitles.put("English 2", subUrl2);
+            if (!detectedSubtitles.contains("English 2")) {
+                detectedSubtitles.add("English 2");
+            }
+        }
+
         isOfflineMode = intent.getBooleanExtra("offlineMode", false);
         if (isOfflineMode) {
             setupExoPlayer(intent.getStringExtra("localFilePath"), intent.getStringExtra("localSubPath"));
@@ -703,8 +755,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (isFullscreenMode) {
             // FULLSCREEN LANDSCAPE (both streaming and offline playback)
-            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
             window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
             window.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
@@ -862,7 +914,7 @@ public class NativePlayerActivity extends AppCompatActivity {
             Log.i("AniLove_Fullscreen", "toggleFullscreenInPlace | isFullscreen: " + isFullscreenMode);
 
             int targetOrientation = isFullscreenMode 
-                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE 
+                ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE 
                 : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
             NativePlayerPlugin.setScreenOrientation(targetOrientation);
             setRequestedOrientation(targetOrientation);
@@ -908,6 +960,7 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
         
         setContentView(R.layout.activity_native_player);
+        applyCaptionStyle();
         updateMetadataFromIntent(getIntent());
         applyWindowSettings(getIntent());
         
@@ -917,6 +970,13 @@ public class NativePlayerActivity extends AppCompatActivity {
         exoPlayerView = findViewById(R.id.player_exoplayer);
         if (exoPlayerView != null) {
             exoPlayerView.setVisibility(View.VISIBLE);
+        }
+
+        TextView btnEngineToggle = findViewById(R.id.btn_engine_toggle);
+        if (btnEngineToggle != null) {
+            btnEngineToggle.setText(isWebViewPlayerMode ? "🌐 Web" : "⚡ Exo");
+            btnEngineToggle.setTextColor(isWebViewPlayerMode ? Color.parseColor("#38BDF8") : Color.parseColor("#34D399"));
+            btnEngineToggle.setOnClickListener(v -> switchPlayerEngine(!isWebViewPlayerMode));
         }
 
         View btnLandscapeToggle = findViewById(R.id.btn_landscape_toggle);
@@ -942,6 +1002,16 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         playerWebView = findViewById(R.id.player_webview);
         if (playerWebView != null) {
+            playerWebView.addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public void onTimeUpdate(double currentSec) {
+                    runOnUiThread(() -> {
+                        currentVideoTime = currentSec;
+                        updateNativeSubtitleOverlay(currentSec);
+                    });
+                }
+            }, "AniLoveWebPlayerBridge");
+
             WebSettings settings = playerWebView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
@@ -1217,6 +1287,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     if (duration > 0) {
                         long targetMs = s.getProgress() * 1000L;
                         exoPlayer.seekTo(Math.min(targetMs, duration));
+                        currentVideoTime = targetMs / 1000.0;
+                        updateNativeSubtitleOverlay(currentVideoTime);
                     }
                 }
                 resetHideTimer(); 
@@ -1267,7 +1339,48 @@ public class NativePlayerActivity extends AppCompatActivity {
                     .setUri(Uri.fromFile(new File(videoPath)));
 
             String effectiveSubPath = (subPath != null && !subPath.isEmpty()) ? subPath : subtitleUrl;
+            if ((effectiveSubPath == null || effectiveSubPath.isEmpty()) && videoPath != null) {
+                File vFile = new File(videoPath);
+                int ep = getIntent().getIntExtra("episodeNumber", 1);
+                File candidate1 = new File(vFile.getParent(), "ep_" + ep + ".vtt");
+                File candidate2 = new File(vFile.getParent(), vFile.getName().replace(".mp4", ".vtt"));
+                if (candidate1.exists()) {
+                    effectiveSubPath = candidate1.getAbsolutePath();
+                } else if (candidate2.exists()) {
+                    effectiveSubPath = candidate2.getAbsolutePath();
+                }
+            }
+
+            String effectiveSubPath2 = getIntent().getStringExtra("localSubPath2");
+            if (effectiveSubPath2 == null || effectiveSubPath2.isEmpty()) {
+                effectiveSubPath2 = getIntent().getStringExtra("subtitleUrl2");
+            }
+            if ((effectiveSubPath2 == null || effectiveSubPath2.isEmpty()) && videoPath != null) {
+                File vFile = new File(videoPath);
+                int ep = getIntent().getIntExtra("episodeNumber", 1);
+                File candidate2A = new File(vFile.getParent(), "ep_" + ep + "_2.vtt");
+                if (candidate2A.exists()) {
+                    effectiveSubPath2 = candidate2A.getAbsolutePath();
+                }
+            }
+
+            if (effectiveSubPath2 != null && !effectiveSubPath2.isEmpty()) {
+                capturedServer2BSubtitles.put("English 2", effectiveSubPath2);
+                if (!detectedSubtitles.contains("English 2")) {
+                    detectedSubtitles.add("English 2");
+                }
+            }
+
             if (effectiveSubPath != null && !effectiveSubPath.isEmpty()) {
+                subtitleUrl = effectiveSubPath;
+                subtitleLang = "English";
+                currentSelectedSubtitle = "English";
+                capturedServer2BSubtitles.put("English", effectiveSubPath);
+                if (!detectedSubtitles.contains("English")) {
+                    detectedSubtitles.add("English");
+                }
+                downloadAndParseVttFile(effectiveSubPath);
+
                 Uri subUri;
                 if (effectiveSubPath.startsWith("http")) {
                     subUri = Uri.parse(effectiveSubPath);
@@ -2530,6 +2643,13 @@ public class NativePlayerActivity extends AppCompatActivity {
             View touchWall = findViewById(R.id.touch_wall);
             View topBar = findViewById(R.id.top_center_button_bar);
             if (topBar != null) topBar.bringToFront();
+
+            TextView btnEngine = findViewById(R.id.btn_engine_toggle);
+            if (btnEngine != null) {
+                btnEngine.setText(useWebView ? "🌐 Web" : "⚡ Exo");
+                btnEngine.setTextColor(useWebView ? Color.parseColor("#38BDF8") : Color.parseColor("#34D399"));
+            }
+
             if (useWebView) {
                 if (exoPlayer != null) {
                     try {
@@ -2542,6 +2662,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                     playerWebView.setVisibility(View.VISIBLE);
                     playerWebView.bringToFront();
                     if (topBar != null) topBar.bringToFront();
+                    TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+                    if (textOverlay != null) textOverlay.bringToFront();
 
                     String targetUrl = (currentEmbedUrl != null && !currentEmbedUrl.trim().isEmpty()) ? currentEmbedUrl : currentLoadedStreamUrl;
                     if (targetUrl != null && !targetUrl.trim().isEmpty()) {
@@ -2607,9 +2729,20 @@ public class NativePlayerActivity extends AppCompatActivity {
             "      if (!win.document) return;" +
             "      var vids = win.document.querySelectorAll('video');" +
             "      for (var i = 0; i < vids.length; i++) {" +
-            "        vids[i].muted = false;" +
-            "        vids[i].autoplay = true;" +
-            "        vids[i].play().catch(function(){});" +
+            "        var v = vids[i];" +
+            "        v.muted = false;" +
+            "        v.autoplay = true;" +
+            "        v.play().catch(function(){});" +
+            "        if (!v.__anilove_tracked) {" +
+            "          v.__anilove_tracked = true;" +
+            "          v.addEventListener('timeupdate', function() {" +
+            "            try {" +
+            "              if (window.AniLoveWebPlayerBridge) {" +
+            "                window.AniLoveWebPlayerBridge.onTimeUpdate(this.currentTime);" +
+            "              }" +
+            "            } catch(e) {}" +
+            "          });" +
+            "        }" +
             "      }" +
             "      var btns = win.document.querySelectorAll('button, .play-btn, .play, #playback, .vjs-big-play-button, .jw-display-icon, div[class*=\"play\"]');" +
             "      for (var j = 0; j < btns.length; j++) {" +
@@ -3036,6 +3169,8 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             long newPos = Math.max(0, Math.min(duration, current + (delta * 1000L)));
             exoPlayer.seekTo(newPos);
+            currentVideoTime = newPos / 1000.0;
+            updateNativeSubtitleOverlay(currentVideoTime);
         }
     }
 
@@ -3043,19 +3178,22 @@ public class NativePlayerActivity extends AppCompatActivity {
         updateHandler.postDelayed(new Runnable() { 
             @Override public void run() { 
                 syncPlayerState();
-                updateHandler.postDelayed(this, 1000); 
+                updateHandler.postDelayed(this, 200); 
             } 
-        }, 1000); 
+        }, 200); 
     }
 
     private void syncPlayerState() {
         if (exoPlayer != null) {
             long currentMs = exoPlayer.getCurrentPosition();
             long durationMs = exoPlayer.getDuration();
+            if (currentMs >= 0) {
+                currentVideoTime = currentMs / 1000.0;
+                updateNativeSubtitleOverlay(currentVideoTime);
+            }
             if (durationMs > 0) {
                 int current = (int) (currentMs / 1000);
                 int duration = (int) (durationMs / 1000);
-                currentVideoTime = current;
                 videoDuration = duration;
 
                 textCurrentTime.setText(formatTime(current));
@@ -3319,26 +3457,35 @@ public class NativePlayerActivity extends AppCompatActivity {
                 long minutes = Long.parseLong(parts[0]);
                 double seconds = Double.parseDouble(parts[1]);
                 return (minutes * 60000L) + (long) (seconds * 1000L);
+            } else if (parts.length == 1) {
+                double seconds = Double.parseDouble(parts[0]);
+                return (long) (seconds * 1000L);
             }
         } catch (Exception ignored) {}
         return 0;
     }
 
     private void parseVttContent(String vttContent) {
-        if (vttContent == null || vttContent.isEmpty()) return;
+        if (vttContent == null || vttContent.trim().isEmpty()) return;
+        if (vttContent.startsWith("\uFEFF")) {
+            vttContent = vttContent.substring(1);
+        }
         List<VttCue> newCues = new ArrayList<>();
-        String[] lines = vttContent.split("\n");
+        String[] lines = vttContent.split("\\r?\\n");
         long currentStart = -1;
         long currentEnd = -1;
         StringBuilder currentText = new StringBuilder();
 
         for (String rawLine : lines) {
             String line = rawLine.trim();
-            if (line.matches("^\\d+$")) continue; // Filter out SRT sequence numbers (1, 2, 3, 424...)
+            if (line.matches("^\\d+$")) continue; // Filter out SRT sequence numbers
 
             if (line.contains("-->")) {
-                if (currentStart >= 0 && currentEnd > currentStart && !currentText.toString().trim().isEmpty()) {
-                    String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
+                if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
+                    String cleanText = currentText.toString()
+                            .replaceAll("<[^>]*>", "")
+                            .replaceAll("\\{[^}]*\\}", "")
+                            .trim();
                     if (!cleanText.isEmpty()) {
                         newCues.add(new VttCue(currentStart, currentEnd, cleanText));
                     }
@@ -3352,13 +3499,16 @@ public class NativePlayerActivity extends AppCompatActivity {
                     currentEnd = parseVttTimestampToMs(endStr);
                 }
             } else if (currentStart >= 0 && !line.isEmpty() && !line.startsWith("WEBVTT") && !line.startsWith("NOTE") && !line.startsWith("STYLE")) {
-                if (!currentText.toString().isEmpty()) currentText.append("\n");
+                if (currentText.length() > 0) currentText.append("\n");
                 currentText.append(line);
             }
         }
 
         if (currentStart >= 0 && currentEnd > currentStart && currentText.length() > 0) {
-            String cleanText = currentText.toString().replaceAll("<[^>]*>", "").replaceAll("\\{[^}]*\\}", "").trim();
+            String cleanText = currentText.toString()
+                    .replaceAll("<[^>]*>", "")
+                    .replaceAll("\\{[^}]*\\}", "")
+                    .trim();
             if (!cleanText.isEmpty()) {
                 newCues.add(new VttCue(currentStart, currentEnd, cleanText));
             }
@@ -3373,53 +3523,112 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void downloadAndParseVttFile(String vttUrl) {
-        if (vttUrl == null || vttUrl.isEmpty()) return;
+        if (vttUrl == null || vttUrl.trim().isEmpty()) return;
+        final String finalVttUrl = vttUrl.trim();
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                URL url = new URL(vttUrl);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-                conn.setInstanceFollowRedirects(true);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
-                if (conn.getResponseCode() == 200) {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                // 1. Check if this is a local disk file (starts with "/" or "file://")
+                if (finalVttUrl.startsWith("/") || finalVttUrl.startsWith("file://")) {
+                    String localPath = finalVttUrl.startsWith("file://") ? finalVttUrl.substring(7) : finalVttUrl;
+                    File file = new File(localPath);
+                    if (file.exists() && file.isFile()) {
+                        Log.i("VttParser", "Reading local VTT file: " + file.getAbsolutePath());
+                        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            sb.append(line).append("\n");
+                        }
+                        in.close();
+                        parseVttContent(sb.toString());
+                        return;
+                    } else {
+                        Log.w("VttParser", "Local VTT file not found on disk: " + localPath);
+                    }
+                }
+
+                // 2. Remote HTTP/HTTPS URL
+                String currentUrl = finalVttUrl;
+                int redirects = 0;
+                HttpURLConnection conn = null;
+
+                while (redirects < 5) {
+                    URL url = new URL(currentUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(20000);
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                    conn.setRequestProperty("Accept", "*/*");
+                    conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+
+                    int status = conn.getResponseCode();
+                    if (status >= 300 && status < 400) {
+                        String loc = conn.getHeaderField("Location");
+                        if (loc != null && !loc.isEmpty()) {
+                            if (!loc.startsWith("http")) {
+                                URL base = new URL(currentUrl);
+                                loc = new URL(base, loc).toString();
+                            }
+                            currentUrl = loc;
+                            conn.disconnect();
+                            redirects++;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                if (conn != null && conn.getResponseCode() == 200) {
+                    InputStream is = conn.getInputStream();
+                    String encoding = conn.getHeaderField("Content-Encoding");
+                    if ("gzip".equalsIgnoreCase(encoding)) {
+                        is = new GZIPInputStream(is);
+                    }
+                    BufferedReader in = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
                     StringBuilder sb = new StringBuilder();
                     String line;
-                    while ((line = in.readLine()) != null) sb.append(line).append("\n");
+                    while ((line = in.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
                     in.close();
                     parseVttContent(sb.toString());
+                } else {
+                    Log.w("VttParser", "VTT request failed code: " + (conn != null ? conn.getResponseCode() : -1));
                 }
             } catch (Exception e) {
-                Log.e("VttParser", "Failed to download VTT file: " + e.getMessage());
+                Log.e("VttParser", "Failed to download/parse VTT file: " + e.getMessage(), e);
             }
         });
     }
 
     private void updateNativeSubtitleOverlay(double currentSec) {
-        TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
-        if (textOverlay == null) return;
+        runOnUiThread(() -> {
+            TextView textOverlay = findViewById(R.id.text_native_subtitle_overlay);
+            if (textOverlay == null) return;
 
-        if (!isSubtitlesEnabled || parsedVttCues.isEmpty()) {
-            textOverlay.setVisibility(View.GONE);
-            return;
-        }
-
-        long currentMs = (long) ((currentSec - subtitleTimingOffset) * 1000L);
-        VttCue activeCue = null;
-        for (VttCue cue : parsedVttCues) {
-            if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
-                activeCue = cue;
-                break;
+            if (!isSubtitlesEnabled || parsedVttCues.isEmpty()) {
+                textOverlay.setVisibility(View.GONE);
+                return;
             }
-        }
 
-        if (activeCue != null && activeCue.text != null && !activeCue.text.isEmpty()) {
-            textOverlay.setText(activeCue.text);
-            textOverlay.setVisibility(View.VISIBLE);
-        } else {
-            textOverlay.setVisibility(View.GONE);
-        }
+            long currentMs = (long) ((currentSec - subtitleTimingOffset) * 1000L);
+            VttCue activeCue = null;
+            for (VttCue cue : parsedVttCues) {
+                if (currentMs >= cue.startMs && currentMs <= cue.endMs) {
+                    activeCue = cue;
+                    break;
+                }
+            }
+
+            if (activeCue != null && activeCue.text != null && !activeCue.text.isEmpty()) {
+                textOverlay.setText(activeCue.text);
+                textOverlay.setVisibility(View.VISIBLE);
+                textOverlay.bringToFront();
+            } else {
+                textOverlay.setVisibility(View.GONE);
+            }
+        });
     }
 
     private void fetchUnifiedSubtitlesJava(int anilistId, int episodeNumber) {
@@ -3428,15 +3637,45 @@ public class NativePlayerActivity extends AppCompatActivity {
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 String reqUrl = "https://subtitles-l8cm.onrender.com/subtitles.php?anilistId=" + anilistId + "&ep=" + episodeNumber;
-                URL url = new URL(reqUrl);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+                String currentUrl = reqUrl;
+                int redirects = 0;
+                HttpURLConnection conn = null;
 
-                if (conn.getResponseCode() == 200) {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                while (redirects < 5) {
+                    URL url = new URL(currentUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(20000);
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                    conn.setRequestProperty("Accept", "application/json, */*");
+                    conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+
+                    int status = conn.getResponseCode();
+                    if (status >= 300 && status < 400) {
+                        String loc = conn.getHeaderField("Location");
+                        if (loc != null && !loc.isEmpty()) {
+                            if (!loc.startsWith("http")) {
+                                URL base = new URL(currentUrl);
+                                loc = new URL(base, loc).toString();
+                            }
+                            currentUrl = loc;
+                            conn.disconnect();
+                            redirects++;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                if (conn != null && conn.getResponseCode() == 200) {
+                    InputStream is = conn.getInputStream();
+                    String encoding = conn.getHeaderField("Content-Encoding");
+                    if ("gzip".equalsIgnoreCase(encoding)) {
+                        is = new GZIPInputStream(is);
+                    }
+                    BufferedReader in = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
                     StringBuilder sb = new StringBuilder();
                     String line;
                     while ((line = in.readLine()) != null) sb.append(line);

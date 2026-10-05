@@ -620,6 +620,26 @@ export const WatchView: React.FC<WatchViewProps> = ({
             </div>
           )}
 
+          {/* ENGINE SWITCH Button */}
+          <div className="relative flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
+              ENGINE
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleEngine}
+              title="Switch Player Engine (ExoPlayer vs WebPlayer)"
+              className={`rounded-xl px-3 py-1.5 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg backdrop-blur-md transition-all active:scale-95 border ${
+                playerEngineMode === 'exo'
+                  ? 'bg-emerald-950/80 border-emerald-500/50 hover:bg-emerald-900/80 text-emerald-300'
+                  : 'bg-cyan-950/80 border-cyan-500/50 hover:bg-cyan-900/80 text-cyan-300'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{playerEngineMode === 'exo' ? 'Exo' : 'Web'}</span>
+            </button>
+          </div>
+
           {/* LANDSCAPE FULL VIEW Button */}
           <div className="relative flex flex-col items-end">
             <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block pr-1 mb-0.5">
@@ -630,6 +650,8 @@ export const WatchView: React.FC<WatchViewProps> = ({
               onClick={() => {
                 if (Capacitor.isNativePlatform()) {
                   NativePlayer.toggleLandscape().catch(() => {});
+                } else {
+                  window.dispatchEvent(new CustomEvent('toggleWebFullscreen'));
                 }
               }}
               title="Rotate Screen & Watch in Landscape Full View"

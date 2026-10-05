@@ -5,6 +5,7 @@ import {
   Globe,
   Home,
   Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { Anime, ThumbnailAppearance, StreamServerId, UserSettings } from '../types';
 import { recordWatchProgress, getStoredSettings } from '../services/storage';
@@ -434,7 +435,14 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     }
   };
 
-  // Native Interface Helper (Format: 00:00)
+  // Listen for external toggleWebFullscreen events (e.g. from WatchView on web)
+  useEffect(() => {
+    const handleToggleWebFullscreen = () => {
+      toggleFullscreen();
+    };
+    window.addEventListener('toggleWebFullscreen', handleToggleWebFullscreen);
+    return () => window.removeEventListener('toggleWebFullscreen', handleToggleWebFullscreen);
+  }, []);
   const formatTime = (seconds: number) => {
     const s = Math.max(0, Math.floor(seconds));
     const mins = Math.floor(s / 60);
@@ -531,6 +539,11 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   useEffect(() => {
     let cancelled = false;
 
+    // Eagerly prefetch unified subtitles for active anime & episode
+    if (!is18PlusActive && anime?.id && episodeNumber) {
+      fetchUnifiedSubtitles(anime.id, episodeNumber).catch(() => []);
+    }
+
     const activeSrcName = selectedSource || (is18PlusActive ? 'HentaiOcean' : 'AnimeDekho');
     const requestedServer = selectedSubServerName || (is18PlusActive ? 'HentaiOcean Engine' : 'Server 1');
     const cacheKey = `${activeSrcName}_${anime.id}_${episodeNumber}_${activeServer}_${audioMode}_${requestedServer}`;
@@ -612,41 +625,100 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
     };
   }, [anime, episodeNumber, activeServer, audioMode, quality, selectedSubServerName, selectedSource, refreshTrigger]);
 
-  // Inline UI Eraser (Destroys old web buttons inside the box)
+  // Anti-Fullscreen & Player UI Clean Script (Hides player fullscreen buttons & ad overlays)
   useEffect(() => {
-    if (!Capacitor.isNativePlatform() || !iframeRef.current || streamStatus !== 'ready') return;
+    if (!iframeRef.current || streamStatus !== 'ready') return;
+
+    const hideFullscreenCss = `
+      .jw-icon-fullscreen, .jw-display-icon-fullscreen,
+      .plyr__control[data-plyr="fullscreen"],
+      .vjs-fullscreen-control,
+      .art-icon-fullscreen,
+      [data-action="fullscreen"],
+      button[title*="full" i],
+      button[aria-label*="full" i],
+      button[class*="fullscreen" i],
+      button[id*="fullscreen" i],
+      .fullscreen-btn,
+      .btn-fullscreen,
+      .control-fullscreen,
+      .fullscreen,
+      video::-webkit-media-controls-fullscreen-button {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+    `;
+
     const interval = setInterval(() => {
       try {
         const doc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
         if (!doc) return;
-        doc.body.style.backgroundColor = 'black';
-        const v = doc.querySelector('video');
-        if (v) {
-          const all = doc.querySelectorAll('body *');
-          // Hide everything that isn't the video or a caption container
-          const whitelist = '.jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech';
-          all.forEach((el: any) => {
-            if (el === v || el.contains(v) || v.contains(el) || (el.matches && el.matches(whitelist))) {
-              el.style.setProperty('visibility', 'visible', 'important');
-              el.style.setProperty('opacity', '1', 'important');
-              if (el !== v && !el.contains(v)) el.style.setProperty('background', 'transparent', 'important');
-            } else {
-              el.style.setProperty('visibility', 'hidden', 'important');
-              el.style.setProperty('pointer-events', 'none', 'important');
-            }
+
+        // Inject anti-fullscreen CSS stylesheet into iframe if accessible
+        if (!doc.getElementById('anilove-anti-fullscreen-style')) {
+          const style = doc.createElement('style');
+          style.id = 'anilove-anti-fullscreen-style';
+          style.textContent = hideFullscreenCss;
+          (doc.head || doc.body)?.appendChild(style);
+        }
+
+        // Hide all elements matching fullscreen button selectors
+        const fullscreenSelectors = [
+          '.jw-icon-fullscreen',
+          '.jw-display-icon-fullscreen',
+          '.plyr__control[data-plyr="fullscreen"]',
+          '.vjs-fullscreen-control',
+          '.art-icon-fullscreen',
+          '[data-action="fullscreen"]',
+          'button[title*="full" i]',
+          'button[aria-label*="full" i]',
+          'button[class*="fullscreen" i]',
+          'button[id*="fullscreen" i]',
+          '.fullscreen-btn',
+          '.btn-fullscreen',
+          '.control-fullscreen'
+        ];
+        fullscreenSelectors.forEach(sel => {
+          doc.querySelectorAll(sel).forEach((el: any) => {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
           });
-          v.style.setProperty('position', 'fixed', 'important');
-          v.style.setProperty('top', '0', 'important');
-          v.style.setProperty('left', '0', 'important');
-          v.style.setProperty('width', '100%', 'important');
-          v.style.setProperty('height', '100%', 'important');
-          v.style.setProperty('z-index', '1000', 'important');
-          v.controls = false;
+        });
+
+        if (Capacitor.isNativePlatform()) {
+          doc.body.style.backgroundColor = 'black';
+          const v = doc.querySelector('video');
+          if (v) {
+            const all = doc.querySelectorAll('body *');
+            const whitelist = '.jw-captions, .vjs-text-track-display, .ytp-caption-window-container, .caption-window, .subtitles, .captions, .jw-video, .vjs-tech';
+            all.forEach((el: any) => {
+              if (el === v || el.contains(v) || v.contains(el) || (el.matches && el.matches(whitelist))) {
+                el.style.setProperty('visibility', 'visible', 'important');
+                el.style.setProperty('opacity', '1', 'important');
+                if (el !== v && !el.contains(v)) el.style.setProperty('background', 'transparent', 'important');
+              } else {
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.style.setProperty('pointer-events', 'none', 'important');
+              }
+            });
+            v.style.setProperty('position', 'fixed', 'important');
+            v.style.setProperty('top', '0', 'important');
+            v.style.setProperty('left', '0', 'important');
+            v.style.setProperty('width', '100%', 'important');
+            v.style.setProperty('height', '100%', 'important');
+            v.style.setProperty('z-index', '1000', 'important');
+            v.controls = false;
+          }
         }
       } catch {}
     }, 500);
     return () => clearInterval(interval);
-  }, [streamStatus]);
+  }, [streamStatus, refreshKey]);
 
 
   // Next Server Failover Helper
@@ -800,6 +872,8 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
               key={`${streamSource.url}-${refreshKey}`}
               src={streamSource.url}
               controls
+              controlsList="nofullscreen nodownload"
+              playsInline
               autoPlay
               className="w-full h-full object-contain pointer-events-auto block"
               onLoadedData={() => setStreamStatus('ready')}
@@ -811,6 +885,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
               src={streamSource.url}
               title={`${displayTitle} - Episode ${episodeNumber}`}
               className="w-full h-full border-0 pointer-events-auto block"
+              referrerPolicy="no-referrer"
               allowFullScreen
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               onLoad={() => setStreamStatus('ready')}
@@ -860,6 +935,26 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           </div>
         )}
 
+        {/* In-Player Landscape / Fullscreen Toggle Button (Web Player) */}
+        {!Capacitor.isNativePlatform() && streamSource?.isEmbeddable && streamStatus === 'ready' && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFullscreen();
+            }}
+            className="absolute bottom-3 right-3 z-30 p-2 sm:p-2.5 rounded-xl bg-black/70 hover:bg-black/90 active:bg-neutral-800 text-white/90 hover:text-white border border-white/20 hover:border-white/40 shadow-xl backdrop-blur-md transition-all duration-200 active:scale-95 flex items-center justify-center group cursor-pointer"
+            title={isFullscreen ? "Exit Fullscreen" : "Landscape Fullscreen"}
+            aria-label={isFullscreen ? "Exit Fullscreen" : "Landscape Fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+            ) : (
+              <Maximize2 className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+            )}
+          </button>
+        )}
+
         {/* Minimal Fullscreen Floating Exit Button */}
         {isFullscreen && (
           <button
@@ -867,7 +962,7 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
             className="absolute top-4 right-4 z-50 p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 backdrop-blur-md transition cursor-pointer"
             title="Exit Fullscreen"
           >
-            <span className="text-xs font-bold">Γ£ò Exit</span>
+            <span className="text-xs font-bold">✕ Exit</span>
           </button>
         )}
       </div>
@@ -922,9 +1017,25 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
             <button
               type="button"
+              onClick={handleToggleEngine}
+              className={`px-3 py-2 rounded-xl border text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5 ${
+                playerEngineMode === 'exo'
+                  ? 'border-emerald-500/50 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300'
+                  : 'border-cyan-500/50 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300'
+              }`}
+              title="Switch Player Engine (ExoPlayer vs WebPlayer)"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{playerEngineMode === 'exo' ? 'ExoPlayer' : 'WebPlayer'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 if (Capacitor.isNativePlatform()) {
                   NativePlayer.toggleLandscape().catch(() => {});
+                } else {
+                  toggleFullscreen();
                 }
               }}
               className="px-3 py-2 rounded-xl border border-indigo-500/50 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs font-black transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"

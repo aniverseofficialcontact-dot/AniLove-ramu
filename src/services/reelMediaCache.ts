@@ -190,6 +190,18 @@ class ReelMediaCache {
     return null;
   }
 
+  private listeners: Set<(data: { reelId: string; objectUrl: string }) => void> = new Set();
+
+  /**
+   * Subscribe to cache updates
+   */
+  subscribe(listener: (data: { reelId: string; objectUrl: string }) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
   private setMemoryCache(reelId: string, objectUrl: string, blob: Blob) {
     if (this.memoryCache.size >= MAX_MEMORY_OBJECT_URLS) {
       let oldestKey = '';
@@ -216,6 +228,18 @@ class ReelMediaCache {
       size: blob.size,
       lastAccessed: Date.now()
     });
+
+    // Notify all active subscribers & dispatch custom event
+    const eventData = { reelId, objectUrl };
+    this.listeners.forEach(fn => {
+      try { fn(eventData); } catch {}
+    });
+
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('anilove-reel-cached', { detail: eventData }));
+      } catch {}
+    }
   }
 
   private async pruneCacheStorage(cache: Cache) {
