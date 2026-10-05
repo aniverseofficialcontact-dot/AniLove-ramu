@@ -364,9 +364,9 @@ async function resolveAnimeDekhoSource(
 
   if (!rawServers || rawServers.length === 0) {
     const epNum = episodeNumber || 1;
-    let apiUrl = `https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?anilistId=${anilistId || 113415}&ep=${epNum}`;
+    let streamUrl = apiUrl(`/api/anime-world-india/v1/stream.php?anilistId=${anilistId || 113415}&ep=${epNum}`);
 
-    const res = await fetchWithTimeout(apiUrl);
+    const res = await fetchWithTimeout(streamUrl);
     if (res && res.success && res.stream && Array.isArray(res.stream.servers)) {
       rawServers = res.stream.servers;
       setToCache(cacheKey, rawServers);

@@ -246,180 +246,20 @@ export function scheduleCloudSync(token?: string | null): void {
   }, 1200);
 }
 
-export async function pushUserDataToCloud(tokenOrSettings?: string | UserSettings | null): Promise<boolean> {
-  const token = typeof tokenOrSettings === 'string' ? tokenOrSettings : getActiveTrackerToken(tokenOrSettings);
-
-  const coins = getStoredArcadeCoins();
-  const characterCards = getStoredGachaVault();
-  const cardAwakenings = getAllCardAwakenings();
-  const activeCompanion = getStoredActiveCompanion();
-  const watchHistory = getStoredWatchHistory();
-  const rawDaily = localStorage.getItem(DAILY_GAMES_RECORD_KEY);
-  const dailyGameRecords = rawDaily ? JSON.parse(rawDaily) : {};
-
-  if (!token) return false;
-
-  // 2. If browser is offline, don't attempt network fetch
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return false;
-  }
-
-  try {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
-
-        const response = await apiFetch('/api/user/sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        coins,
-        characterCards,
-        cardAwakenings,
-        activeCompanion,
-        watchHistory,
-        dailyGameRecords,
-      }),
-      signal: controller?.signal,
-    });
-
-    if (timeoutId) clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.warn('Push user sync response not ok:', err);
-      return false;
-    }
-
-    return true;
-  } catch (error: any) {
-    // Graceful handling without throwing fatal errors
-    if (error?.name !== 'AbortError') {
-      console.warn('Push user sync network notice (data preserved locally):', error?.message || error);
-    }
-    return false;
-  }
+export async function pushUserDataToCloud(_tokenOrSettings?: string | UserSettings | null): Promise<boolean> {
+  // Remote user sync API removed - state preserved locally
+  return true;
 }
 
 export async function syncUserDataWithCloud(
-  tokenOrSettings?: string | UserSettings | null
+  _tokenOrSettings?: string | UserSettings | null
 ): Promise<{ success: boolean; coins: number; cardsCount: number; user?: any }> {
-  const token = typeof tokenOrSettings === 'string' ? tokenOrSettings : getActiveTrackerToken(tokenOrSettings);
-
-  if (!token) return { success: true, coins: getStoredArcadeCoins(), cardsCount: getStoredGachaVault().length };
-
-  // If offline, return local state without throwing
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return { success: true, coins: getStoredArcadeCoins(), cardsCount: getStoredGachaVault().length };
-  }
-
-  try {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
-
-        const response = await apiFetch('/api/user/sync', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      signal: controller?.signal,
-    });
-
-    if (timeoutId) clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      // First push current local data to initialize cloud store
-      await pushUserDataToCloud(token);
-      return { success: true, coins: getStoredArcadeCoins(), cardsCount: getStoredGachaVault().length };
-    }
-
-    const json = await response.json();
-    const cloudData = json?.data;
-    const user = json?.user;
-
-    if (cloudData) {
-      // 1. Merge coins (take max balance so user never loses earned coins)
-      const localCoins = getStoredArcadeCoins();
-      const cloudCoins = typeof cloudData.coins === 'number' ? cloudData.coins : 10;
-      const mergedCoins = Math.max(localCoins, cloudCoins);
-      localStorage.setItem(ARCADE_COINS_KEY, mergedCoins.toString());
-      window.dispatchEvent(new CustomEvent('arcade_coins_updated', { detail: mergedCoins }));
-
-      // 2. Merge character cards (union by id)
-      const localCards = getStoredGachaVault();
-      const cloudCards: GachaCard[] = Array.isArray(cloudData.characterCards) ? cloudData.characterCards : [];
-      const cardMap = new Map<string, GachaCard>();
-      localCards.forEach(c => {
-        if (c && c.id) cardMap.set(c.id, c);
-      });
-      cloudCards.forEach(c => {
-        if (c && c.id) {
-          const current = cardMap.get(c.id);
-          if (!current || (c.obtainedAt && c.obtainedAt > (current.obtainedAt || 0))) {
-            cardMap.set(c.id, c);
-          }
-        }
-      });
-      const mergedCards = Array.from(cardMap.values());
-      localStorage.setItem(GACHA_VAULT_KEY, JSON.stringify(mergedCards));
-      window.dispatchEvent(new CustomEvent('vault_updated', { detail: mergedCards }));
-
-      // 3. Merge card awakenings
-      const localAwakenings = getAllCardAwakenings();
-      const cloudAwakenings = cloudData.cardAwakenings || {};
-      const mergedAwakenings = { ...localAwakenings };
-      Object.entries(cloudAwakenings).forEach(([cId, lvl]) => {
-        mergedAwakenings[cId] = Math.max(mergedAwakenings[cId] || 1, Number(lvl) || 1);
-      });
-      localStorage.setItem(CARD_AWAKENINGS_KEY, JSON.stringify(mergedAwakenings));
-      window.dispatchEvent(new CustomEvent('character_awakened', { detail: mergedAwakenings }));
-
-      // 4. Merge active companion
-      if (cloudData.activeCompanion) {
-        localStorage.setItem(ACTIVE_COMPANION_KEY, JSON.stringify(cloudData.activeCompanion));
-        window.dispatchEvent(new CustomEvent('active_companion_changed', { detail: cloudData.activeCompanion }));
-      }
-
-      // 5. Merge watch history
-      const localHistory = getStoredWatchHistory();
-      const cloudHistory: WatchHistoryEntry[] = Array.isArray(cloudData.watchHistory) ? cloudData.watchHistory : [];
-      const histMap = new Map<string, WatchHistoryEntry>();
-      localHistory.forEach(h => histMap.set(`${h.animeId}-${h.episodeNumber}`, h));
-      cloudHistory.forEach(h => {
-        const key = `${h.animeId}-${h.episodeNumber}`;
-        const cur = histMap.get(key);
-        if (!cur || (h.lastWatchedAt && h.lastWatchedAt >= (cur.lastWatchedAt || 0))) {
-          histMap.set(key, h);
-        }
-      });
-      const mergedHistory = Array.from(histMap.values()).slice(0, 50);
-      localStorage.setItem(WATCH_HISTORY_KEY, JSON.stringify(mergedHistory));
-
-      // Push final merged state back to ensure cloud is in sync
-      await pushUserDataToCloud(token);
-
-      return {
-        success: true,
-        coins: mergedCoins,
-        cardsCount: mergedCards.length,
-        user,
-      };
-    } else {
-      // Initialize cloud with current local cards and coins
-      await pushUserDataToCloud(token);
-      return {
-        success: true,
-        coins: getStoredArcadeCoins(),
-        cardsCount: getStoredGachaVault().length,
-        user,
-      };
-    }
-  } catch (err: any) {
-    console.warn('User sync notice (data retained locally):', err?.message || err);
-    return { success: true, coins: getStoredArcadeCoins(), cardsCount: getStoredGachaVault().length };
-  }
+  // Remote user sync API removed - return current local storage state
+  return {
+    success: true,
+    coins: getStoredArcadeCoins(),
+    cardsCount: getStoredGachaVault().length,
+  };
 }
 
 export const syncUserDataWithAniList = (token: string) => syncUserDataWithCloud(token);

@@ -2050,22 +2050,29 @@ public class NativePlayerActivity extends AppCompatActivity {
         isNextEpisodePreFetched = true;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                String safeSlug = animeTitle != null
-                    ? animeTitle.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "")
-                    : "anime";
-                String episodeSlug = safeSlug + "-season-1-" + anilistId + "-1x" + nextEp;
+                // Pre-fetch next episode via MovieBox with AniZip mapping
+                AniZipHelper.Mapping mapping = AniZipHelper.getMapping(anilistId);
+                String searchTitle = AniZipHelper.getMappedTitle(mapping, animeTitle);
+                int searchEp = AniZipHelper.getMappedEpisode(mapping, nextEp);
 
-                String apiUrl = "https://animeworld-india-api-njtl.onrender.com/api/anime-world-india/v1/stream.php?id=" +
-                        URLEncoder.encode(episodeSlug, "UTF-8") + "&ongoing=true";
+                String audioParam = audio != null ? audio : "English";
+                if ("SUB".equalsIgnoreCase(audioParam)) audioParam = "Japanese";
+                else if ("DUB".equalsIgnoreCase(audioParam)) audioParam = "English";
 
-                Log.i("AniLove_PreFetch", "Pre-fetching next episode stream: " + episodeSlug);
+                String apiUrl = "https://moviebox-api-mklm.onrender.com/api/anime/batch-download?title="
+                        + URLEncoder.encode(searchTitle, "UTF-8")
+                        + "&episodes=" + searchEp
+                        + "&se=1&audio=" + URLEncoder.encode(audioParam, "UTF-8")
+                        + "&quality=1080p";
+
+                Log.i("AniLove_PreFetch", "Pre-fetching next episode stream for " + searchTitle + " Ep " + searchEp);
                 URL url = new URL(apiUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(10000);
                 conn.setReadTimeout(15000);
                 conn.setRequestProperty("Accept", "application/json");
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
 
                 if (conn.getResponseCode() == 200) {
                     BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -2075,10 +2082,11 @@ public class NativePlayerActivity extends AppCompatActivity {
                     br.close();
 
                     JSONObject resObj = new JSONObject(sb.toString());
-                    if (resObj.optBoolean("success", false)) {
-                        JSONObject streamObj = resObj.optJSONObject("stream");
-                        if (streamObj != null) {
-                            String mainLink = streamObj.optString("streamLink", streamObj.optString("file", ""));
+                    JSONArray eps = resObj.optJSONArray("episodes");
+                    if (eps != null && eps.length() > 0) {
+                        JSONObject first = eps.optJSONObject(0);
+                        if (first != null) {
+                            String mainLink = first.optString("direct_download_url", "");
                             if (!mainLink.isEmpty()) {
                                 StreamCache.put(anilistId, nextEp, audio, mainLink);
                                 Log.i("AniLove_PreFetch", "Successfully pre-fetched next episode stream for Ep " + nextEp + ": " + mainLink);
