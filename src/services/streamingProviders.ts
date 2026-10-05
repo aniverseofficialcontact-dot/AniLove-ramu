@@ -184,11 +184,6 @@ function cleanTitleForQuery(title: string): string {
   return title
     .replace(/\s*\(.*?\)/g, '')
     .replace(/\s*\[.*?\]/g, '')
-    .replace(/:\s*Season\s*\d+.*/i, '')
-    .replace(/\s+Season\s*\d+.*/i, '')
-    .replace(/:\s*Part\s*\d+.*/i, '')
-    .replace(/:\s*2nd\s*Season.*/i, '')
-    .replace(/:\s*3rd\s*Season.*/i, '')
     .trim();
 }
 
@@ -584,8 +579,13 @@ export async function resolveEpisodeSource({
     };
   }
 
-  // ROUTE 1: HiAnime Source
-  if (combined.includes('hianime')) {
+  const isSpecialOrOvaOrOna = (() => {
+    const fmt = (anime.format || anime.type || (anime as any)?.details?.format || '').toUpperCase();
+    return fmt === 'SPECIAL' || fmt === 'OVA' || fmt === 'ONA';
+  })();
+
+  // ROUTE 1: HiAnime Source (also forced for SPECIAL, OVA, ONA by default)
+  if (combined.includes('hianime') || (!is18Mode && isSpecialOrOvaOrOna && !reqSrc.includes('multi-lang') && !reqServer.includes('multi-lang'))) {
     const hi = resolveHiAnimeSource(anilistId, episodeNumber, language, serverName);
     return {
       status: 'available',
@@ -608,24 +608,46 @@ export async function resolveEpisodeSource({
 
   // ROUTE 2: Multi-Lang (MovieBox) Source (Default)
   const ml = await resolveMultiLangSource(englishTitle, 1, episodeNumber, language, resolution, refresh);
+  if (ml && ml.selectedUrl) {
+    return {
+      status: 'available',
+      source: {
+        provider: DEFAULT_PROVIDER,
+        url: ml.selectedUrl,
+        subtitleUrl: undefined,
+        subtitleLang: 'English',
+        language,
+        resolution,
+        isEmbeddable: true,
+        external: false,
+        skipData: { intro: [0, 0], outro: [0, 0] },
+        availableServers: ml.availableServers,
+        availableLanguages: ml.availableLanguages as any,
+        availableResolutions: ml.availableResolutions,
+        qualityMap: ml.qualityMap,
+        languageQualityMap: ml.languageQualityMap,
+        selectedServerName: ml.selectedServerName,
+        isDubAvailable: true,
+      },
+    };
+  }
+
+  // Automatic Fallback to HiAnime if Multi-Lang is not available for this anime
+  const hiFallback = resolveHiAnimeSource(anilistId, episodeNumber, language, serverName);
   return {
     status: 'available',
     source: {
       provider: DEFAULT_PROVIDER,
-      url: ml.selectedUrl,
-      subtitleUrl: undefined,
-      subtitleLang: 'English',
+      url: hiFallback.selectedUrl,
       language,
       resolution,
       isEmbeddable: true,
       external: false,
       skipData: { intro: [0, 0], outro: [0, 0] },
-      availableServers: ml.availableServers,
-      availableLanguages: ml.availableLanguages as any,
-      availableResolutions: ml.availableResolutions,
-      qualityMap: ml.qualityMap,
-      languageQualityMap: ml.languageQualityMap,
-      selectedServerName: ml.selectedServerName,
+      availableServers: hiFallback.availableServers,
+      availableLanguages: ['SUB', 'DUB'],
+      availableResolutions: ['1080p'],
+      selectedServerName: hiFallback.selectedServerName,
       isDubAvailable: true,
     },
   };

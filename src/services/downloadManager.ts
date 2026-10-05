@@ -226,12 +226,16 @@ export async function queueBatchEpisodeDownloads(
         }
       }
 
-      streamUrl = streamRes || '';
-
       if (!streamUrl) {
         errors.push(`EP ${ep.number}: Could not resolve stream URL`);
         return;
       }
+
+      const isMovieBox =
+        streamUrl.includes('hakunaymatata') ||
+        streamUrl.includes('bcdnxw') ||
+        selectedServerName.toLowerCase().includes('moviebox') ||
+        selectedServerName.toLowerCase().includes('multi-lang');
 
       const downloadId = `${anime.id}_ep_${ep.number}_${audio.toLowerCase()}_${effectiveQuality}`;
 

@@ -475,8 +475,17 @@ public class NativePlayerActivity extends AppCompatActivity {
         StreamCache.clear();
         cleanupPlaybackEngines();
 
+        // Always show controls and reset touch state on every source/server change
+        stopHideTimer();
+        isControlsVisible = true;
+        if (controlsOverlay != null) controlsOverlay.setVisibility(View.VISIBLE);
+
         View touchWall = findViewById(R.id.touch_wall);
-        if (touchWall != null) touchWall.setVisibility(View.VISIBLE);
+        if (touchWall != null) {
+            touchWall.setVisibility(View.VISIBLE);
+            touchWall.setClickable(true);
+            touchWall.setFocusable(true);
+        }
 
         updateMetadataFromIntent(intent);
         applyWindowSettings(intent);
@@ -903,6 +912,14 @@ public class NativePlayerActivity extends AppCompatActivity {
                         MainActivity.instance.getBridge().getWebView().evaluateJavascript("window.dispatchEvent(new Event('resize'));", null);
                     }
                 } catch (Exception ignored) {}
+
+                // Re-ensure touch interception is active after window layout changes
+                View tw = findViewById(R.id.touch_wall);
+                if (tw != null) {
+                    tw.setClickable(true);
+                    tw.setFocusable(true);
+                    tw.setVisibility(View.VISIBLE);
+                }
             });
         }
         
@@ -1265,8 +1282,28 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
             return gestureDetector.onTouchEvent(event);
         };
+
+        // controlsOverlay is a ViewGroup — must return true on DOWN so the GestureDetector
+        // can track the full gesture sequence (UP/CANCEL). Without this, the touch dispatcher
+        // routes ACTION_UP to children instead, breaking tap/long-press detection on the overlay.
+        View.OnTouchListener overlayTouchListener = (v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                if (is2xSpeed) setPlaybackSpeed(currentPermanentSpeed, true);
+                if (indicatorVolume != null) indicatorVolume.setVisibility(View.GONE);
+                if (indicatorBrightness != null) indicatorBrightness.setVisibility(View.GONE);
+                initialVolume = -1;
+                initialBrightness = -1.0f;
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.performClick();
+                }
+            }
+            gestureDetector.onTouchEvent(event);
+            // Always claim the touch so the gesture detector tracks the full sequence
+            return true;
+        };
+
         findViewById(R.id.touch_wall).setOnTouchListener(touchListener);
-        controlsOverlay.setOnTouchListener(touchListener);
+        controlsOverlay.setOnTouchListener(overlayTouchListener);
 
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean u) { 
@@ -1308,6 +1345,17 @@ public class NativePlayerActivity extends AppCompatActivity {
         String reqEngine = getIntent().getStringExtra("engineMode");
         if (is18PlusActive() || "web".equalsIgnoreCase(reqEngine)) {
             switchPlayerEngine(true);
+        }
+
+        // Align state with XML: controlsOverlay starts VISIBLE, so mark it as visible
+        isControlsVisible = true;
+        if (controlsOverlay != null) controlsOverlay.setVisibility(View.VISIBLE);
+
+        // Ensure touch_wall is always clickable/focusable on first launch
+        View twInit = findViewById(R.id.touch_wall);
+        if (twInit != null) {
+            twInit.setClickable(true);
+            twInit.setFocusable(true);
         }
 
         startUpdateLoop();
@@ -1831,6 +1879,8 @@ public class NativePlayerActivity extends AppCompatActivity {
                         } else if (playbackState == Player.STATE_READY) {
                             if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
                             populateTracksFromExoPlayer();
+                            // Ensure player is always interactive once video is ready
+                            showControlsExplicitly();
                         } else if (playbackState == Player.STATE_ENDED) {
                             isPlaying = false;
                             btnPlayPause.setImageResource(android.R.drawable.ic_media_play);

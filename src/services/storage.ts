@@ -20,6 +20,72 @@ const WATCH_HISTORY_KEY_LEGACY = 'anilove_watch_history_v1';
 const LIBRARY_KEY_18PLUS = 'anilove_library_18plus_v1';
 const WATCH_HISTORY_KEY_18PLUS = 'anilove_watch_history_18plus_v1';
 
+export function sanitizeAnimeForStorage(anime: Anime): Anime {
+  if (!anime) return anime;
+  return {
+    id: anime.id,
+    idMal: anime.idMal,
+    title: {
+      english: anime.title?.english || '',
+      romaji: anime.title?.romaji || '',
+      native: anime.title?.native || '',
+      userPreferred: anime.title?.userPreferred || '',
+    },
+    coverImage: anime.coverImage ? {
+      extraLarge: anime.coverImage.extraLarge,
+      large: anime.coverImage.large,
+      medium: anime.coverImage.medium,
+    } : undefined,
+    bannerImage: anime.bannerImage,
+    format: anime.format,
+    episodes: anime.episodes,
+    duration: anime.duration,
+    status: anime.status,
+    season: anime.season,
+    seasonYear: anime.seasonYear,
+    averageScore: anime.averageScore,
+    meanScore: anime.meanScore,
+    genres: anime.genres ? anime.genres.slice(0, 5) : [],
+    description: anime.description ? anime.description.slice(0, 300) : '',
+    isAdult: anime.isAdult,
+    nextAiringEpisode: anime.nextAiringEpisode,
+  };
+}
+
+export function safeLocalStorageSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014 || String(e).includes('QuotaExceeded')) {
+      console.warn(`[Storage] QuotaExceededError when setting ${key}. Purging volatile caches...`);
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (
+            k.startsWith('anilist_cache') ||
+            k.startsWith('AnimeDekho_') ||
+            k.startsWith('AnimeSalt_') ||
+            k.startsWith('stream_cache') ||
+            k.includes('_legacy') ||
+            k.startsWith('subtitle_') ||
+            k.startsWith('jikan_') ||
+            k.startsWith('watch_order_')
+          )) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(key, value);
+      } catch (retryErr) {
+        console.warn(`[Storage] Retry failed for ${key}:`, retryErr);
+      }
+    } else {
+      console.error(`[Storage] Error setting ${key}:`, e);
+    }
+  }
+}
+
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'midnight',
   twoWaySyncEnabled: true,
@@ -381,9 +447,13 @@ export function saveStoredLibrary(items: UserMediaListItem[], force18PlusMode?: 
   try {
     const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
     const targetKey = is18 ? LIBRARY_KEY_18PLUS : LIBRARY_KEY;
-    localStorage.setItem(targetKey, JSON.stringify(items));
+    const sanitizedItems = items.map(item => ({
+      ...item,
+      media: sanitizeAnimeForStorage(item.media),
+    }));
+    safeLocalStorageSetItem(targetKey, JSON.stringify(sanitizedItems));
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('library_updated', { detail: { items, is18PlusMode: is18 } }));
+      window.dispatchEvent(new CustomEvent('library_updated', { detail: { items: sanitizedItems, is18PlusMode: is18 } }));
     }
   } catch (e) {
     console.error('Error saving stored library:', e);
@@ -397,7 +467,8 @@ export function updateLibraryItem(
   anime: Anime,
   updates: Partial<UserMediaListItem>
 ): UserMediaListItem[] {
-  const index = library.findIndex(i => i.mediaId === anime.id);
+  const cleanAnime = sanitizeAnimeForStorage(anime);
+  const index = library.findIndex(i => i.mediaId === cleanAnime.id);
   let updated: UserMediaListItem[];
   let targetItem: UserMediaListItem;
 
@@ -405,19 +476,19 @@ export function updateLibraryItem(
     targetItem = {
       ...library[index],
       ...updates,
-      media: anime,
+      media: cleanAnime,
       updatedAt: Date.now(),
     };
     updated = [...library];
     updated[index] = targetItem;
   } else {
     targetItem = {
-      mediaId: anime.id,
+      mediaId: cleanAnime.id,
       status: updates.status || 'PLANNING',
       progress: updates.progress || 0,
       score: updates.score || 0,
       updatedAt: Date.now(),
-      media: anime,
+      media: cleanAnime,
       ...updates,
     };
     updated = [targetItem, ...library];
@@ -627,16 +698,19 @@ export function saveStoredWatchHistory(history: WatchHistoryEntry[], force18Plus
     const is18 = force18PlusMode ?? (getStoredSettings().is18PlusMode ?? false);
     const targetKey = is18 ? WATCH_HISTORY_KEY_18PLUS : WATCH_HISTORY_KEY;
 
-    // Ensure strict uniqueness per anime
+    // Ensure strict uniqueness per anime and sanitize anime objects
     const animeMap = new Map<number, WatchHistoryEntry>();
     const sorted = [...history].sort((a, b) => (b.lastWatchedAt || 0) - (a.lastWatchedAt || 0));
     for (const item of sorted) {
       if (item && item.animeId && !animeMap.has(item.animeId)) {
-        animeMap.set(item.animeId, item);
+        animeMap.set(item.animeId, {
+          ...item,
+          anime: sanitizeAnimeForStorage(item.anime),
+        });
       }
     }
     const cleanList = Array.from(animeMap.values()).slice(0, 30);
-    localStorage.setItem(targetKey, JSON.stringify(cleanList));
+    safeLocalStorageSetItem(targetKey, JSON.stringify(cleanList));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('watch_history_updated', { detail: { history: cleanList, is18PlusMode: is18 } }));
     }
@@ -656,17 +730,18 @@ export function recordWatchProgress(entry: {
   thumbnailStyle?: import('../types').ThumbnailAppearance;
 }): WatchHistoryEntry[] {
   const isEpisodeCompleted = entry.duration > 0 && entry.currentTime / entry.duration >= 0.85;
+  const cleanAnime = sanitizeAnimeForStorage(entry.anime);
 
   // 1. Auto-complete prior episodes in user's library
   // When watching episode N, episodes 1..(N-1) are automatically considered completed.
   try {
     const library = getStoredLibrary();
-    const existingLibItem = library.find(item => item.mediaId === entry.anime.id);
+    const existingLibItem = library.find(item => item.mediaId === cleanAnime.id);
     const targetProgress = isEpisodeCompleted ? entry.episodeNumber : Math.max(1, entry.episodeNumber - 1);
     const currentProgress = existingLibItem?.progress || 0;
 
     const totalEps =
-      typeof entry.anime.episodes === 'number' && entry.anime.episodes > 0 ? entry.anime.episodes : null;
+      typeof cleanAnime.episodes === 'number' && cleanAnime.episodes > 0 ? cleanAnime.episodes : null;
     const isFullAnimeCompleted = totalEps !== null && targetProgress >= totalEps;
 
     if (
@@ -679,7 +754,7 @@ export function recordWatchProgress(entry: {
         : existingLibItem?.status === 'COMPLETED' && !isFullAnimeCompleted
         ? 'CURRENT'
         : existingLibItem?.status || 'CURRENT';
-      updateLibraryItem(library, entry.anime, {
+      updateLibraryItem(library, cleanAnime, {
         progress: Math.max(currentProgress, targetProgress),
         status: nextStatus,
       });
@@ -691,7 +766,7 @@ export function recordWatchProgress(entry: {
   // 2. Manage Continue Watching history:
   // Strictly at most 1 episode per anime. All previous episodes for this anime are removed from continue watching.
   const currentHistory = getStoredWatchHistory();
-  const otherAnimeHistory = currentHistory.filter(h => h.animeId !== entry.anime.id);
+  const otherAnimeHistory = currentHistory.filter(h => h.animeId !== cleanAnime.id);
 
   if (isEpisodeCompleted) {
     // If the episode is completed, do not keep it in Continue Watching
@@ -700,8 +775,8 @@ export function recordWatchProgress(entry: {
   }
 
   const newEntry: WatchHistoryEntry = {
-    animeId: entry.anime.id,
-    anime: entry.anime,
+    animeId: cleanAnime.id,
+    anime: cleanAnime,
     episodeNumber: entry.episodeNumber,
     episodeTitle: entry.episodeTitle,
     seasonTitle: entry.seasonTitle,

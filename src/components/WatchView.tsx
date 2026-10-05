@@ -198,10 +198,15 @@ export const WatchView: React.FC<WatchViewProps> = ({
     return isFreshAiredEpisodeWithin7Days(anime, details, episodeNumber);
   }, [anime, details, episodeNumber]);
 
+  const isSpecialOrOvaOrOna = useMemo(() => {
+    const fmt = (anime.format || anime.type || details?.format || details?.type || '').toUpperCase();
+    return fmt === 'SPECIAL' || fmt === 'OVA' || fmt === 'ONA';
+  }, [anime.format, anime.type, details?.format, details?.type]);
+
   const configuredDefaultSource = (settings?.preferredSource || 'Multi-Lang') as StreamSourceId;
   const effectiveDefaultSource: StreamSourceId = is18PlusActive
     ? 'HentaiOcean'
-    : isFreshEpisode
+    : (isSpecialOrOvaOrOna || isFreshEpisode)
     ? 'HiAnime'
     : configuredDefaultSource;
 
