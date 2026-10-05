@@ -44,6 +44,11 @@ export const AppIntroSplash: React.FC<AppIntroSplashProps> = ({
         // CRITICAL: Signal the native Android layer to dismiss its logo
         // only now that the video is actually moving on the screen!
         (window as any).isWebReady = true;
+        try {
+          if ((window as any).NativeApp && typeof (window as any).NativeApp.setWebReady === 'function') {
+            (window as any).NativeApp.setWebReady();
+          }
+        } catch (e) {}
       };
       v.addEventListener('playing', handlePlay);
 

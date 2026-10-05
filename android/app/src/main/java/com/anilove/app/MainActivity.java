@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
@@ -87,6 +88,18 @@ public class MainActivity extends BridgeActivity {
         startWebReadyPolling();
     }
 
+    public class WebReadyBridge {
+        @JavascriptInterface
+        public void setWebReady() {
+            splashHandler.post(() -> {
+                if (!isWebReady) {
+                    Log.i(TAG, "Web signaled READY via JS Bridge. Revealing web view.");
+                    MainActivity.this.setWebReady(true);
+                }
+            });
+        }
+    }
+
     private void configureWebViewSettings() {
         try {
             WebView webView = getBridge() != null ? getBridge().getWebView() : null;
@@ -95,8 +108,13 @@ public class MainActivity extends BridgeActivity {
                 settings.setSupportMultipleWindows(false);
                 settings.setJavaScriptCanOpenWindowsAutomatically(false);
                 settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setCacheMode(WebSettings.LOAD_DEFAULT);
                 // Allow autoplaying videos without user gesture
                 settings.setMediaPlaybackRequiresUserGesture(false);
+
+                // Add Javascript Interface for instant web ready notification
+                webView.addJavascriptInterface(new WebReadyBridge(), "NativeApp");
             }
         } catch (Exception e) {
             Log.w(TAG, "WebSettings adjustment error: " + e.getMessage());
@@ -119,17 +137,17 @@ public class MainActivity extends BridgeActivity {
                 if (isWebReady) return;
 
                 WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-                if (webView != null) {
+                if (webView != null && !isWebReady) {
                     webView.evaluateJavascript("window.isWebReady", value -> {
                         if ("true".equals(value)) {
-                            Log.i(TAG, "Web signaled READY. Revealing homepage.");
+                            Log.i(TAG, "Web signaled READY via polling. Revealing homepage.");
                             setWebReady(true);
                         } else if (!isWebReady) {
-                            splashHandler.postDelayed(pollTask, 100);
+                            splashHandler.postDelayed(pollTask, 250);
                         }
                     });
                 } else if (!isWebReady) {
-                    splashHandler.postDelayed(pollTask, 100);
+                    splashHandler.postDelayed(pollTask, 250);
                 }
             }
         };
@@ -155,7 +173,6 @@ public class MainActivity extends BridgeActivity {
                 return;
             }
 
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             decorView.post(() -> {
                 try {
                     WindowInsetsCompat currentInsets = ViewCompat.getRootWindowInsets(decorView);

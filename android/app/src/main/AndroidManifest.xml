@@ -25,6 +25,16 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Disable automatic locale metadata lookup to eliminate startup overhead in AppCompatDelegate -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="false" />
+        </service>
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"

@@ -490,6 +490,11 @@ export function App() {
     // SIGNAL NATIVE DISMISSAL IMMEDIATELY for the fastest possible launch experience
     // This allows our custom web-based "CoolLoadingSplash" to take over instantly!
     (window as any).isWebReady = true;
+    try {
+      if ((window as any).NativeApp && typeof (window as any).NativeApp.setWebReady === 'function') {
+        (window as any).NativeApp.setWebReady();
+      }
+    } catch (e) {}
     loadHomeContent();
     setLibrary(getUserLibrary(settings.is18PlusMode));
   }, [loadHomeContent, settings.is18PlusMode]);
