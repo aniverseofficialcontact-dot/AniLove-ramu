@@ -88,6 +88,15 @@ public class MainActivity extends BridgeActivity {
         startWebReadyPolling();
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == NOTIFICATION_PERMISSION_REQ_CODE) {
+            // Handled natively in MainActivity
+            return;
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
     public class WebReadyBridge {
         @JavascriptInterface
         public void setWebReady() {

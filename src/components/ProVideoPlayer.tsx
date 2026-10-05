@@ -20,32 +20,8 @@ import {
   SUPPORTED_LANGUAGES,
 } from '../services/streamingProviders';
 import { fetchUnifiedSubtitles, getCachedSubtitles, anonymizeAndSortSubtitleTracks } from '../services/subtitleService';
-import { registerPlugin, Capacitor } from '@capacitor/core';
-
-interface NativePlayerPlugin {
-  play(options: {
-    url: string;
-    title: string;
-    subtitleUrl?: string;
-    subtitleLang?: string;
-    allSubtitles?: string;
-    hasNext?: boolean;
-    hasPrev?: boolean;
-    startFullscreen?: boolean;
-    yOffset?: number;
-    anilistId?: number;
-    episodeNumber?: number;
-    audio?: string;
-    advancePlayer?: boolean;
-    startTime?: number;
-  }): Promise<void>;
-  updatePosition(options: { y: number }): Promise<void>;
-  close(): Promise<void>;
-  addListener(eventName: 'onEpisodeNavigation', listenerFunc: (data: { direction: 'next' | 'prev' }) => void): Promise<any>;
-  addListener(eventName: 'onBackButtonPressed', listenerFunc: () => void): Promise<any>;
-}
-
-const NativePlayer = registerPlugin<NativePlayerPlugin>('NativePlayer');
+import { Capacitor } from '@capacitor/core';
+import { NativePlayer } from '../services/nativePlayer';
 
 interface EpisodeItem {
   number: number;
