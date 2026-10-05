@@ -33,11 +33,14 @@ public class AniZipHelper {
     private static final Map<Integer, Mapping> cache = new ConcurrentHashMap<>();
 
     /**
-     * Cleans anime title by removing common release tags (Cour 1, Cour 2, Part 1, Part 2, etc.)
+     * Cleans anime title by removing release tags, years like (2021), (Cour 1, Cour 2, Part 1, Part 2, etc.)
      */
     public static String cleanTitle(String title) {
         if (title == null) return "";
         return title
+            .replaceAll("\\s*\\(\\d{4}\\)", "")
+            .replaceAll("\\s*\\(.*?\\)", "")
+            .replaceAll("\\s*\\[.*?\\]", "")
             .replaceAll("(?i)\\b(Cour|Part|Season|S)\\s*\\d+\\b", "")
             .replaceAll("(?i)\\b(2nd|3rd|4th|5th|6th|7th|8th|9th)\\s*Season\\b", "")
             .replaceAll(":\\s*$", "")
@@ -80,9 +83,9 @@ public class AniZipHelper {
 
                 JSONObject titles = obj.optJSONObject("titles");
                 if (titles != null) {
-                    m.titleEn = titles.has("en") ? titles.optString("en") : null;
-                    m.titleRj = titles.has("rj") ? titles.optString("rj") : null;
-                    m.titleJp = titles.has("jp") ? titles.optString("jp") : null;
+                    m.titleEn = titles.has("en") ? cleanTitle(titles.optString("en")) : null;
+                    m.titleRj = titles.has("rj") ? cleanTitle(titles.optString("rj")) : null;
+                    m.titleJp = titles.has("jp") ? cleanTitle(titles.optString("jp")) : null;
                 }
 
                 m.episodeOffset = obj.optInt("episodeOffset", 0);
@@ -96,7 +99,7 @@ public class AniZipHelper {
                             int appEp = Integer.parseInt(epKey);
                             JSONObject epObj = episodes.optJSONObject(epKey);
                             if (epObj != null) {
-                                int tvdbEp = epObj.optInt("tvdbEpisode", epObj.optInt("absolute", appEp));
+                                int tvdbEp = epObj.optInt("episodeNumber", epObj.optInt("absoluteEpisodeNumber", epObj.optInt("tvdbEpisode", epObj.optInt("absolute", appEp))));
                                 m.episodeMap.put(appEp, tvdbEp);
                             }
                         } catch (NumberFormatException ignored) {}
@@ -135,10 +138,10 @@ public class AniZipHelper {
      */
     public static String getMappedTitle(Mapping mapping, String fallbackTitle) {
         if (mapping != null && mapping.titleEn != null && !mapping.titleEn.isEmpty()) {
-            return mapping.titleEn;
+            return cleanTitle(mapping.titleEn);
         }
         if (mapping != null && mapping.titleRj != null && !mapping.titleRj.isEmpty()) {
-            return mapping.titleRj;
+            return cleanTitle(mapping.titleRj);
         }
         return cleanTitle(fallbackTitle);
     }

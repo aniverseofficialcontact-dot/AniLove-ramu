@@ -11,6 +11,22 @@ export interface AniZipMapping {
 const aniZipCache = new Map<number, AniZipMapping>();
 
 /**
+ * Cleans anime title by stripping release tags, years (e.g. 2021), Cour/Part/Season indicators.
+ */
+export function cleanAnimeTitleForQuery(title: string): string {
+  if (!title) return 'Anime';
+  return title
+    .replace(/\s*\(\d{4}\)/g, '')
+    .replace(/\s*\(.*?\)/g, '')
+    .replace(/\s*\[.*?\]/g, '')
+    .replace(/(?:\b(Cour|Part|Season|S)\s*\d+\b)/gi, '')
+    .replace(/(?:\b(2nd|3rd|4th|5th|6th|7th|8th|9th)\s*Season\b)/gi, '')
+    .replace(/:\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Fetches AniZip mappings for a given AniList ID (cached in memory)
  */
 export async function getAniZipMapping(anilistId?: number): Promise<AniZipMapping | null> {
@@ -30,16 +46,22 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
         Object.entries(data.episodes).forEach(([epKey, epVal]: [string, any]) => {
           const epNum = parseInt(epKey, 10);
           if (!isNaN(epNum) && epVal) {
-            episodeMap[epNum] = epVal.tvdbEpisode || epVal.absolute || epNum;
+            const mappedEp = epVal.episodeNumber || epVal.absoluteEpisodeNumber || epVal.tvdbEpisode || epVal.absolute || epNum;
+            episodeMap[epNum] = mappedEp;
           }
         });
       }
 
+      const rawTitleEn = data.titles?.en || undefined;
+      const rawTitleRj = data.titles?.rj || undefined;
+      const cleanTitleEn = rawTitleEn ? cleanAnimeTitleForQuery(rawTitleEn) : undefined;
+      const cleanTitleRj = rawTitleRj ? cleanAnimeTitleForQuery(rawTitleRj) : undefined;
+
       const mapping: AniZipMapping = {
         anilistId,
         malId: data.mappings?.mal_id || data.mappings?.mal || 0,
-        titleEn: data.titles?.en || undefined,
-        titleRj: data.titles?.rj || undefined,
+        titleEn: cleanTitleEn,
+        titleRj: cleanTitleRj,
         episodeOffset: typeof data.episodeOffset === 'number' ? data.episodeOffset : 0,
         season: typeof data.season === 'number' ? data.season : 1,
         episodeMap,
@@ -53,22 +75,6 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
   }
 
   return null;
-}
-
-/**
- * Cleans anime title by stripping common release tags (Cour 1, Cour 2, Part 1, Part 2, etc.)
- */
-export function cleanAnimeTitleForQuery(title: string): string {
-  if (!title) return 'Anime';
-  return title
-    .replace(/\s*\(.*?\)/g, '')
-    .replace(/\s*\[.*?\]/g, '')
-    .replace(/\s*-\s*/g, ' ')
-    .replace(/(?:\b(Cour|Part|Season|S)\s*\d+\b)/gi, '')
-    .replace(/(?:\b(2nd|3rd|4th|5th|6th|7th|8th|9th)\s*Season\b)/gi, '')
-    .replace(/:\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 export function resolveMappedEpisode(mapping: AniZipMapping | null, originalEp: number): number {
