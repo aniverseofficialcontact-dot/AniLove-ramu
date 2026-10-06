@@ -433,40 +433,66 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
   const activeStreamSource = resolvedEp === episodeNumber ? streamSource : null;
   const isStreamReady = resolvedEp === episodeNumber && streamStatus === 'ready';
 
+  const callbacksRef = useRef({
+    onEpisodeChange,
+    onClosePlayer,
+    episodeNumber,
+  });
+  callbacksRef.current = {
+    onEpisodeChange,
+    onClosePlayer,
+    episodeNumber,
+  };
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let subNav: any, subBack: any, subHome: any, subQuality: any, subLang: any;
+
+    (async () => {
+      subNav = await NativePlayer.addListener('onEpisodeNavigation', (data: any) => {
+        const { onEpisodeChange: onEp, episodeNumber: curEp } = callbacksRef.current;
+        if (data.direction === 'next' && onEp) onEp(curEp + 1);
+        else if (data.direction === 'prev' && onEp) onEp(curEp - 1);
+      });
+
+      subBack = await NativePlayer.addListener('onBackButtonPressed', () => {
+        callbacksRef.current.onClosePlayer?.();
+      });
+
+      subHome = await NativePlayer.addListener('onHomeButtonPressed', () => {
+        window.dispatchEvent(new CustomEvent('navigateToHome'));
+      });
+
+      subQuality = await NativePlayer.addListener('onQualityChange', (data: any) => {
+        if (data && data.quality) {
+          setQuality(data.quality as StreamResolution);
+        }
+      });
+
+      subLang = await NativePlayer.addListener('onLanguageChange', (data: any) => {
+        if (data && data.language) {
+          const l = String(data.language).toLowerCase();
+          if (l.includes('jap') || l.includes('sub')) setAudioMode('SUB');
+          else if (l.includes('eng') || l.includes('dub')) setAudioMode('DUB');
+        }
+      });
+    })();
+
+    return () => {
+      subNav?.remove?.();
+      subBack?.remove?.();
+      subHome?.remove?.();
+      subQuality?.remove?.();
+      subLang?.remove?.();
+    };
+  }, []);
+
   const triggerNativePlayerLaunch = (src: StreamSource, targetEp: number) => {
     if (!Capacitor.isNativePlatform() || !src?.url) return;
 
     const dTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
     const currentEpNum = Number(targetEp);
-
-    (NativePlayer as any).removeAllListeners?.('onEpisodeNavigation');
-    (NativePlayer as any).removeAllListeners?.('onBackButtonPressed');
-    (NativePlayer as any).removeAllListeners?.('onHomeButtonPressed');
-    (NativePlayer as any).removeAllListeners?.('onQualityChange');
-    (NativePlayer as any).removeAllListeners?.('onLanguageChange');
-
-    NativePlayer.addListener('onEpisodeNavigation', (data) => {
-      if (data.direction === 'next' && onEpisodeChange) onEpisodeChange(currentEpNum + 1);
-      else if (data.direction === 'prev' && onEpisodeChange) onEpisodeChange(currentEpNum - 1);
-    });
-    NativePlayer.addListener('onBackButtonPressed', () => {
-      if (onClosePlayer) onClosePlayer();
-    });
-    NativePlayer.addListener('onHomeButtonPressed', () => {
-      window.dispatchEvent(new CustomEvent('navigateToHome'));
-    });
-    NativePlayer.addListener('onQualityChange', (data: any) => {
-      if (data && data.quality) {
-        setQuality(data.quality as StreamResolution);
-      }
-    });
-    NativePlayer.addListener('onLanguageChange', (data: any) => {
-      if (data && data.language) {
-        const l = String(data.language).toLowerCase();
-        if (l.includes('jap') || l.includes('sub')) setAudioMode('SUB');
-        else if (l.includes('eng') || l.includes('dub')) setAudioMode('DUB');
-      }
-    });
 
     let activeSubUrl = src.subtitleUrl;
     let activeSubLang = src.subtitleLang || 'English';

@@ -465,17 +465,131 @@ public class NativePlayerActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isWebViewInitialized = false;
+    private void ensureWebViewInitialized() {
+        if (isWebViewInitialized) return;
+        isWebViewInitialized = true;
+        playerWebView = findViewById(R.id.player_webview);
+        if (playerWebView != null) {
+            playerWebView.addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public void onTimeUpdate(double currentSec) {
+                    runOnUiThread(() -> {
+                        currentVideoTime = currentSec;
+                        updateNativeSubtitleOverlay(currentSec);
+                    });
+                }
+            }, "AniLoveWebPlayerBridge");
+
+            WebSettings settings = playerWebView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            settings.setSupportMultipleWindows(false);
+            settings.setJavaScriptCanOpenWindowsAutomatically(false);
+
+            playerWebView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onShowCustomView(View view, CustomViewCallback callback) {
+                    if (callback != null) {
+                        try { callback.onCustomViewHidden(); } catch (Exception ignored) {}
+                    }
+                }
+                @Override
+                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                    return false;
+                }
+            });
+
+            playerWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString().toLowerCase();
+                        if (isAdUrl(url)) {
+                            Log.i("AniLove_AdBlock", "Blocked ad request: " + url);
+                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        String url = request.getUrl().toString();
+                        String lower = url.toLowerCase();
+                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
+
+                        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+                            Log.i("AniLove_AdBlock", "Blocked non-http url: " + url);
+                            return true;
+                        }
+
+                        if (isAdUrl(lower) || host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg")) {
+                            Log.i("AniLove_AdBlock", "Blocked ad redirect: " + url);
+                            return true;
+                        }
+
+                        if (is18PlusActive() || (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean"))) {
+                            if (!host.contains("hentaiocean") && !host.contains("pyyokibh") && !host.contains("localhost")) {
+                                Log.i("AniLove_AdBlock", "KILLED 18+ ad redirect to external domain: " + host + " (" + url + ")");
+                                return true;
+                            }
+                        }
+
+                        if (request.isForMainFrame()) {
+                            if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
+                                try {
+                                    String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
+                                    if (!host.contains("hentaiocean") && !host.equals(originalHost) && !originalHost.contains(host)) {
+                                        Log.i("AniLove_AdBlock", "Blocked top-level ad redirect: " + host);
+                                        return true;
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                    injectAdEraserScript(view);
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    injectAdEraserScript(view);
+                }
+            });
+
+            playerWebView.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.performClick();
+                    float x = event.getX();
+                    float y = event.getY();
+                    String clickScript = "var el = document.elementFromPoint(" + x + ", " + y + "); if (el) el.click();";
+                    playerWebView.evaluateJavascript(clickScript, null);
+                }
+                return false;
+            });
+        }
+    }
+
     @UnstableApi
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        overridePendingTransition(0, 0);
+    private void processIncomingIntent(Intent intent) {
+        if (intent == null) return;
         setIntent(intent);
 
         StreamCache.clear();
         cleanupPlaybackEngines();
 
-        // Always show controls and reset touch state on every source/server change
         stopHideTimer();
         isControlsVisible = true;
         if (controlsOverlay != null) controlsOverlay.setVisibility(View.VISIBLE);
@@ -561,7 +675,22 @@ public class NativePlayerActivity extends AppCompatActivity {
             String referer = intent.getStringExtra("referer");
             setupExoPlayerOnline(streamUrl, referer, null);
         }
+
+        String reqEngine = intent.getStringExtra("engineMode");
+        if (is18PlusActive() || "web".equalsIgnoreCase(reqEngine)) {
+            ensureWebViewInitialized();
+            switchPlayerEngine(true);
+        }
+
         resetHideTimer();
+    }
+
+    @UnstableApi
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        overridePendingTransition(0, 0);
+        processIncomingIntent(intent);
     }
 
     private int getPhysicalScreenWidth() {
@@ -961,8 +1090,6 @@ public class NativePlayerActivity extends AppCompatActivity {
         
         setContentView(R.layout.activity_native_player);
         applyCaptionStyle();
-        updateMetadataFromIntent(getIntent());
-        applyWindowSettings(getIntent());
         
         overridePendingTransition(0, 0);
 
@@ -996,120 +1123,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             } else {
                 btnHome18Plus.setVisibility(View.GONE);
             }
-        }
-
-        playerWebView = findViewById(R.id.player_webview);
-        if (playerWebView != null) {
-            playerWebView.addJavascriptInterface(new Object() {
-                @JavascriptInterface
-                public void onTimeUpdate(double currentSec) {
-                    runOnUiThread(() -> {
-                        currentVideoTime = currentSec;
-                        updateNativeSubtitleOverlay(currentSec);
-                    });
-                }
-            }, "AniLoveWebPlayerBridge");
-
-            WebSettings settings = playerWebView.getSettings();
-            settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(true);
-            settings.setDatabaseEnabled(true);
-            settings.setMediaPlaybackRequiresUserGesture(false);
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-            settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            settings.setSupportMultipleWindows(false);
-            settings.setJavaScriptCanOpenWindowsAutomatically(false);
-
-            playerWebView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onShowCustomView(View view, CustomViewCallback callback) {
-                    if (callback != null) {
-                        try { callback.onCustomViewHidden(); } catch (Exception ignored) {}
-                    }
-                }
-                @Override
-                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
-                    return false;
-                }
-            });
-
-            playerWebView.setWebViewClient(new WebViewClient() {
-                @Override
-                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                    if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString().toLowerCase();
-                        if (isAdUrl(url)) {
-                            Log.i("AniLove_AdBlock", "Blocked ad request: " + url);
-                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes()));
-                        }
-                    }
-                    return super.shouldInterceptRequest(view, request);
-                }
-
-                @Override
-                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                    if (request != null && request.getUrl() != null) {
-                        String url = request.getUrl().toString();
-                        String lower = url.toLowerCase();
-                        String host = request.getUrl().getHost() != null ? request.getUrl().getHost().toLowerCase() : "";
-
-                        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
-                            Log.i("AniLove_AdBlock", "Blocked non-http url: " + url);
-                            return true;
-                        }
-
-                        if (isAdUrl(lower) || host.contains("youtube") || host.contains("youtu.be") || host.contains("ytimg")) {
-                            Log.i("AniLove_AdBlock", "Blocked ad redirect: " + url);
-                            return true;
-                        }
-
-                        // Strict HentaiOcean Domain Lock:
-                        // Disallow any top-level or popup navigation away from HentaiOcean domain & video CDN
-                        if (is18PlusActive() || (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean"))) {
-                            if (!host.contains("hentaiocean") && !host.contains("pyyokibh") && !host.contains("localhost")) {
-                                Log.i("AniLove_AdBlock", "KILLED 18+ ad redirect to external domain: " + host + " (" + url + ")");
-                                return true; // CANCEL AD REDIRECT!
-                            }
-                        }
-
-                        if (request.isForMainFrame()) {
-                            if (currentEmbedUrl != null && !currentEmbedUrl.isEmpty()) {
-                                try {
-                                    String originalHost = new URL(currentEmbedUrl).getHost().toLowerCase();
-                                    if (!host.contains("hentaiocean") && !host.equals(originalHost) && !originalHost.contains(host)) {
-                                        Log.i("AniLove_AdBlock", "Blocked top-level ad redirect: " + host);
-                                        return true;
-                                    }
-                                } catch (Exception ignored) {}
-                            }
-                        }
-                    }
-                    return false;
-                }
-
-                @Override
-                public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                    super.onPageStarted(view, url, favicon);
-                    injectAdEraserScript(view);
-                }
-
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    super.onPageFinished(view, url);
-                    injectAdEraserScript(view);
-                }
-            });
-
-            playerWebView.setOnTouchListener((v, event) -> {
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    v.performClick();
-                    float x = event.getX();
-                    float y = event.getY();
-                    String clickScript = "var el = document.elementFromPoint(" + x + ", " + y + "); if (el) el.click();";
-                    playerWebView.evaluateJavascript(clickScript, null);
-                }
-                return false;
-            });
         }
 
         loadingProgress = findViewById(R.id.loading_progress);
@@ -1265,9 +1278,6 @@ public class NativePlayerActivity extends AppCompatActivity {
             return gestureDetector.onTouchEvent(event);
         };
 
-        // controlsOverlay is a ViewGroup — must return true on DOWN so the GestureDetector
-        // can track the full gesture sequence (UP/CANCEL). Without this, the touch dispatcher
-        // routes ACTION_UP to children instead, breaking tap/long-press detection on the overlay.
         View.OnTouchListener overlayTouchListener = (v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                 if (is2xSpeed) setPlaybackSpeed(currentPermanentSpeed, true);
@@ -1280,7 +1290,6 @@ public class NativePlayerActivity extends AppCompatActivity {
                 }
             }
             gestureDetector.onTouchEvent(event);
-            // Always claim the touch so the gesture detector tracks the full sequence
             return true;
         };
 
@@ -1314,34 +1323,9 @@ public class NativePlayerActivity extends AppCompatActivity {
             }
         });
 
-        isOfflineMode = getIntent().getBooleanExtra("offlineMode", false);
-        if (isOfflineMode) {
-            setupExoPlayer(getIntent().getStringExtra("localFilePath"), getIntent().getStringExtra("localSubPath"));
-        } else {
-            String streamUrl = getIntent().getStringExtra("videoUrl");
-            if (streamUrl == null) streamUrl = getIntent().getStringExtra("url");
-            String referer = getIntent().getStringExtra("referer");
-            setupExoPlayerOnline(streamUrl, referer, null);
-        }
-
-        String reqEngine = getIntent().getStringExtra("engineMode");
-        if (is18PlusActive() || "web".equalsIgnoreCase(reqEngine)) {
-            switchPlayerEngine(true);
-        }
-
-        // Align state with XML: controlsOverlay starts VISIBLE, so mark it as visible
-        isControlsVisible = true;
-        if (controlsOverlay != null) controlsOverlay.setVisibility(View.VISIBLE);
-
-        // Ensure touch_wall is always clickable/focusable on first launch
-        View twInit = findViewById(R.id.touch_wall);
-        if (twInit != null) {
-            twInit.setClickable(true);
-            twInit.setFocusable(true);
-        }
+        processIncomingIntent(getIntent());
 
         startUpdateLoop();
-        resetHideTimer();
     }
 
     @Override
@@ -2709,6 +2693,9 @@ public class NativePlayerActivity extends AppCompatActivity {
     public void switchPlayerEngine(boolean useWebView) {
         isWebViewPlayerMode = useWebView;
         VideoSniffer.cancelActiveSniffers();
+        if (useWebView) {
+            ensureWebViewInitialized();
+        }
         runOnUiThread(() -> {
             View touchWall = findViewById(R.id.touch_wall);
             View topBar = findViewById(R.id.top_center_button_bar);
