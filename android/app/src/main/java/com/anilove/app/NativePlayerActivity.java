@@ -1345,6 +1345,38 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!isFullscreenMode && !isOfflineMode && event != null) {
+            View videoRoot = findViewById(R.id.video_root_container);
+            int videoHeight = (videoRoot != null && videoRoot.getHeight() > 0)
+                    ? videoRoot.getHeight()
+                    : (int) (getPhysicalScreenWidth() * 0.5625);
+
+            float translationY = videoRoot != null ? videoRoot.getTranslationY() : 0;
+            float effectiveY = event.getY() - translationY;
+
+            if (effectiveY > videoHeight) {
+                if (MainActivity.instance != null && MainActivity.instance.getBridge() != null) {
+                    WebView webView = MainActivity.instance.getBridge().getWebView();
+                    if (webView != null) {
+                        final MotionEvent copyEvent = MotionEvent.obtain(event);
+                        webView.post(() -> {
+                            try {
+                                webView.dispatchTouchEvent(copyEvent);
+                            } catch (Exception ignored) {
+                            } finally {
+                                copyEvent.recycle();
+                            }
+                        });
+                    }
+                }
+                return true;
+            }
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
             return false;
