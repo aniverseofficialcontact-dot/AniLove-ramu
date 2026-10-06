@@ -823,39 +823,12 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           isFullscreen ? 'h-full flex items-center justify-center' : 'aspect-video'
         }`}
       >
-        {Capacitor.isNativePlatform() ? (
-          <div className="w-full h-full relative group bg-black z-10">
-            <div className="absolute inset-0 bg-black z-0" />
-            <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4">
-              {streamStatus === 'loading' ? (
-                <>
-                  <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
-                  <div className="text-xs font-bold text-white mb-1">Loading Episode {episodeNumber}...</div>
-                  <div className="text-[10px] text-neutral-400 font-medium">Connecting to {selectedSource || 'Multi-Lang'}...</div>
-                </>
-              ) : streamStatus === 'error' ? (
-                <div className="p-4 max-w-md mx-auto space-y-2 text-center">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                    <AlertCircle className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-bold text-white">Stream Not Available</h3>
-                  <p className="text-xs text-neutral-400">{streamMessage}</p>
-                </div>
-              ) : (
-                <>
-                  <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin mb-2" />
-                  <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Hybrid Native Player Active</div>
-                </>
-              )}
-            </div>
-          </div>
-        ) : streamSource?.isEmbeddable && streamStatus !== 'error' ? (
+        {streamSource?.isEmbeddable && streamStatus !== 'error' ? (
           streamSource.url.includes('.mp4') ? (
             <video
               key={`${streamSource.url}-${refreshKey}`}
               src={streamSource.url}
               controls
-              controlsList="nofullscreen nodownload"
               playsInline
               autoPlay
               className="w-full h-full object-contain pointer-events-auto block"
@@ -878,41 +851,17 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           <div className="w-full h-full flex flex-col items-center justify-center bg-black/90 p-4 text-center">
             {streamStatus === 'loading' ? (
               <>
-                <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
-                <div className="text-sm font-bold text-white mb-1">Loading Episode Stream...</div>
-                <div className="text-xs text-neutral-400">Connecting to {activeServer}...</div>
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
+                <div className="text-xs font-bold text-white mb-1">Loading Episode {episodeNumber}...</div>
+                <div className="text-[10px] text-neutral-400 font-medium">Connecting to {selectedSource || 'Multi-Lang'}...</div>
               </>
             ) : (
-              <div className="p-6 max-w-md mx-auto space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6" />
+              <div className="p-4 max-w-md mx-auto space-y-2 text-center">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5" />
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-white">Stream Not Available</h3>
-                <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
-                  {streamMessage || `Streaming is not yet available for Episode ${episodeNumber} in ${audioMode}. Please switch server or audio language.`}
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      handleReloadStream();
-                    }}
-                    className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-neutral-200 border border-neutral-700 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Retry</span>
-                  </button>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      handleSwitchToNextServer();
-                    }}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Switch Server</span>
-                  </button>
-                </div>
+                <h3 className="text-sm font-bold text-white">Stream Not Available</h3>
+                <p className="text-xs text-neutral-400">{streamMessage}</p>
               </div>
             )}
           </div>
