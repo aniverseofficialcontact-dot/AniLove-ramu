@@ -101,13 +101,18 @@ public class AniZipHelper {
                             if (epObj != null) {
                                 int tvdbEp = epObj.optInt("episodeNumber", epObj.optInt("absoluteEpisodeNumber", epObj.optInt("tvdbEpisode", epObj.optInt("absolute", appEp))));
                                 m.episodeMap.put(appEp, tvdbEp);
+
+                                if ("1".equals(epKey) && epObj.has("seasonNumber")) {
+                                    int sn = epObj.optInt("seasonNumber", 1);
+                                    if (sn > 0) m.season = sn;
+                                }
                             }
                         } catch (NumberFormatException ignored) {}
                     }
                 }
 
                 Log.i(TAG, "Fetched AniZip mapping for AniList ID " + anilistId +
-                        " -> Title: " + m.titleEn + ", Offset: " + m.episodeOffset + ", MAL ID: " + m.malId);
+                        " -> Title: " + m.titleEn + ", Season: " + m.season + ", Offset: " + m.episodeOffset + ", MAL ID: " + m.malId);
                 cache.put(anilistId, m);
                 return m;
             }

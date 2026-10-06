@@ -744,9 +744,11 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
 
     let ticking = false;
     let lastY = -9999;
+    let lastSendTime = 0;
 
     const syncPosition = () => {
       if (playerContainerRef.current) {
+        const now = Date.now();
         const rect = playerContainerRef.current.getBoundingClientRect();
         const viewportH = window.innerHeight;
 
@@ -760,8 +762,9 @@ export const ProVideoPlayer: React.FC<ProVideoPlayerProps> = ({
           y = Math.round(Math.max(0, rect.top));
         }
 
-        if (Math.abs(y - lastY) >= 3) {
+        if (Math.abs(y - lastY) >= 6 || (now - lastSendTime > 80 && y !== lastY)) {
           lastY = y;
+          lastSendTime = now;
           NativePlayer.updatePosition({ y });
         }
       }

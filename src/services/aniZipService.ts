@@ -37,9 +37,9 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
     return aniZipCache.get(anilistId)!;
   }
 
-  // 2. LocalStorage cache (v3 schema to purge stale historical keys)
+  // 2. LocalStorage cache (v4 schema to purge stale historical keys)
   try {
-    const local = localStorage.getItem(`anizip_map_v3_${anilistId}`);
+    const local = localStorage.getItem(`anizip_map_v4_${anilistId}`);
     if (local) {
       const parsed = JSON.parse(local);
       if (parsed && typeof parsed === 'object') {
@@ -63,14 +63,24 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
     if (res.ok) {
       const data = await res.json();
       const episodeMap: Record<number, number> = {};
+      let resolvedSeason = 1;
+
       if (data.episodes && typeof data.episodes === 'object') {
         Object.entries(data.episodes).forEach(([epKey, epVal]: [string, any]) => {
           const epNum = parseInt(epKey, 10);
           if (!isNaN(epNum) && epVal) {
             const mappedEp = epVal.episodeNumber || epVal.absoluteEpisodeNumber || epVal.tvdbEpisode || epVal.absolute || epNum;
             episodeMap[epNum] = mappedEp;
+
+            if (epKey === '1' && typeof epVal.seasonNumber === 'number' && epVal.seasonNumber > 0) {
+              resolvedSeason = epVal.seasonNumber;
+            }
           }
         });
+      }
+
+      if (resolvedSeason === 1 && typeof data.season === 'number' && data.season > 0) {
+        resolvedSeason = data.season;
       }
 
       const rawTitleEn = data.titles?.en || undefined;
@@ -84,13 +94,13 @@ export async function getAniZipMapping(anilistId?: number): Promise<AniZipMappin
         titleEn: cleanTitleEn,
         titleRj: cleanTitleRj,
         episodeOffset: typeof data.episodeOffset === 'number' ? data.episodeOffset : 0,
-        season: typeof data.season === 'number' ? data.season : 1,
+        season: resolvedSeason,
         episodeMap,
       };
 
       aniZipCache.set(anilistId, mapping);
       try {
-        localStorage.setItem(`anizip_map_v3_${anilistId}`, JSON.stringify(mapping));
+        localStorage.setItem(`anizip_map_v4_${anilistId}`, JSON.stringify(mapping));
       } catch (ignored) {}
 
       return mapping;
