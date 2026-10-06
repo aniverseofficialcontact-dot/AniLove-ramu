@@ -272,15 +272,22 @@ public class NativePlayerActivity extends AppCompatActivity {
         applySubtitleTimingOffsetInWeb();
     }
 
+    private boolean hasDeletedSubOffset = false;
+    private int lastBroadcastSecond = -1;
+
     private void deleteEpisodeSubOffset() {
+        if (hasDeletedSubOffset) return;
         int anilistId = getIntent().getIntExtra("anilistId", 0);
         int episodeNumber = getIntent().getIntExtra("episodeNumber", 0);
         if (anilistId <= 0 || episodeNumber <= 0) return;
 
+        hasDeletedSubOffset = true;
         try {
             SharedPreferences prefs = getSharedPreferences("AniLoveSubTimingOffsets", MODE_PRIVATE);
             String key = anilistId + "_ep" + episodeNumber;
-            prefs.edit().remove(key).apply();
+            if (prefs.contains(key)) {
+                prefs.edit().remove(key).apply();
+            }
             subtitleTimingOffset = 0.0;
         } catch (Exception ignored) {}
     }
@@ -455,13 +462,23 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         if (exoPlayerView != null) exoPlayerView.setVisibility(View.VISIBLE);
 
-        // 3. Stop ExoPlayer playback synchronously without destroying the player instance for stream reuse
+        if (playerWebView != null) {
+            try {
+                playerWebView.stopLoading();
+                playerWebView.loadUrl("about:blank");
+                playerWebView.setVisibility(View.GONE);
+            } catch (Exception ignored) {}
+        }
+
+        // 3. Stop and release ExoPlayer playback synchronously to free decoders and hardware resources
         if (exoPlayer != null) {
             try {
                 exoPlayer.setPlayWhenReady(false);
                 exoPlayer.stop();
                 exoPlayer.clearMediaItems();
+                exoPlayer.release();
             } catch (Exception ignored) {}
+            exoPlayer = null;
         }
     }
 
@@ -589,6 +606,8 @@ public class NativePlayerActivity extends AppCompatActivity {
 
         StreamCache.clear();
         cleanupPlaybackEngines();
+        hasDeletedSubOffset = false;
+        lastBroadcastSecond = -1;
 
         stopHideTimer();
         isControlsVisible = true;
@@ -3313,6 +3332,10 @@ public class NativePlayerActivity extends AppCompatActivity {
     }
 
     private void broadcastProgress(double current, double duration) {
+        int currentSec = (int) current;
+        if (currentSec == lastBroadcastSecond) return;
+        lastBroadcastSecond = currentSec;
+
         if (duration > 0 && current >= duration * 0.85) {
             deleteEpisodeSubOffset();
         }
@@ -3990,6 +4013,15 @@ public class NativePlayerActivity extends AppCompatActivity {
         navigationListener = null;
         
         cleanupPlaybackEngines();
+        if (playerWebView != null) {
+            try {
+                playerWebView.stopLoading();
+                playerWebView.loadUrl("about:blank");
+                playerWebView.destroy();
+            } catch (Exception ignored) {}
+            playerWebView = null;
+        }
+
         NativePlayerPlugin.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         updateHandler.removeCallbacksAndMessages(null); 
         hideHandler.removeCallbacksAndMessages(null); 

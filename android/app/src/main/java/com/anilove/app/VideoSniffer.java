@@ -72,7 +72,6 @@ public class VideoSniffer {
         // Set realistic viewport so responsive players layout properly instead of 0x0
         webView.layout(0, 0, 1280, 720);
         webView.onResume();
-        webView.resumeTimers();
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -414,7 +413,6 @@ public class VideoSniffer {
                     webView.stopLoading();
                     webView.loadUrl("about:blank");
                     webView.onPause();
-                    webView.pauseTimers();
                     webView.destroy();
                 } catch (Exception ignored) {}
                 webView = null;
