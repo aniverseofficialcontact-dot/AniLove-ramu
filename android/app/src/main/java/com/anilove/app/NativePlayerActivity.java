@@ -857,6 +857,7 @@ public class NativePlayerActivity extends AppCompatActivity {
 
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             findViewById(android.R.id.content).setBackgroundColor(Color.TRANSPARENT);
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
 
             int physicalWidth = getPhysicalScreenWidth();
             int videoHeight = (int) (physicalWidth * 0.5625);
@@ -869,15 +870,12 @@ public class NativePlayerActivity extends AppCompatActivity {
             params.height = videoHeight + statusBarHeight;
             params.gravity = Gravity.TOP | Gravity.START;
             params.x = 0;
-            params.y = currentY;
+            params.y = 0;
 
             final int finalStatusBarHeight = statusBarHeight;
             decorView.post(() -> {
                 int curWidth = getPhysicalScreenWidth();
                 int curVideoHeight = (int) (curWidth * 0.5625);
-                params.width = WindowManager.LayoutParams.MATCH_PARENT;
-                params.height = curVideoHeight + finalStatusBarHeight;
-                window.setAttributes(params);
 
                 View videoRoot = findViewById(R.id.video_root_container);
                 View portraitBottom = findViewById(R.id.portrait_bottom_container);
@@ -1983,16 +1981,15 @@ public class NativePlayerActivity extends AppCompatActivity {
                 if (window != null) {
                     View decorView = window.getDecorView();
                     if (y < 0) {
-                        // Hide native player overlay window when y < 0 (e.g., modal dialog opened)
+                        // Hide native player overlay window when y < 0 (e.g., scrolled off screen)
                         decorView.setVisibility(View.GONE);
                     } else {
                         if (decorView.getVisibility() != View.VISIBLE) {
                             decorView.setVisibility(View.VISIBLE);
                         }
-                        WindowManager.LayoutParams params = window.getAttributes();
-                        if (params.y != y) {
-                            params.y = y;
-                            window.setAttributes(params);
+                        View videoRoot = findViewById(R.id.video_root_container);
+                        if (videoRoot != null) {
+                            videoRoot.setTranslationY(y);
                         }
                     }
                 }
