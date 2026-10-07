@@ -465,6 +465,8 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
                 volume: item.attributes?.volume ? String(item.attributes.volume) : undefined,
                 language: item.attributes?.translatedLanguage || 'en',
                 scanlationGroup: groupName,
+                publishAt: item.attributes?.publishAt || item.attributes?.readableAt,
+                pagesCount: typeof item.attributes?.pages === 'number' ? item.attributes.pages : undefined,
               });
             }
           });

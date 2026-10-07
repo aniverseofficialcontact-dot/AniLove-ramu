@@ -9,7 +9,7 @@ import {
   CheckCircle2, Volume2, Sparkle, Compass, BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, AnimeTrailer, ThumbnailAppearance } from '../types';
+import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, AnimeTrailer, ThumbnailAppearance, MangaChapter, Manga } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
 import { API_BASE, apiFetch, apiUrl } from '../services/api';
 import { ProVideoPlayer } from './ProVideoPlayer';
@@ -25,7 +25,8 @@ import {
   ExtendedEpisodeInfo,
 } from '../services/episodeMetadataService';
 import { getKitsuMangaTypeBadge, fetchKitsuScores, KitsuPlatformScores } from '../services/kitsuService';
-import { fetchMangaCovers, fetchMangaChapters, MangaCoverArt, MangaChapter } from '../services/mangaProvider';
+import { fetchMangaBakaDetails, fetchMangaBakaRelations, fetchMangaBakaScores, getMangaTypeBadge } from '../services/mangabakaService';
+import { fetchMangaCovers, fetchMangaChapters, MangaCoverArt } from '../services/mangaProvider';
 
 export interface ResolvedThemeTrack {
   id?: number;
@@ -101,6 +102,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   }>({ openings: [], endings: [], resolvedTracks: [] });
   const [themeLoading, setThemeLoading] = useState<string | null>(null);
   const [kitsuScores, setKitsuScores] = useState<KitsuPlatformScores | null>(null);
+  const [mangaBakaDetails, setMangaBakaDetails] = useState<AnimeDetail | null>(null);
+  const [mangaBakaRelations, setMangaBakaRelations] = useState<{ relationType: string; node: Anime }[]>([]);
   const [mangaCovers, setMangaCovers] = useState<MangaCoverArt[]>([]);
   const [isLoadingCovers, setIsLoadingCovers] = useState<boolean>(false);
   const [coverTypeFilter, setCoverTypeFilter] = useState<string>('ALL');
@@ -167,6 +170,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     // Reset state immediately so previous manga data does NOT bleed into view
     setMangaCovers([]);
     setMangaChapters([]);
+    setMangaBakaDetails(null);
+    setMangaBakaRelations([]);
 
     let isMounted = true;
     setLoading(true);
@@ -208,9 +213,24 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
         }
       });
 
-    fetchKitsuScores(anime).then(scores => {
+    // Fetch MangaBaka Overview Details
+    fetchMangaBakaDetails(anime).then(bakaDetails => {
+      if (isMounted && activeAnimeIdRef.current === currentFetchId && bakaDetails) {
+        setMangaBakaDetails(bakaDetails);
+      }
+    }).catch(() => null);
+
+    // Fetch MangaBaka Franchise & Series Relations
+    fetchMangaBakaRelations(anime).then(rels => {
+      if (isMounted && activeAnimeIdRef.current === currentFetchId && rels && rels.length > 0) {
+        setMangaBakaRelations(rels);
+      }
+    }).catch(() => null);
+
+    // Fetch Multi-Platform Ratings (MangaBaka / Kitsu)
+    fetchMangaBakaScores(anime).then(scores => {
       if (isMounted && activeAnimeIdRef.current === currentFetchId) setKitsuScores(scores);
-    });
+    }).catch(() => null);
 
     setIsLoadingCovers(true);
     fetchMangaCovers(anime, (chunkCovers) => {
@@ -280,7 +300,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     };
   }, [isOpen]);
 
-  const currentAnime = details || anime;
+  const currentAnime = mangaBakaDetails || details || anime;
   const title = currentAnime?.title?.english || currentAnime?.title?.romaji || currentAnime?.title?.userPreferred || 'Unknown Title';
 
   const filteredCovers = useMemo(() => {
@@ -706,9 +726,12 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   }, [mangaChapters, episodeSearchQuery]);
 
   const allRelations = useMemo(() => {
+    if (mangaBakaRelations && mangaBakaRelations.length > 0) {
+      return mangaBakaRelations;
+    }
     if (!details?.relations?.edges) return [];
     return details.relations.edges;
-  }, [details?.relations?.edges]);
+  }, [mangaBakaRelations, details?.relations?.edges]);
 
   const filteredRelations = useMemo(() => {
     if (relationTypeFilter === 'ALL') return allRelations;
@@ -859,7 +882,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
                 {(() => {
-                  const badge = getKitsuMangaTypeBadge(currentAnime);
+                  const badge = getMangaTypeBadge(currentAnime);
                   return (
                     <span className={`px-3 py-1 rounded-lg border text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${badge.color}`}>
                       <span>{badge.flag}</span>
@@ -1487,6 +1510,13 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       {filteredMangaChapters.map(ch => {
                         const chNum = parseFloat(ch.chapterNumber) || 1;
                         const isRead = chNum <= currentProgress;
+                        const publishDate = ch.publishAt
+                          ? new Date(ch.publishAt).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : null;
 
                         return (
                           <div
@@ -1497,26 +1527,52 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                 onPlayStream(currentAnime, chNum, 0);
                               }
                             }}
-                            className="group flex items-center justify-between p-3.5 bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 transition cursor-pointer shadow-md"
+                            className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 transition cursor-pointer shadow-md gap-3"
                           >
                             <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                              <div className="w-12 h-12 rounded-xl bg-indigo-950/60 border border-indigo-500/30 flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition">
+                              <div className="w-12 h-12 rounded-xl bg-indigo-950/60 border border-indigo-500/30 flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition shadow-inner">
                                 <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tight">CH</span>
                                 <span className="text-sm font-black text-white">{ch.chapterNumber}</span>
                               </div>
-                              <div className="min-w-0 flex-1 text-left">
+                              <div className="min-w-0 flex-1 text-left space-y-1">
                                 <h4 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-orange-400 transition truncate">
                                   {ch.title || `Chapter ${ch.chapterNumber}`}
                                 </h4>
-                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                                  {ch.volume ? `Volume ${ch.volume}` : `Chapter ${ch.chapterNumber}`}
-                                </p>
+
+                                {/* Chapter Detailed Attributes Row */}
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                                  {ch.volume && (
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-medium">
+                                      Vol. {ch.volume}
+                                    </span>
+                                  )}
+                                  {ch.scanlationGroup && (
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-indigo-300 font-medium truncate max-w-[160px]">
+                                      {ch.scanlationGroup}
+                                    </span>
+                                  )}
+                                  {publishDate && (
+                                    <span className="text-slate-400 font-medium">
+                                      {publishDate}
+                                    </span>
+                                  )}
+                                  {ch.pagesCount && (
+                                    <span className="text-slate-400 font-medium">
+                                      • {ch.pagesCount} pages
+                                    </span>
+                                  )}
+                                  {ch.language && (
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-bold uppercase text-[9px]">
+                                      {ch.language === 'en' ? '🇬🇧 EN' : ch.language.toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0 ml-3">
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center ml-auto sm:ml-0">
                               {isRead && (
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
                                   Read
                                 </span>
                               )}
@@ -1991,7 +2047,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     >
                       All ({allRelations.length})
                     </button>
-                    {['SOURCE', 'SEQUEL', 'SPIN_OFF', 'PREQUEL', 'ADAPTATION', 'SIDE_STORY'].map((type) => {
+                    {Object.keys(relationCounts).map((type) => {
                       const count = relationCounts[type] || 0;
                       if (count === 0) return null;
                       return (

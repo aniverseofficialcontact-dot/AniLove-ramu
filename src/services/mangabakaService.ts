@@ -7,6 +7,7 @@ import {
   searchAnimeAdvanced as searchAniListAdvanced,
   searchAnime as searchAniList,
 } from './anilist';
+import { getMangaDexId } from './mangaProvider';
 
 const MANGADEX_BASE_URL = 'https://api.mangadex.org';
 const MANGADEX_UPLOADS_URL = 'https://uploads.mangadex.org';
@@ -367,11 +368,105 @@ export function getMangaTypeBadge(manga: Manga): { label: string; flag: string; 
   return { label: 'Manga', flag: '🇯🇵', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' };
 }
 
-export async function fetchMangaBakaDetails(id: number): Promise<MangaDetail> {
-  const details = await fetchAniListDetails(id).catch(() => null);
-  if (details) return enrichMangaWithBakaData(details) as MangaDetail;
-  const list = await fetchMangaBakaTrending(1, 30);
-  return (list.find((m) => m.id === id) || list[0]) as MangaDetail;
+export async function fetchMangaBakaDetails(mangaInput: Manga | number): Promise<MangaDetail> {
+  const targetId = typeof mangaInput === 'number' ? mangaInput : mangaInput?.id;
+  let details: MangaDetail | null = null;
+
+  if (targetId) {
+    details = (await fetchAniListDetails(Number(targetId)).catch(() => null)) as MangaDetail | null;
+  }
+
+  if (!details && typeof mangaInput === 'object' && mangaInput) {
+    details = { ...mangaInput } as MangaDetail;
+  }
+
+  if (!details) {
+    const list = await fetchMangaBakaTrending(1, 30);
+    details = (list[0] || {}) as MangaDetail;
+  }
+
+  const enriched = enrichMangaWithBakaData(details as Manga);
+  const scores = await fetchMangaBakaScores(enriched);
+
+  return {
+    ...enriched,
+    averageScore: scores.averageScore ? scores.averageScore * 10 : enriched.averageScore,
+  } as MangaDetail;
+}
+
+/**
+ * Fetches relations & franchise titles from AniList + MangaDex APIs formatted via MangaBaka
+ */
+export async function fetchMangaBakaRelations(manga: Manga): Promise<{ relationType: string; node: Manga }[]> {
+  if (!manga) return [];
+  const results: { relationType: string; node: Manga }[] = [];
+  const seenIds = new Set<string | number>();
+
+  try {
+    const mangaId = typeof manga === 'number' ? manga : manga.id;
+    const [aniDetails, dexId] = await Promise.allSettled([
+      mangaId ? fetchAniListDetails(Number(mangaId)) : Promise.resolve(null),
+      getMangaDexId(manga),
+    ]);
+
+    // 1. Process AniList Relations
+    if (aniDetails.status === 'fulfilled' && aniDetails.value?.relations?.edges) {
+      aniDetails.value.relations.edges.forEach((edge: any) => {
+        if (edge?.node) {
+          const enrichedNode = enrichMangaWithBakaData(edge.node);
+          const key = enrichedNode.id || enrichedNode.title?.english || enrichedNode.title?.romaji;
+          if (key && !seenIds.has(key)) {
+            seenIds.add(key);
+            results.push({
+              relationType: edge.relationType || 'RELATED',
+              node: enrichedNode,
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Process MangaDex Relations
+    if (dexId.status === 'fulfilled' && dexId.value) {
+      const dexMangaUrl = `${MANGADEX_BASE_URL}/manga/${dexId.value}?includes[]=manga&includes[]=cover_art`;
+      const dexRes = await fetchWithTimeout(dexMangaUrl, 4000)
+        .then((r) => r.json())
+        .catch(() => null);
+
+      if (dexRes?.data?.relationships && Array.isArray(dexRes.data.relationships)) {
+        const mangaRels = dexRes.data.relationships.filter((r: any) => r.type === 'manga');
+
+        for (const rel of mangaRels) {
+          const rawRelType = (rel.related || 'related').toUpperCase();
+          let normType = 'OTHER';
+          if (rawRelType.includes('SEQUEL')) normType = 'SEQUEL';
+          else if (rawRelType.includes('PREQUEL')) normType = 'PREQUEL';
+          else if (rawRelType.includes('SPIN')) normType = 'SPIN_OFF';
+          else if (rawRelType.includes('ADAPT')) normType = 'ADAPTATION';
+          else if (rawRelType.includes('SIDE')) normType = 'SIDE_STORY';
+          else if (rawRelType.includes('PARENT') || rawRelType.includes('MAIN')) normType = 'SOURCE';
+          else if (rawRelType.includes('ALT')) normType = 'ALTERNATIVE';
+          else if (rawRelType.includes('FRANCHISE')) normType = 'SAME_FRANCHISE';
+
+          if (rel.attributes) {
+            const relManga = formatMangaDexToManga(rel);
+            const key = relManga.id || relManga.title?.english;
+            if (key && !seenIds.has(key)) {
+              seenIds.add(key);
+              results.push({
+                relationType: normType,
+                node: enrichMangaWithBakaData(relManga),
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[MangaBaka] Relations fetch notice:', err);
+  }
+
+  return results;
 }
 
 export { fetchMangaCovers as fetchMangaBakaCovers } from './mangaProvider';
