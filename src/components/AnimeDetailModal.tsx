@@ -202,9 +202,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     });
 
     setIsLoadingCovers(true);
-    fetchMangaCovers(anime).then(covers => {
+    fetchMangaCovers(anime, (chunkCovers) => {
+      if (isMounted && chunkCovers && chunkCovers.length > 0) {
+        setMangaCovers(chunkCovers);
+        setIsLoadingCovers(false);
+      }
+    }).then(finalCovers => {
       if (isMounted) {
-        setMangaCovers(covers || []);
+        setMangaCovers(finalCovers || []);
         setIsLoadingCovers(false);
       }
     }).catch(() => {
@@ -1842,7 +1847,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       Volume Covers
                     </h3>
                     <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
-                      {isLoadingCovers ? 'Loading MangaBaka...' : `${filteredCovers.length} covers found`}
+                      {isLoadingCovers ? 'Loading Volume Covers...' : `${filteredCovers.length} covers found`}
                     </span>
                   </div>
 

@@ -91,7 +91,7 @@ export function formatMangaDexToManga(item: any): Manga {
     popularity: 9500,
     genres: tags.length > 0 ? tags : ['Action', 'Fantasy'],
     description: attrs.description?.en || 'Discover story, chapter releases, and ratings.',
-    source: 'MangaBaka Provider',
+    source: 'Manga Engine',
     studios: {
       nodes: [{ id: 1, name: authorName, isAnimationStudio: false }],
     },

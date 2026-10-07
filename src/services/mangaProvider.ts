@@ -147,13 +147,22 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
 export const getMangaBakaId = getMangaDexId;
 
 /**
- * Fetches all official volume covers & artwork variants via MangaDex, Kitsu, and Comick
+ * Fetches all official volume covers & artwork variants with live incremental streaming
  */
-export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
+export async function fetchMangaCovers(
+  manga: Manga,
+  onChunk?: (covers: MangaCoverArt[]) => void
+): Promise<MangaCoverArt[]> {
   if (!manga) return [];
 
   const covers: MangaCoverArt[] = [];
   const seenUrls = new Set<string>();
+
+  const emitChunk = () => {
+    if (onChunk) {
+      onChunk([...covers]);
+    }
+  };
 
   const titleStr = (
     manga.title?.english ||
@@ -192,6 +201,45 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
     });
   }
 
+  // Emit initial primary cover immediately (<10ms)
+  emitChunk();
+
+  const processItems = (items: any[], dexId: string) => {
+    let addedCount = 0;
+    items.forEach((item: any, idx: number) => {
+      const vol = item.attributes?.volume;
+      const fileName = item.attributes?.fileName;
+      const locale = item.attributes?.locale || 'ja';
+      const descRaw = item.attributes?.description || '';
+
+      if (fileName) {
+        const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
+        if (!seenUrls.has(coverUrl)) {
+          seenUrls.add(coverUrl);
+
+          const coverType = determineCoverType(descRaw);
+          const langInfo = getLanguageDetails(locale);
+          const volNum = vol ? parseFloat(vol) : undefined;
+          const formattedDesc = `${coverType} ${vol ? `(Volume) ${vol}` : ''}`.trim();
+
+          covers.push({
+            id: item.id || `dex_cover_${covers.length}_${idx}`,
+            volume: vol ? `Volume ${vol}` : `Volume ${covers.length + 1}`,
+            volumeNum: volNum,
+            url: coverUrl,
+            type: coverType,
+            description: formattedDesc,
+            locale,
+            flag: langInfo.flag,
+            languageName: langInfo.name,
+          });
+          addedCount++;
+        }
+      }
+    });
+    return addedCount;
+  };
+
   // 2. Query MangaDex + Kitsu
   const dexIdPromise = getMangaDexId(manga);
   const kitsuSearchPromise = titleStr
@@ -202,13 +250,11 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
         .catch(() => null)
     : Promise.resolve(null);
 
-  const [dexIdResult, kitsuResult] = await Promise.allSettled([dexIdPromise, kitsuSearchPromise]);
-
-  // Process MangaDex Volume Covers
-  if (dexIdResult.status === 'fulfilled' && dexIdResult.value) {
-    const dexId = dexIdResult.value;
+  // Process MangaDex as soon as ID resolves
+  const dexProcessPromise = dexIdPromise.then(async (dexId) => {
+    if (!dexId) return;
     try {
-      // Step 1: Initial call to get total count & first batch (limit 100)
+      // Step 1: Fetch offset 0 (first 100 covers)
       const initialUrl = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=0&order[volume]=asc`;
       const res = await fetch(initialUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
@@ -217,111 +263,100 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
       if (res && res.ok) {
         const json = await res.json().catch(() => null);
         const total = json?.total || 0;
-        const allItems: any[] = json?.data && Array.isArray(json.data) ? json.data : [];
+        const initialItems = json?.data && Array.isArray(json.data) ? json.data : [];
 
-        // If total > 100, fetch remaining offsets concurrently
+        if (initialItems.length > 0) {
+          processItems(initialItems, dexId);
+          // Emit immediately so user sees initial ~100 covers in ~200ms!
+          emitChunk();
+        }
+
+        // If total > 100, fetch remaining offsets concurrently, streaming live updates
         if (total > 100) {
           const remainingOffsets: number[] = [];
           for (let offset = 100; offset < Math.min(total, 800); offset += 100) {
             remainingOffsets.push(offset);
           }
 
-          const fetchPromises = remainingOffsets.map((offset) =>
-            fetch(`${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-            })
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          );
+          const offsetPromises = remainingOffsets.map(async (offset) => {
+            try {
+              const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`;
+              const oRes = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+              }).catch(() => null);
 
-          const batchResults = await Promise.allSettled(fetchPromises);
-          batchResults.forEach((bRes) => {
-            if (bRes.status === 'fulfilled' && bRes.value?.data && Array.isArray(bRes.value.data)) {
-              allItems.push(...bRes.value.data);
+              if (oRes && oRes.ok) {
+                const oJson = await oRes.json().catch(() => null);
+                if (oJson?.data && Array.isArray(oJson.data) && oJson.data.length > 0) {
+                  const added = processItems(oJson.data, dexId);
+                  if (added > 0) {
+                    emitChunk(); // Live stream chunk to UI!
+                  }
+                }
+              }
+            } catch (err) {
+              // ignore offset error
             }
           });
+
+          await Promise.allSettled(offsetPromises);
         }
-
-        // Process all collected items
-        allItems.forEach((item: any, idx: number) => {
-          const vol = item.attributes?.volume;
-          const fileName = item.attributes?.fileName;
-          const locale = item.attributes?.locale || 'ja';
-          const descRaw = item.attributes?.description || '';
-
-          if (fileName) {
-            const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
-            if (!seenUrls.has(coverUrl)) {
-              seenUrls.add(coverUrl);
-
-              const coverType = determineCoverType(descRaw);
-              const langInfo = getLanguageDetails(locale);
-              const volNum = vol ? parseFloat(vol) : undefined;
-              const formattedDesc = `${coverType} ${vol ? `(Volume) ${vol}` : ''}`.trim();
-
-              covers.push({
-                id: item.id || `dex_cover_${idx}`,
-                volume: vol ? `Volume ${vol}` : `Volume ${idx + 1}`,
-                volumeNum: volNum,
-                url: coverUrl,
-                type: coverType,
-                description: formattedDesc,
-                locale,
-                flag: langInfo.flag,
-                languageName: langInfo.name,
-              });
-            }
-          }
-        });
       }
     } catch (err) {
       console.warn('[MangaDex Provider] Fetch covers notice:', err);
     }
-  }
+  });
 
-  // Process Kitsu Volume Covers
-  if (kitsuResult.status === 'fulfilled' && kitsuResult.value?.data && Array.isArray(kitsuResult.value.data)) {
-    kitsuResult.value.data.forEach((kitsuItem: any, idx: number) => {
-      const poster =
-        kitsuItem.attributes?.posterImage?.original ||
-        kitsuItem.attributes?.posterImage?.large;
-      const cover =
-        kitsuItem.attributes?.coverImage?.original ||
-        kitsuItem.attributes?.coverImage?.large;
+  // Process Kitsu as soon as search completes
+  const kitsuProcessPromise = kitsuSearchPromise.then((kitsuResult) => {
+    if (kitsuResult?.data && Array.isArray(kitsuResult.data)) {
+      let added = false;
+      kitsuResult.data.forEach((kitsuItem: any, idx: number) => {
+        const poster =
+          kitsuItem.attributes?.posterImage?.original ||
+          kitsuItem.attributes?.posterImage?.large;
+        const cover =
+          kitsuItem.attributes?.coverImage?.original ||
+          kitsuItem.attributes?.coverImage?.large;
 
-      if (poster && !seenUrls.has(poster)) {
-        seenUrls.add(poster);
-        covers.push({
-          id: `kitsu_poster_${idx}`,
-          volume: `Volume ${covers.length + 1}`,
-          url: poster,
-          type: 'Front',
-          description: `Front (Volume) ${covers.length + 1}`,
-          flag: '🇰🇷',
-          languageName: 'Korean',
-        });
-      }
+        if (poster && !seenUrls.has(poster)) {
+          seenUrls.add(poster);
+          covers.push({
+            id: `kitsu_poster_${idx}`,
+            volume: `Volume ${covers.length + 1}`,
+            url: poster,
+            type: 'Front',
+            description: `Front (Volume) ${covers.length + 1}`,
+            flag: '🇰🇷',
+            languageName: 'Korean',
+          });
+          added = true;
+        }
 
-      if (cover && !seenUrls.has(cover)) {
-        seenUrls.add(cover);
-        covers.push({
-          id: `kitsu_cover_${idx}`,
-          volume: `Volume ${covers.length + 1}`,
-          url: cover,
-          type: 'Variant',
-          description: `Variant Cover ${covers.length + 1}`,
-          flag: '🇰🇷',
-          languageName: 'Korean',
-        });
-      }
-    });
-  }
+        if (cover && !seenUrls.has(cover)) {
+          seenUrls.add(cover);
+          covers.push({
+            id: `kitsu_cover_${idx}`,
+            volume: `Volume ${covers.length + 1}`,
+            url: cover,
+            type: 'Variant',
+            description: `Variant Cover ${covers.length + 1}`,
+            flag: '🇰🇷',
+            languageName: 'Korean',
+          });
+          added = true;
+        }
+      });
+      if (added) emitChunk();
+    }
+  });
 
+  await Promise.allSettled([dexProcessPromise, kitsuProcessPromise]);
   return covers;
 }
 
 /**
- * Fetches available chapters for a Manga title via Comick + MangaDex Engines
+ * Fetches available chapters for a Manga title via Comick + MangaDex Engines concurrently
  */
 export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> {
   const cacheKey = `chapters_${manga.id}`;
@@ -331,47 +366,48 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
 
   const chaptersMap = new Map<string, MangaChapter>();
 
-  // 1. Query Comick Engine
-  try {
-    const comickHid = await getComickHid(manga);
-    if (comickHid) {
-      const url = `${COMICK_BASE_URL}/comic/${comickHid}/chapters?lang=en&limit=300`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
+  // Run Comick & MangaDex requests concurrently
+  const comickPromise = (async () => {
+    try {
+      const comickHid = await getComickHid(manga);
+      if (comickHid) {
+        const url = `${COMICK_BASE_URL}/comic/${comickHid}/chapters?lang=en&limit=300`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+        }).catch(() => null);
 
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        const list = json?.chapters || json;
-        if (Array.isArray(list) && list.length > 0) {
-          list.forEach((item: any) => {
-            const chNum = String(item.chap || item.chapterNumber || '1');
-            const chTitle = item.title ? String(item.title).trim() : '';
+        if (res && res.ok) {
+          const json = await res.json().catch(() => null);
+          const list = json?.chapters || json;
+          if (Array.isArray(list) && list.length > 0) {
+            list.forEach((item: any) => {
+              const chNum = String(item.chap || item.chapterNumber || '1');
+              const chTitle = item.title ? String(item.title).trim() : '';
 
-            if (!chaptersMap.has(chNum)) {
-              chaptersMap.set(chNum, {
-                id: `comick_${item.hid}`,
-                chapterNumber: chNum,
-                title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
-                volume: item.vol ? String(item.vol) : undefined,
-                language: 'en',
-                scanlationGroup: item.group_name?.[0] || 'Comick Releases',
-              });
-            }
-          });
+              if (!chaptersMap.has(chNum)) {
+                chaptersMap.set(chNum, {
+                  id: `comick_${item.hid}`,
+                  chapterNumber: chNum,
+                  title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
+                  volume: item.vol ? String(item.vol) : undefined,
+                  language: 'en',
+                  scanlationGroup: item.group_name?.[0] || 'Official Release',
+                });
+              }
+            });
+          }
         }
       }
+    } catch (e) {
+      console.warn('[Comick Provider] Chapter list error:', e);
     }
-  } catch (e) {
-    console.warn('[Comick Provider] Chapter list error:', e);
-  }
+  })();
 
-  // 2. Query MangaDex Engine if Comick returned 0 chapters
-  if (chaptersMap.size === 0) {
+  const dexPromise = (async () => {
     try {
       const dexId = await getMangaDexId(manga);
       if (dexId) {
-        const url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=250`;
+        const url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=300`;
         const res = await fetch(url, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
         }).catch(() => null);
@@ -399,7 +435,9 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
     } catch (err) {
       console.warn('[MangaDex Provider] Fetch chapters notice:', err);
     }
-  }
+  })();
+
+  await Promise.allSettled([comickPromise, dexPromise]);
 
   const sorted = Array.from(chaptersMap.values()).sort((a, b) => {
     const numA = parseFloat(a.chapterNumber) || 0;
