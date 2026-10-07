@@ -102,6 +102,30 @@ export async function getComickHid(manga: Manga): Promise<string | null> {
   return null;
 }
 
+function isTitleMatch(dexItem: any, targetTitles: string[]): boolean {
+  if (!dexItem || !targetTitles || targetTitles.length === 0) return true;
+  const dexTitles: string[] = [];
+  const attrs = dexItem.attributes || {};
+  if (attrs.title) {
+    Object.values(attrs.title).forEach((t: any) => dexTitles.push(String(t).toLowerCase()));
+  }
+  if (Array.isArray(attrs.altTitles)) {
+    attrs.altTitles.forEach((altObj: any) => {
+      Object.values(altObj).forEach((t: any) => dexTitles.push(String(t).toLowerCase()));
+    });
+  }
+
+  for (const target of targetTitles) {
+    const tNorm = target.toLowerCase();
+    for (const dexT of dexTitles) {
+      if (dexT === tNorm || dexT.includes(tNorm) || tNorm.includes(dexT)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Resolves MangaDex UUID for any title
  */
@@ -123,7 +147,7 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
 
   for (const titleStr of Array.from(new Set(cleanTitles))) {
     try {
-      const url = `${MANGADEX_BASE_URL}/manga?title=${encodeURIComponent(titleStr)}&limit=5`;
+      const url = `${MANGADEX_BASE_URL}/manga?title=${encodeURIComponent(titleStr)}&limit=10&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
       const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
       }).catch(() => null);
@@ -131,7 +155,8 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
       if (res && res.ok) {
         const json = await res.json().catch(() => null);
         if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
-          const dexId = json.data[0].id;
+          const match = json.data.find((item: any) => isTitleMatch(item, cleanTitles)) || json.data[0];
+          const dexId = match.id;
           mangaDexIdCache.set(cacheKey, dexId);
           return dexId;
         }
@@ -407,29 +432,42 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
     try {
       const dexId = await getMangaDexId(manga);
       if (dexId) {
-        const url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=300`;
-        const res = await fetch(url, {
+        let url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=500&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
+        let res = await fetch(url, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
         }).catch(() => null);
 
-        if (res && res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
-            json.data.forEach((item: any) => {
-              const chNum = String(item.attributes?.chapter || '1');
-              const chTitle = item.attributes?.title ? String(item.attributes.title).trim() : '';
+        let json = res && res.ok ? await res.json().catch(() => null) : null;
+        let items = json?.data || [];
 
-              if (!chaptersMap.has(chNum)) {
-                chaptersMap.set(chNum, {
-                  id: `mangadex_${item.id}`,
-                  chapterNumber: chNum,
-                  title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
-                  volume: item.attributes?.volume ? String(item.attributes.volume) : undefined,
-                  language: 'en',
-                });
-              }
-            });
-          }
+        // Fallback: If English filter returns 0 chapters, try without language filter
+        if (!Array.isArray(items) || items.length === 0) {
+          url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?order[chapter]=asc&limit=500&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
+          res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+          }).catch(() => null);
+          json = res && res.ok ? await res.json().catch(() => null) : null;
+          items = json?.data || [];
+        }
+
+        if (Array.isArray(items) && items.length > 0) {
+          items.forEach((item: any) => {
+            const chNum = String(item.attributes?.chapter || '1');
+            const chTitle = item.attributes?.title ? String(item.attributes.title).trim() : '';
+            const groupRel = item.relationships?.find((r: any) => r.type === 'scanlation_group');
+            const groupName = groupRel?.attributes?.name || 'MangaDex Group';
+
+            if (!chaptersMap.has(chNum)) {
+              chaptersMap.set(chNum, {
+                id: `mangadex_${item.id}`,
+                chapterNumber: chNum,
+                title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
+                volume: item.attributes?.volume ? String(item.attributes.volume) : undefined,
+                language: item.attributes?.translatedLanguage || 'en',
+                scanlationGroup: groupName,
+              });
+            }
+          });
         }
       }
     } catch (err) {

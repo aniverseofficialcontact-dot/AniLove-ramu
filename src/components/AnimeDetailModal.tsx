@@ -109,6 +109,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   const [selectedCoverLightbox, setSelectedCoverLightbox] = useState<MangaCoverArt | null>(null);
   const [mangaChapters, setMangaChapters] = useState<MangaChapter[]>([]);
   const [isLoadingChapters, setIsLoadingChapters] = useState<boolean>(false);
+  const [relationTypeFilter, setRelationTypeFilter] = useState<string>('ALL');
 
   // Streaming & Episode UI State
   const [playingEpisode, setPlayingEpisode] = useState<number | null>(null);
@@ -144,17 +145,28 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   }, []);
 
   const prevIsOpenRef = useRef(false);
+  const activeAnimeIdRef = useRef<number | string | null>(null);
 
   // Load detailed anime relations & recommendations
   useEffect(() => {
     if (!isOpen || !anime) {
       setDetails(null);
+      setMangaCovers([]);
+      setMangaChapters([]);
+      activeAnimeIdRef.current = null;
       prevIsOpenRef.current = false;
       return;
     }
 
     const isInitialOpen = !prevIsOpenRef.current;
     prevIsOpenRef.current = true;
+
+    const currentFetchId = anime.id;
+    activeAnimeIdRef.current = currentFetchId;
+
+    // Reset state immediately so previous manga data does NOT bleed into view
+    setMangaCovers([]);
+    setMangaChapters([]);
 
     let isMounted = true;
     setLoading(true);
@@ -166,7 +178,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
       setActiveTab('overview');
       setPlayingEpisode(null);
     } else {
-      // If modal was already open (e.g. user selected another season while on episodes tab), keep the active tab
       setPlayingEpisode(null);
     }
 
@@ -185,45 +196,45 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
     fetchAnimeDetails(anime.id)
       .then(data => {
-        if (isMounted) {
+        if (isMounted && activeAnimeIdRef.current === currentFetchId) {
           setDetails(data);
           setLoading(false);
         }
       })
       .catch(err => {
         console.error('Error fetching anime details:', err);
-        if (isMounted) {
+        if (isMounted && activeAnimeIdRef.current === currentFetchId) {
           setLoading(false);
         }
       });
 
     fetchKitsuScores(anime).then(scores => {
-      if (isMounted) setKitsuScores(scores);
+      if (isMounted && activeAnimeIdRef.current === currentFetchId) setKitsuScores(scores);
     });
 
     setIsLoadingCovers(true);
     fetchMangaCovers(anime, (chunkCovers) => {
-      if (isMounted && chunkCovers && chunkCovers.length > 0) {
+      if (isMounted && activeAnimeIdRef.current === currentFetchId && chunkCovers && chunkCovers.length > 0) {
         setMangaCovers(chunkCovers);
         setIsLoadingCovers(false);
       }
     }).then(finalCovers => {
-      if (isMounted) {
+      if (isMounted && activeAnimeIdRef.current === currentFetchId) {
         setMangaCovers(finalCovers || []);
         setIsLoadingCovers(false);
       }
     }).catch(() => {
-      if (isMounted) setIsLoadingCovers(false);
+      if (isMounted && activeAnimeIdRef.current === currentFetchId) setIsLoadingCovers(false);
     });
 
     setIsLoadingChapters(true);
     fetchMangaChapters(anime).then(chaps => {
-      if (isMounted) {
+      if (isMounted && activeAnimeIdRef.current === currentFetchId) {
         setMangaChapters(chaps || []);
         setIsLoadingChapters(false);
       }
     }).catch(() => {
-      if (isMounted) setIsLoadingChapters(false);
+      if (isMounted && activeAnimeIdRef.current === currentFetchId) setIsLoadingChapters(false);
     });
 
     // Fetch theme song tracks & pre-resolve stream URLs concurrently
@@ -694,32 +705,25 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     });
   }, [mangaChapters, episodeSearchQuery]);
 
-  // Filter relations: Keep only the earliest Adaptation (by release year/date) + all non-adaptations
-  const filteredRelations = useMemo(() => {
+  const allRelations = useMemo(() => {
     if (!details?.relations?.edges) return [];
-    const edges = details.relations.edges;
-
-    const adaptations = edges.filter(e => e.relationType === 'ADAPTATION');
-    const nonAdaptations = edges.filter(e => e.relationType !== 'ADAPTATION');
-
-    if (adaptations.length <= 1) {
-      return edges;
-    }
-
-    // Sort adaptations by earliest release year / start date
-    const sortedAdaptations = [...adaptations].sort((a, b) => {
-      const yearA = a.node?.startDate?.year || a.node?.seasonYear || 9999;
-      const yearB = b.node?.startDate?.year || b.node?.seasonYear || 9999;
-      if (yearA !== yearB) return yearA - yearB;
-
-      const monthA = a.node?.startDate?.month || 12;
-      const monthB = b.node?.startDate?.month || 12;
-      return monthA - monthB;
-    });
-
-    // Keep ONLY the earliest adaptation + all non-adaptation relations
-    return [sortedAdaptations[0], ...nonAdaptations];
+    return details.relations.edges;
   }, [details?.relations?.edges]);
+
+  const filteredRelations = useMemo(() => {
+    if (relationTypeFilter === 'ALL') return allRelations;
+    return allRelations.filter(e => e.relationType === relationTypeFilter);
+  }, [allRelations, relationTypeFilter]);
+
+  const relationCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allRelations.forEach(e => {
+      if (e.relationType) {
+        counts[e.relationType] = (counts[e.relationType] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allRelations]);
 
 
 
@@ -1967,38 +1971,71 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB 5: RELATIONS & FRANCHISE */}
+            {/* TAB 5: RELATIONS & FRANCHISE (Matching Image 3) */}
             {activeTab === 'relations' && (
-              <div className="space-y-4 text-left">
-                <h3 className="text-base font-bold uppercase tracking-wider text-slate-300">
-                  Franchise Watch Order & Related Series
-                </h3>
+              <div className="space-y-5 text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/90 pb-3">
+                  <h3 className="text-base font-bold uppercase tracking-wider text-slate-200">
+                    Related Series & Franchise
+                  </h3>
+
+                  {/* Image 3 Style Relation Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <button
+                      onClick={() => setRelationTypeFilter('ALL')}
+                      className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
+                        relationTypeFilter === 'ALL'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      All ({allRelations.length})
+                    </button>
+                    {['SOURCE', 'SEQUEL', 'SPIN_OFF', 'PREQUEL', 'ADAPTATION', 'SIDE_STORY'].map((type) => {
+                      const count = relationCounts[type] || 0;
+                      if (count === 0) return null;
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => setRelationTypeFilter(type)}
+                          className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer capitalize ${
+                            relationTypeFilter === type
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                          }`}
+                        >
+                          {type.replace('_', ' ').toLowerCase()} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {loading ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="aspect-[2/3] rounded-none bg-slate-900 animate-pulse" />
+                      <div key={i} className="aspect-[2/3] rounded-2xl bg-slate-900 animate-pulse" />
                     ))}
                   </div>
                 ) : filteredRelations.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     {filteredRelations.map((rel, idx) => {
                       const relNode = rel.node;
-                      const relTitle = relNode.title?.english || relNode.title?.romaji || 'Related Anime';
-                      const relCover = relNode.coverImage?.large || relNode.coverImage?.medium;
+                      const relTitle = relNode?.title?.english || relNode?.title?.romaji || 'Related Series';
+                      const relCover = relNode?.coverImage?.large || relNode?.coverImage?.medium || coverUrl;
 
                       return (
                         <div
                           key={idx}
                           onClick={() => onNavigateToAnime(relNode)}
-                          className="group flex flex-col select-none cursor-pointer"
+                          className="group relative flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-indigo-500/60 transition duration-200 shadow-xl cursor-pointer"
                         >
-                          <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-900 rounded-none shadow-md border border-slate-800 hover:border-orange-500/60 transition">
+                          <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
                             {relCover ? (
                               <img
                                 src={relCover}
                                 alt={relTitle}
-                                className="w-full h-full object-cover rounded-none group-hover:scale-105 transition duration-300"
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                                 referrerPolicy="no-referrer"
                               />
                             ) : (
@@ -2006,23 +2043,35 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                 {relTitle}
                               </div>
                             )}
-                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-none bg-indigo-600 text-white text-[10px] font-bold uppercase shadow-sm">
+
+                            {/* Relation Type Badge on Top Left */}
+                            <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-indigo-600/90 backdrop-blur-md text-[11px] font-bold text-white shadow-md uppercase tracking-wider">
                               {rel.relationType.replace('_', ' ')}
                             </div>
+
+                            {/* Format & Status Badge on Top Right */}
+                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] font-bold text-slate-200 shadow-md">
+                              {relNode?.format || 'Manga'}
+                            </div>
                           </div>
-                          <h5 className="font-bold text-xs sm:text-sm text-slate-200 group-hover:text-orange-400 truncate mt-2">
-                            {relTitle}
-                          </h5>
-                          <div className="text-xs text-slate-400 mt-0.5">
-                            {relNode.format || 'Anime'} {relNode.seasonYear ? `• ${relNode.seasonYear}` : ''}
+
+                          {/* Title & Info Footer */}
+                          <div className="p-3 bg-slate-950 border-t border-slate-800/60 text-left">
+                            <h5 className="font-bold text-xs sm:text-sm text-slate-200 group-hover:text-indigo-400 truncate">
+                              {relTitle}
+                            </h5>
+                            <div className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-between">
+                              <span>{relNode?.status === 'FINISHED' ? 'Completed' : relNode?.status || 'Releasing'}</span>
+                              {relNode?.seasonYear && <span>{relNode.seasonYear}</span>}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="p-16 text-center text-slate-500 text-sm">
-                    No official franchise relations recorded for this series.
+                  <div className="p-16 text-center text-slate-400 text-sm bg-slate-900/40 rounded-2xl border border-slate-800">
+                    No related series found for selected criteria.
                   </div>
                 )}
               </div>
