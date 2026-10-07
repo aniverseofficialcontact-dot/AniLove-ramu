@@ -34,7 +34,7 @@ function localeToFlag(locale: string): string {
 }
 
 /**
- * Resolves MangaDex UUID for any title
+ * Resolves MangaDex UUID for any title with multi-query title fallback
  */
 export async function getMangaDexId(manga: Manga): Promise<string | null> {
   if (!manga) return null;
@@ -80,16 +80,70 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
 export const getMangaBakaId = getMangaDexId;
 
 /**
- * Fetches all official volume covers & artwork variants for a Manga title via MangaDex
+ * Fetches all official volume covers & artwork variants for a Manga title via MangaDex, Kitsu & AniList
  */
 export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
+  if (!manga) return [];
+
   const covers: MangaCoverArt[] = [];
   const seenUrls = new Set<string>();
 
-  try {
-    const dexId = await getMangaDexId(manga);
-    if (dexId) {
-      // Fetch up to 200 covers across 2 paginated requests
+  const titleStr = (
+    manga.title?.english ||
+    manga.title?.romaji ||
+    manga.title?.userPreferred ||
+    ''
+  ).trim();
+
+  // 1. Primary AniList Cover Images
+  if (manga.coverImage?.extraLarge) {
+    seenUrls.add(manga.coverImage.extraLarge);
+    covers.push({
+      id: 'anilist_extralarge',
+      volume: 'Volume 1 (Official Poster)',
+      url: manga.coverImage.extraLarge,
+      description: 'Primary HD Poster Artwork',
+      flag: '🇯🇵',
+    });
+  }
+
+  if (manga.bannerImage && !seenUrls.has(manga.bannerImage)) {
+    seenUrls.add(manga.bannerImage);
+    covers.push({
+      id: 'anilist_banner',
+      volume: 'Banner Artwork',
+      url: manga.bannerImage,
+      description: 'Official Wide Banner',
+      flag: '🇯🇵',
+    });
+  }
+
+  if (manga.coverImage?.large && !seenUrls.has(manga.coverImage.large)) {
+    seenUrls.add(manga.coverImage.large);
+    covers.push({
+      id: 'anilist_large',
+      volume: 'Volume Variant',
+      url: manga.coverImage.large,
+      flag: '🇯🇵',
+    });
+  }
+
+  // 2. Query MangaDex + Kitsu in Parallel
+  const dexIdPromise = getMangaDexId(manga);
+  const kitsuSearchPromise = titleStr
+    ? fetch(`https://kitsu.io/api/edge/manga?filter[text]=${encodeURIComponent(titleStr)}&page[limit]=10`, {
+        headers: { 'User-Agent': 'MangaLove/1.0 (Mobile App)' },
+      })
+        .then((r) => r.json())
+        .catch(() => null)
+    : Promise.resolve(null);
+
+  const [dexIdResult, kitsuResult] = await Promise.allSettled([dexIdPromise, kitsuSearchPromise]);
+
+  // Process MangaDex Volume Covers
+  if (dexIdResult.status === 'fulfilled' && dexIdResult.value) {
+    const dexId = dexIdResult.value;
+    try {
       const offsets = [0, 100];
       for (const offset of offsets) {
         const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`;
@@ -110,9 +164,9 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
                   seenUrls.add(coverUrl);
                   covers.push({
                     id: item.id || `dex_cover_${offset}_${idx}`,
-                    volume: vol ? `Volume ${vol}` : `Volume Variant ${idx + 1}`,
+                    volume: vol ? `Volume ${vol}` : `Volume Cover ${idx + 1}`,
                     url: coverUrl,
-                    description: vol ? `Front (Volume) ${vol}` : 'Official Cover',
+                    description: vol ? `Front (Volume) ${vol}` : 'Official Volume Cover',
                     locale,
                     flag: localeToFlag(locale),
                   });
@@ -122,31 +176,42 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
           }
         }
       }
+    } catch (err) {
+      console.warn('[MangaDex Provider] Fetch covers notice:', err);
     }
-  } catch (err) {
-    console.warn('[MangaDex Provider] Fetch covers notice:', err);
   }
 
-  // Fallback to AniList primary poster and banner if MangaDex returned no covers
-  if (covers.length === 0 && manga) {
-    if (manga.coverImage?.extraLarge) {
-      covers.push({
-        id: 'anilist_extralarge',
-        volume: 'Volume 1',
-        url: manga.coverImage.extraLarge,
-        flag: '🇯🇵',
-        description: 'Official Poster Art',
-      });
-    }
-    if (manga.bannerImage) {
-      covers.push({
-        id: 'anilist_banner',
-        volume: 'Banner Art',
-        url: manga.bannerImage,
-        flag: '🇯🇵',
-        description: 'Wide Banner Artwork',
-      });
-    }
+  // Process Kitsu Volume / Poster Covers
+  if (kitsuResult.status === 'fulfilled' && kitsuResult.value?.data && Array.isArray(kitsuResult.value.data)) {
+    kitsuResult.value.data.forEach((kitsuItem: any, idx: number) => {
+      const poster =
+        kitsuItem.attributes?.posterImage?.original ||
+        kitsuItem.attributes?.posterImage?.large ||
+        kitsuItem.attributes?.posterImage?.medium;
+      const cover =
+        kitsuItem.attributes?.coverImage?.original ||
+        kitsuItem.attributes?.coverImage?.large;
+
+      if (poster && !seenUrls.has(poster)) {
+        seenUrls.add(poster);
+        covers.push({
+          id: `kitsu_poster_${idx}`,
+          volume: `Volume Cover ${covers.length + 1}`,
+          url: poster,
+          flag: '🇰🇷',
+        });
+      }
+
+      if (cover && !seenUrls.has(cover)) {
+        seenUrls.add(cover);
+        covers.push({
+          id: `kitsu_cover_${idx}`,
+          volume: `Volume Variant ${covers.length + 1}`,
+          url: cover,
+          flag: '🇰🇷',
+        });
+      }
+    });
   }
 
   return covers;

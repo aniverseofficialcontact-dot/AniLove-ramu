@@ -72,6 +72,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [isGrayscale, setIsGrayscale] = useState<boolean>(false);
   const [dimPercentage, setDimPercentage] = useState<number>(0); // 0% to 80%
 
+  // Live Ambient Backlight Interpolation States
+  const [ambientCurrentUrl, setAmbientCurrentUrl] = useState<string>('');
+  const [ambientNextUrl, setAmbientNextUrl] = useState<string>('');
+  const [ambientBlendProgress, setAmbientBlendProgress] = useState<number>(0);
+
   const [showChapterDrawer, setShowChapterDrawer] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [chapterSearch, setChapterSearch] = useState<string>('');
@@ -115,6 +120,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     fetchChapterPages(currentChapter.id, manga, chapterNum).then((fetchedPages) => {
       if (!isMounted) return;
       setPages(fetchedPages);
+      if (fetchedPages.length > 0) {
+        setAmbientCurrentUrl(fetchedPages[0].url);
+        if (fetchedPages.length > 1) setAmbientNextUrl(fetchedPages[1].url);
+      }
       setLoadingPages(false);
 
       if (onUpdateProgress) {
@@ -239,23 +248,41 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   };
 
-  // Scroll spy to update active page index in webtoon mode
+  // Continuous Scroll Spy: Blends YouTube Ambient Backlight Glow Smoothly on Every Scroll Pixel
   const handleScroll = () => {
-    if (readingDirection === 'webtoon' && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      const children = container.querySelectorAll('.reader-page-img');
-      const containerTop = container.scrollTop;
+    if (!scrollContainerRef.current || pages.length === 0) return;
 
-      children.forEach((child, index) => {
-        const rect = (child as HTMLElement).offsetTop;
-        if (containerTop >= rect - 200) {
-          setCurrentPageIndex(index);
-        }
-      });
+    const container = scrollContainerRef.current;
+    const pageImgs = container.querySelectorAll('.reader-page-img');
+
+    if (pageImgs.length === 0) return;
+
+    const viewportMiddle = container.scrollTop + container.clientHeight / 2;
+
+    let activeIdx = 0;
+    let nextIdx = 0;
+    let blendRatio = 0;
+
+    for (let i = 0; i < pageImgs.length; i++) {
+      const imgElem = pageImgs[i] as HTMLElement;
+      const imgTop = imgElem.offsetTop;
+      const imgHeight = imgElem.offsetHeight;
+
+      if (viewportMiddle >= imgTop && viewportMiddle <= imgTop + imgHeight) {
+        activeIdx = i;
+        nextIdx = Math.min(pages.length - 1, i + 1);
+        blendRatio = (viewportMiddle - imgTop) / Math.max(1, imgHeight);
+        break;
+      }
     }
+
+    setCurrentPageIndex(activeIdx);
+    if (pages[activeIdx]?.url) setAmbientCurrentUrl(pages[activeIdx].url);
+    if (pages[nextIdx]?.url) setAmbientNextUrl(pages[nextIdx].url);
+    setAmbientBlendProgress(Math.min(1, Math.max(0, blendRatio)));
   };
 
-  // Compute background style (Translucent Ambient, Black, White, Custom)
+  // Compute background style
   const getContainerBgStyle = (): React.CSSProperties => {
     switch (bgTheme) {
       case 'white':
@@ -282,18 +309,26 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       className="relative w-full h-screen overflow-hidden select-none flex flex-col transition-all duration-300"
       style={getContainerBgStyle()}
     >
-      {/* YouTube Ambient Glow Mode Background (projects soft vibrant backlight from active page) */}
+      {/* Real-Time Continuous Scroll YouTube Ambient Glow Mode Background */}
       {bgTheme === 'translucent' && (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-          {pages[currentPageIndex]?.url ? (
+          {ambientCurrentUrl && (
             <img
-              src={pages[currentPageIndex].url}
-              alt="ambient glow"
-              className="w-full h-full object-cover scale-150 blur-3xl opacity-50 transition-all duration-700 ease-out"
+              src={ambientCurrentUrl}
+              alt="ambient current"
+              className="w-full h-full object-cover scale-150 blur-3xl transition-opacity duration-100 ease-linear"
+              style={{ opacity: 0.65 * (1 - ambientBlendProgress) }}
               referrerPolicy="no-referrer"
             />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-indigo-900/40 via-purple-950/40 to-slate-950/40 blur-3xl" />
+          )}
+          {ambientNextUrl && (
+            <img
+              src={ambientNextUrl}
+              alt="ambient next"
+              className="absolute inset-0 w-full h-full object-cover scale-150 blur-3xl transition-opacity duration-100 ease-linear"
+              style={{ opacity: 0.65 * ambientBlendProgress }}
+              referrerPolicy="no-referrer"
+            />
           )}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-xl" />
         </div>
@@ -407,9 +442,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             <p className="text-sm text-neutral-400 animate-pulse">Loading Chapter Pages...</p>
           </div>
         ) : readingDirection === 'webtoon' ? (
-          /* Webtoon Vertical Infinite Scroll */
+          /* Webtoon Vertical Infinite Scroll (Edge-To-Edge 100% Full Screen at 100% Zoom) */
           <div
-            className="mx-auto flex flex-col items-center py-12 px-2 transition-all duration-200"
+            className={`mx-auto flex flex-col items-center transition-all duration-200 ${
+              zoomLevel === 100 ? 'w-full max-w-none px-0 py-0' : 'px-2 py-8'
+            }`}
             style={{
               width: `${zoomLevel}%`,
               maxWidth: zoomLevel === 100 ? '100%' : `${zoomLevel}%`,
@@ -421,7 +458,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                 key={page.pageNumber}
                 src={page.url}
                 alt={`Page ${page.pageNumber}`}
-                className="reader-page-img w-full h-auto block rounded-sm object-contain shadow-lg loading-lazy"
+                className={`reader-page-img w-full h-auto block object-contain loading-lazy ${
+                  zoomLevel === 100 ? 'rounded-none shadow-none' : 'rounded-sm shadow-lg'
+                }`}
                 style={{
                   filter: `${isGrayscale ? 'grayscale(100%)' : ''}`,
                 }}
@@ -433,7 +472,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             {/* End of Chapter Action Card */}
             <div className="w-full max-w-lg my-8 p-6 rounded-2xl bg-neutral-900 border border-white/10 flex flex-col items-center text-center gap-4 shadow-2xl">
               <Sparkles className="w-8 h-8 text-purple-400" />
-              <h3 className="text-lg font-bold">End of Chapter {currentChapter?.chapterNumber}</h3>
+              <h3 className="text-lg font-bold text-white">End of Chapter {currentChapter?.chapterNumber}</h3>
               <div className="flex items-center gap-3">
                 <button
                   disabled={currentChapterIndex === 0}
@@ -441,7 +480,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                     e.stopPropagation();
                     handlePrevChapter();
                   }}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-40 text-sm font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-40 text-sm font-medium cursor-pointer text-white"
                 >
                   Previous
                 </button>
@@ -532,7 +571,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           <button
             disabled={currentChapterIndex === 0}
             onClick={handlePrevChapter}
-            className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 text-xs font-semibold flex items-center gap-1 cursor-pointer text-white"
           >
             <ChevronLeft className="w-4 h-4" /> Prev Ch
           </button>
@@ -574,7 +613,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </h2>
               <button
                 onClick={() => setShowChapterDrawer(false)}
-                className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer text-white"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -633,7 +672,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </button>
             </div>
 
-            {/* ZOOM LEVEL STEPPER (5% step size delta as requested) */}
+            {/* ZOOM LEVEL STEPPER (5% step size delta) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Page Zoom Level
@@ -661,11 +700,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   onClick={() => setZoomLevel(100)}
                   className="px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-neutral-300 cursor-pointer"
                 >
-                  Full Width
+                  Full Screen (100%)
                 </button>
               </div>
               <p className="text-[11px] text-neutral-500">
-                At 100%, pages cover the full width of your device screen.
+                At 100%, pages fill the full width of your device screen from edge to edge.
               </p>
             </div>
 
