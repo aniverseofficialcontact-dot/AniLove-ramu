@@ -37,7 +37,7 @@ interface ReaderViewProps {
 
 export type ReadingDirection = 'paged-ltr' | 'paged-rtl' | 'webtoon';
 export type ProgressBarPosition = 'bottom' | 'top' | 'left' | 'right' | 'hidden';
-export type BgTheme = 'black' | 'white' | 'transparent' | 'dynamic' | 'custom';
+export type BgTheme = 'black' | 'white' | 'translucent' | 'custom';
 
 export const ReaderView: React.FC<ReaderViewProps> = ({
   manga,
@@ -56,17 +56,15 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [loadingPages, setLoadingPages] = useState<boolean>(true);
   const [showControls, setShowControls] = useState<boolean>(true);
 
-  // Settings & Customization States (Image 1 & 2 exact features)
-  const [readingDirection, setReadingDirection] = useState<ReadingDirection>(
-    manga.countryOfOrigin === 'KR' || manga.format === 'MANHWA' ? 'webtoon' : 'paged-rtl'
-  );
+  // Settings & Customization States (Always default to 'webtoon' / scroll to bottom)
+  const [readingDirection, setReadingDirection] = useState<ReadingDirection>('webtoon');
   const [stripMargin, setStripMargin] = useState<number>(0); // Strip margin in px
   const [zoomLevel, setZoomLevel] = useState<number>(100); // 50% to 100%
   const [bgTheme, setBgTheme] = useState<BgTheme>('black');
   const [customBgColor, setCustomBgColor] = useState<string>('#121620');
   const [keyboardScrollMode, setKeyboardScrollMode] = useState<'fast' | 'smooth'>('smooth');
   const [keyboardScrollStep, setKeyboardScrollStep] = useState<number>(10); // Percent viewport step
-  const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(20); // px/s
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(30); // 5 to 500 px/s
   const [isAutoScrolling, setIsAutoScrolling] = useState<boolean>(false);
   const [progressBarPosition, setProgressBarPosition] = useState<ProgressBarPosition>('right');
   const [preloadMode, setPreloadMode] = useState<'some' | 'all'>('some');
@@ -147,7 +145,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   }, [pages, currentPageIndex, preloadMode]);
 
-  // Auto-Scrolling Logic
+  // Auto-Scrolling Logic (Max speed up to 500 px/s)
   useEffect(() => {
     if (!isAutoScrolling || autoScrollSpeed <= 0) return;
 
@@ -247,15 +245,13 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   };
 
-  // Compute dynamic background style
-  const getContainerBgStyle = () => {
+  // Compute background style (Translucent, Black, White, Custom)
+  const getContainerBgStyle = (): React.CSSProperties => {
     switch (bgTheme) {
       case 'white':
         return { backgroundColor: '#ffffff', color: '#111827' };
-      case 'transparent':
-        return { backgroundColor: 'transparent' };
-      case 'dynamic':
-        return { backgroundColor: '#090d16' };
+      case 'translucent':
+        return { backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' };
       case 'custom':
         return { backgroundColor: customBgColor };
       case 'black':
@@ -273,7 +269,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   return (
     <div
-      className="relative w-full h-screen overflow-hidden select-none flex flex-col transition-colors duration-300"
+      className="relative w-full h-screen overflow-hidden select-none flex flex-col transition-all duration-300"
       style={getContainerBgStyle()}
     >
       {/* Dim Overlay */}
@@ -341,7 +337,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </div>
       </div>
 
-      {/* Vertical Segmented Progress Bar (Exact Match for Image 1) */}
+      {/* Vertical Segmented Progress Bar (Image 1 Exact Match) */}
       {progressBarPosition === 'right' && pages.length > 0 && (
         <div className="fixed right-1 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-0.5 max-h-[80vh] overflow-hidden p-1 rounded-md bg-black/40 backdrop-blur-sm border border-white/5 shadow-2xl">
           {pages.map((_, idx) => {
@@ -608,7 +604,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </button>
             </div>
 
-            {/* ZOOM LEVEL STEPPER (Matching Image 2) */}
+            {/* ZOOM LEVEL STEPPER (- 5% step delta as requested, max 100%) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Page Zoom Level
@@ -617,7 +613,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                 <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-2.5 flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => setZoomLevel((prev) => Math.max(50, prev - 10))}
+                    onClick={() => setZoomLevel((prev) => Math.max(50, prev - 5))}
                     className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 font-bold text-lg text-white cursor-pointer"
                   >
                     -
@@ -625,7 +621,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   <span className="text-sm font-black text-teal-400">{zoomLevel}%</span>
                   <button
                     type="button"
-                    onClick={() => setZoomLevel((prev) => Math.min(100, prev + 10))}
+                    onClick={() => setZoomLevel((prev) => Math.min(100, prev + 5))}
                     className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 font-bold text-lg text-white cursor-pointer"
                   >
                     +
@@ -636,25 +632,24 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   onClick={() => setZoomLevel(100)}
                   className="px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-neutral-300 cursor-pointer"
                 >
-                  Full Width
+                  Full Screen
                 </button>
               </div>
               <p className="text-[11px] text-neutral-500">
-                At 100%, pages fill the full device screen width.
+                At 100%, pages cover the full width of your device screen.
               </p>
             </div>
 
-            {/* BACKGROUND THEMES */}
+            {/* BACKGROUND THEMES (Black, White, Translucent, Custom) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Background Theme
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'black', label: 'Black', bg: '#000000' },
                   { id: 'white', label: 'White', bg: '#ffffff' },
-                  { id: 'transparent', label: 'Clear', bg: 'transparent' },
-                  { id: 'dynamic', label: 'Lively', bg: '#090d16' },
+                  { id: 'translucent', label: 'Translucent', bg: 'rgba(0, 0, 0, 0.65)' },
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -668,7 +663,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   >
                     <div
                       className="w-5 h-5 rounded-full border border-white/20 shadow-sm"
-                      style={{ backgroundColor: t.bg === 'transparent' ? '#1f2937' : t.bg }}
+                      style={{ backgroundColor: t.bg }}
                     />
                     <span>{t.label}</span>
                   </button>
@@ -690,7 +685,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </div>
             </div>
 
-            {/* READING DIRECTION */}
+            {/* READING DIRECTION (Default 'Top to bottom' / webtoon) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Reading Direction
@@ -823,7 +818,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </div>
             </div>
 
-            {/* AUTO-SCROLL SPEED */}
+            {/* AUTO-SCROLL SPEED (Up to 500 px/s max) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
@@ -834,7 +829,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               <input
                 type="range"
                 min={5}
-                max={100}
+                max={500}
                 value={autoScrollSpeed}
                 onChange={(e) => setAutoScrollSpeed(parseInt(e.target.value, 10))}
                 className="w-full accent-teal-400 h-2 rounded-lg bg-white/10 cursor-pointer"
