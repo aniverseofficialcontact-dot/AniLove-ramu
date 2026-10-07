@@ -145,21 +145,31 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   }, [pages, currentPageIndex, preloadMode]);
 
-  // Auto-Scrolling Logic (Max speed up to 500 px/s)
+  // Silky-Smooth 60fps/120fps Hardware-Accelerated Auto-Scrolling (requestAnimationFrame)
   useEffect(() => {
     if (!isAutoScrolling || autoScrollSpeed <= 0) return;
 
-    const interval = setInterval(() => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollBy({
-          top: autoScrollSpeed / 10,
-          behavior: keyboardScrollMode === 'smooth' ? 'smooth' : 'auto',
-        });
-      }
-    }, 100);
+    let animationFrameId: number;
+    let lastTime = performance.now();
 
-    return () => clearInterval(interval);
-  }, [isAutoScrolling, autoScrollSpeed, keyboardScrollMode]);
+    const scrollStep = (now: number) => {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (scrollContainerRef.current && dt > 0 && dt < 0.2) {
+        scrollContainerRef.current.scrollTop += autoScrollSpeed * dt;
+      }
+
+      animationFrameId = requestAnimationFrame(scrollStep);
+    };
+
+    lastTime = performance.now();
+    animationFrameId = requestAnimationFrame(scrollStep);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isAutoScrolling, autoScrollSpeed]);
 
   // Next & Prev Chapter Navigation
   const handlePrevChapter = useCallback(() => {
@@ -245,13 +255,13 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
   };
 
-  // Compute background style (Translucent, Black, White, Custom)
+  // Compute background style (Translucent Ambient, Black, White, Custom)
   const getContainerBgStyle = (): React.CSSProperties => {
     switch (bgTheme) {
       case 'white':
         return { backgroundColor: '#ffffff', color: '#111827' };
       case 'translucent':
-        return { backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' };
+        return { backgroundColor: 'transparent' };
       case 'custom':
         return { backgroundColor: customBgColor };
       case 'black':
@@ -272,6 +282,23 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       className="relative w-full h-screen overflow-hidden select-none flex flex-col transition-all duration-300"
       style={getContainerBgStyle()}
     >
+      {/* YouTube Ambient Glow Mode Background (projects soft vibrant backlight from active page) */}
+      {bgTheme === 'translucent' && (
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+          {pages[currentPageIndex]?.url ? (
+            <img
+              src={pages[currentPageIndex].url}
+              alt="ambient glow"
+              className="w-full h-full object-cover scale-150 blur-3xl opacity-50 transition-all duration-700 ease-out"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-indigo-900/40 via-purple-950/40 to-slate-950/40 blur-3xl" />
+          )}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-xl" />
+        </div>
+      )}
+
       {/* Dim Overlay */}
       {dimPercentage > 0 && (
         <div
@@ -369,7 +396,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
       {/* Main Reader View Container */}
       <div
-        className="flex-1 w-full h-full overflow-y-auto relative scrollbar-none"
+        className="flex-1 w-full h-full overflow-y-auto relative scrollbar-none z-10"
         ref={scrollContainerRef}
         onScroll={handleScroll}
         onClick={handleContainerTap}
@@ -399,6 +426,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   filter: `${isGrayscale ? 'grayscale(100%)' : ''}`,
                 }}
                 loading="lazy"
+                referrerPolicy="no-referrer"
               />
             ))}
 
@@ -443,6 +471,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   maxWidth: zoomLevel === 100 ? '100%' : `${zoomLevel}%`,
                   filter: `${isGrayscale ? 'grayscale(100%)' : ''}`,
                 }}
+                referrerPolicy="no-referrer"
               />
             )}
 
@@ -588,7 +617,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </div>
       )}
 
-      {/* Reader Settings Modal (Exact Features from Images 1 & 2) */}
+      {/* Reader Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="w-full max-w-lg bg-[#121620] border border-white/10 rounded-3xl p-5 sm:p-6 flex flex-col gap-5 my-auto max-h-[90vh] overflow-y-auto shadow-2xl text-left">
@@ -604,7 +633,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </button>
             </div>
 
-            {/* ZOOM LEVEL STEPPER (- 5% step delta as requested, max 100%) */}
+            {/* ZOOM LEVEL STEPPER (5% step size delta as requested) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Page Zoom Level
@@ -632,7 +661,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                   onClick={() => setZoomLevel(100)}
                   className="px-4 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-neutral-300 cursor-pointer"
                 >
-                  Full Screen
+                  Full Width
                 </button>
               </div>
               <p className="text-[11px] text-neutral-500">
@@ -640,7 +669,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </p>
             </div>
 
-            {/* BACKGROUND THEMES (Black, White, Translucent, Custom) */}
+            {/* BACKGROUND THEMES (Black, White, Translucent Ambient, Custom) */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-400 tracking-wider uppercase block">
                 Background Theme
@@ -649,7 +678,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                 {[
                   { id: 'black', label: 'Black', bg: '#000000' },
                   { id: 'white', label: 'White', bg: '#ffffff' },
-                  { id: 'translucent', label: 'Translucent', bg: 'rgba(0, 0, 0, 0.65)' },
+                  { id: 'translucent', label: 'Ambient Translucent', bg: 'rgba(0, 0, 0, 0.65)' },
                 ].map((t) => (
                   <button
                     key={t.id}
