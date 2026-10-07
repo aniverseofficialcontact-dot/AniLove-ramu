@@ -120,7 +120,7 @@ export async function fetchUserWatchlistNews(library: Anime[]): Promise<NewsItem
   for (let i = 0; i < targetAnime.length; i++) {
     const anime = targetAnime[i];
     const animeName = anime.title?.userPreferred || anime.title?.english || anime.title?.romaji || 'Anime';
-    const officialCover = anime.bannerImage || anime.coverImage;
+    const officialCover = anime.bannerImage || anime.coverImage?.extraLarge || anime.coverImage?.large || '';
 
     // Strict rule: Only include if anime has an official cover art
     if (!isOfficialThumbnail(officialCover)) continue;

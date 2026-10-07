@@ -6,7 +6,7 @@ import {
   ChevronRight, Users, MessageSquare, AlertCircle, RefreshCw, Layers,
   MoreVertical, Music, Headphones, Info, Eye, EyeOff, Search,
   LayoutGrid, List, Download, ChevronDown, ChevronUp, FastForward,
-  CheckCircle2, Volume2, Sparkle, Compass
+  CheckCircle2, Volume2, Sparkle, Compass, BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, AnimeTrailer, ThumbnailAppearance } from '../types';
@@ -24,7 +24,8 @@ import {
   getCanonicalEpisodeArtwork,
   ExtendedEpisodeInfo,
 } from '../services/episodeMetadataService';
-import { Capacitor } from '@capacitor/core';
+import { getKitsuMangaTypeBadge, fetchKitsuScores, KitsuPlatformScores } from '../services/kitsuService';
+import { fetchMangaCovers, fetchMangaChapters, MangaCoverArt, MangaChapter } from '../services/mangaProvider';
 
 export interface ResolvedThemeTrack {
   id?: number;
@@ -68,7 +69,7 @@ interface AnimeDetailModalProps {
   ) => void;
 }
 
-type DetailTab = 'overview' | 'episodes' | 'watch_order' | 'relations' | 'characters' | 'music';
+type DetailTab = 'overview' | 'episodes' | 'covers' | 'relations' | 'characters';
 
 export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   anime,
@@ -99,7 +100,11 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     resolvedTracks: ResolvedThemeTrack[];
   }>({ openings: [], endings: [], resolvedTracks: [] });
   const [themeLoading, setThemeLoading] = useState<string | null>(null);
-  
+  const [kitsuScores, setKitsuScores] = useState<KitsuPlatformScores | null>(null);
+  const [mangaCovers, setMangaCovers] = useState<MangaCoverArt[]>([]);
+  const [mangaChapters, setMangaChapters] = useState<MangaChapter[]>([]);
+  const [isLoadingChapters, setIsLoadingChapters] = useState<boolean>(false);
+
   // Streaming & Episode UI State
   const [playingEpisode, setPlayingEpisode] = useState<number | null>(null);
   const [episodeSearchQuery, setEpisodeSearchQuery] = useState<string>('');
@@ -186,6 +191,24 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           setLoading(false);
         }
       });
+
+    fetchKitsuScores(anime).then(scores => {
+      if (isMounted) setKitsuScores(scores);
+    });
+
+    fetchMangaCovers(anime).then(covers => {
+      if (isMounted && covers && covers.length > 0) setMangaCovers(covers);
+    });
+
+    setIsLoadingChapters(true);
+    fetchMangaChapters(anime).then(chaps => {
+      if (isMounted) {
+        setMangaChapters(chaps || []);
+        setIsLoadingChapters(false);
+      }
+    }).catch(() => {
+      if (isMounted) setIsLoadingChapters(false);
+    });
 
     // Fetch theme song tracks & pre-resolve stream URLs concurrently
     const displayTitle = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || '';
@@ -599,6 +622,48 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     });
   }, [episodeList, episodeSearchQuery, selectedEpisodeRange, episodeRanges]);
 
+  // Filtered manga chapters based on search query
+  const filteredMangaChapters = useMemo(() => {
+    if (!episodeSearchQuery.trim()) return mangaChapters;
+    const q = episodeSearchQuery.toLowerCase().trim();
+    const cleanNum = q.replace(/^(?:chapter|ch|#)\s*/i, '').trim();
+
+    return mangaChapters.filter(ch => {
+      if (ch.chapterNumber === cleanNum) return true;
+      if (ch.title && ch.title.toLowerCase().includes(q)) return true;
+      if (`chapter ${ch.chapterNumber}`.toLowerCase().includes(q)) return true;
+      if (`ch ${ch.chapterNumber}`.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [mangaChapters, episodeSearchQuery]);
+
+  // Filter relations: Keep only the earliest Adaptation (by release year/date) + all non-adaptations
+  const filteredRelations = useMemo(() => {
+    if (!details?.relations?.edges) return [];
+    const edges = details.relations.edges;
+
+    const adaptations = edges.filter(e => e.relationType === 'ADAPTATION');
+    const nonAdaptations = edges.filter(e => e.relationType !== 'ADAPTATION');
+
+    if (adaptations.length <= 1) {
+      return edges;
+    }
+
+    // Sort adaptations by earliest release year / start date
+    const sortedAdaptations = [...adaptations].sort((a, b) => {
+      const yearA = a.node?.startDate?.year || a.node?.seasonYear || 9999;
+      const yearB = b.node?.startDate?.year || b.node?.seasonYear || 9999;
+      if (yearA !== yearB) return yearA - yearB;
+
+      const monthA = a.node?.startDate?.month || 12;
+      const monthB = b.node?.startDate?.month || 12;
+      return monthA - monthB;
+    });
+
+    // Keep ONLY the earliest adaptation + all non-adaptation relations
+    return [sortedAdaptations[0], ...nonAdaptations];
+  }, [details?.relations?.edges]);
+
 
 
   if (!isOpen || !anime || !currentAnime) return null;
@@ -732,11 +797,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             {/* Title, Studio & Key Metas */}
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
-                {currentAnime.format && (
-                  <span className="px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold uppercase tracking-wider">
-                    {currentAnime.format.replace('_', ' ')}
-                  </span>
-                )}
+                {(() => {
+                  const badge = getKitsuMangaTypeBadge(currentAnime);
+                  return (
+                    <span className={`px-3 py-1 rounded-lg border text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${badge.color}`}>
+                      <span>{badge.flag}</span>
+                      <span>{badge.label}</span>
+                    </span>
+                  );
+                })()}
                 {currentAnime.status && (
                   <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">
                     {currentAnime.status}
@@ -744,12 +813,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 )}
                 {currentAnime.seasonYear && (
                   <span className="text-xs text-slate-400 font-medium">
-                    {currentAnime.season || ''} {currentAnime.seasonYear}
-                  </span>
-                )}
-                {currentAnime.duration && (
-                  <span className="text-xs text-slate-400 font-medium">
-                    • {currentAnime.duration} mins/ep
+                    {currentAnime.seasonYear}
                   </span>
                 )}
               </div>
@@ -766,13 +830,13 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
               {/* Studio and Genre Badges */}
               <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start pt-1">
-                {/* Static Studio Tag */}
+                {/* Author / Artist Tag */}
                 {primaryStudio && (
                   <span
                     className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800/90 text-indigo-300 text-xs font-semibold border border-slate-700/70 select-none shadow-sm"
                   >
                     <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Studio: {primaryStudio}</span>
+                    <span>Author/Artist: {primaryStudio}</span>
                   </span>
                 )}
 
@@ -821,18 +885,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                   className="flowable-watch-btn flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition active:scale-95 cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Watch Episodes</span>
-                </button>
-              )}
-
-              {currentAnime.trailer && currentAnime.trailer.id && (
-                <button
-                  id="detail-watch-trailer-btn"
-                  onClick={() => onOpenTrailer(currentAnime.trailer!, title)}
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold text-sm border border-slate-700 transition"
-                >
-                  <Film className="w-4 h-4 text-red-400" />
-                  <span>Trailer</span>
+                  <span>Read Chapters</span>
                 </button>
               )}
 
@@ -845,7 +898,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                   className="px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm font-semibold outline-none cursor-pointer hover:bg-slate-700 transition shadow-inner"
                 >
                   <option value="">+ Add to Library</option>
-                  <option value="CURRENT">Watching</option>
+                  <option value="CURRENT">Reading</option>
                   <option value="COMPLETED">Completed</option>
                   <option value="PLANNING">Planning</option>
                   <option value="PAUSED">Paused</option>
@@ -854,14 +907,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Right Tracking Controls: Episode Counter & Score Rating */}
+            {/* Right Tracking Controls: Chapter Counter & Score Rating */}
             <div className="flex items-center gap-3 flex-wrap justify-center md:justify-end w-full lg:w-auto">
-              {/* Episode Stepper & Direct Editable Number Box */}
+              {/* Chapter Stepper & Direct Editable Number Box */}
               <div className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
                 <div className="flex flex-col text-left pl-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Episodes</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Chapters</span>
                   {episodesTotal && (
-                    <span className="text-[9px] text-indigo-400 font-bold">Max: {episodesTotal} eps</span>
+                    <span className="text-[9px] text-indigo-400 font-bold">Max: {episodesTotal} ch</span>
                   )}
                 </div>
 
@@ -929,23 +982,10 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 </div>
               </div>
 
-              {/* Score Rating with OP and ED side triggers */}
-              <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
-                {/* OP Side Trigger */}
-                <button
-                  type="button"
-                  onClick={handleTriggerOP}
-                  disabled={themeLoading === 'op_side_toggle'}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500 text-orange-400 hover:text-white text-xs font-black border border-orange-500/30 transition active:scale-95 cursor-pointer"
-                  title="Activate Opening Theme (OP)"
-                >
-                  <Music className={`w-3 h-3 ${themeLoading === 'op_side_toggle' ? 'animate-spin' : ''}`} />
-                  <span>{themeLoading === 'op_side_toggle' ? '...' : 'OP'}</span>
-                </button>
-
-                {/* Score Selector */}
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-950/80 rounded-lg border border-slate-800">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              {/* Score Rating */}
+              <div className="flex items-center gap-1.5 p-2 bg-slate-900 border border-slate-800 rounded-xl">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/80 rounded-lg border border-slate-800">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                   <select
                     value={currentScore}
                     onChange={e => onUpdateScore(currentAnime, Number(e.target.value))}
@@ -959,18 +999,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     ))}
                   </select>
                 </div>
-
-                {/* ED Side Trigger */}
-                <button
-                  type="button"
-                  onClick={handleTriggerED}
-                  disabled={themeLoading === 'ed_side_toggle'}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500 text-indigo-400 hover:text-white text-xs font-black border border-indigo-500/30 transition active:scale-95 cursor-pointer"
-                  title="Activate Ending Theme (ED)"
-                >
-                  <Headphones className={`w-3 h-3 ${themeLoading === 'ed_side_toggle' ? 'animate-spin' : ''}`} />
-                  <span>{themeLoading === 'ed_side_toggle' ? '...' : 'ED'}</span>
-                </button>
               </div>
 
               {/* 2-Way Sync Status Pulse */}
@@ -990,11 +1018,10 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           <div id="modal-tab-nav" className="flex items-center gap-2 sm:gap-6 mt-8 border-b border-slate-800/90 overflow-x-auto pb-0 scrollbar-none w-full max-w-full min-w-0">
             {[
               { id: 'overview', label: 'Overview' },
-              { id: 'episodes', label: 'Episodes' },
-              { id: 'watch_order', label: 'Watch Order' },
+              { id: 'episodes', label: 'Chapters' },
+              { id: 'covers', label: 'Covers & Artworks' },
               { id: 'relations', label: 'Relations' },
               { id: 'characters', label: 'Cast' },
-              { id: 'music', label: 'Featured Music' },
             ].map(tab => {
               const active = activeTab === tab.id;
               return (
@@ -1058,16 +1085,53 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Multi-Platform Ratings Breakdown */}
+                  {kitsuScores && (
+                    <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Star className="w-4 h-4 fill-amber-400" /> Multi-Platform Ratings
+                        </h4>
+                        <span className="text-xs font-black text-white bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                          Avg: {kitsuScores.averageScore} / 10
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs pt-1">
+                        <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                          <div className="text-[10px] text-slate-400 font-semibold">Kitsu</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.kitsu}</div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                          <div className="text-[10px] text-slate-400 font-semibold">AniList</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.anilist}</div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                          <div className="text-[10px] text-slate-400 font-semibold">MyAnimeList</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.mal}</div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                          <div className="text-[10px] text-slate-400 font-semibold">MangaUpdates</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.mangaUpdates}</div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center col-span-2 sm:col-span-1">
+                          <div className="text-[10px] text-slate-400 font-semibold">MangaDex</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.mangadex}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Studio & Production Metadata Grid */}
                   <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
                     <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-                      Anime Information & Studio Production
+                      Manga Information & Publishing Details
                     </h4>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
-                      {/* Studios List */}
+                      {/* Author / Artist */}
                       <div className="col-span-2 sm:col-span-1">
-                        <div className="text-slate-400 font-medium">Studios</div>
+                        <div className="text-slate-400 font-medium">Author / Artist</div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {currentAnime.studios?.nodes && currentAnime.studios.nodes.length > 0 ? (
                             currentAnime.studios.nodes.map(st => (
@@ -1085,13 +1149,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       </div>
 
                       <div>
-                        <div className="text-slate-400 font-medium">Duration</div>
-                        <div className="font-semibold text-slate-200 mt-1">
-                          {currentAnime.duration ? `${currentAnime.duration} mins/ep` : 'Standard'}
-                        </div>
-                      </div>
-
-                      <div>
                         <div className="text-slate-400 font-medium">Source Material</div>
                         <div className="font-semibold text-slate-200 mt-1">
                           {currentAnime.source ? currentAnime.source.replace('_', ' ') : 'Original'}
@@ -1099,7 +1156,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       </div>
 
                       <div>
-                        <div className="text-slate-400 font-medium">Total Episodes</div>
+                        <div className="text-slate-400 font-medium">Total Chapters</div>
                         <div className="font-semibold text-slate-200 mt-1">
                           {episodesTotal || 'Ongoing / Unknown'}
                         </div>
@@ -1321,414 +1378,151 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB 2: EPISODES & STREAMING */}
+            {/* TAB 2: CHAPTERS & READ */}
             {activeTab === 'episodes' && (
               <div className="space-y-6 text-left">
-                {!relStatus.isReleased ? (
-                  <div className="p-8 sm:p-12 rounded-3xl bg-slate-900/90 border border-slate-800 text-center space-y-4 max-w-lg mx-auto my-6 shadow-2xl">
-                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center shadow-lg">
-                      <Calendar className="w-8 h-8" />
+                <div className="space-y-4">
+                  {/* Header and Filter Search Bar */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 id="modal-episodes-section-title" className="text-base sm:text-lg font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-orange-400" />
+                        <span>Chapters</span>
+                        <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-0.5 rounded-full ml-1 normal-case tracking-normal">
+                          {mangaChapters.length > 0 ? mangaChapters.length : episodeList.length} total
+                        </span>
+                      </h3>
                     </div>
-                    <h3 className="text-xl font-bold text-white">Not Released Yet</h3>
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      {relStatus.releaseDateText
-                        ? `This anime is officially scheduled for release on ${relStatus.releaseDateText}. Episodes will become available as they air.`
-                        : 'This title has not been officially released yet. Episodes will become available once broadcasts begin.'}
-                    </p>
-                    <div className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/40">
-                      <span>{relStatus.buttonLabel}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* State 1: Active Episode Video Player (Pro Video Player) */}
-                {playingEpisode !== null ? (
-                  <div ref={playerRef} className="space-y-6">
-                    {/* Feature-Packed Crunchyroll-Inspired Video Player */}
-                    <ProVideoPlayer
-                      anime={currentAnime}
-                      episodeNumber={playingEpisode}
-                      episodeTitle={episodeList.find(e => e.number === playingEpisode)?.title}
-                      episodesList={episodeList}
-                      initialTime={initialTime || 0}
-                      onEpisodeChange={ep => {
-                        setPlayingEpisode(ep);
-                        onUpdateProgress(currentAnime, ep);
-                      }}
-                      onClosePlayer={() => setPlayingEpisode(null)}
-                    />
 
-                    {/* Episodes List in Active Playing View */}
-                    <div className="space-y-4 pt-4 border-t border-slate-800">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                          <span>Episodes</span>
-                          <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-                            {episodeList.length}
-                          </span>
-                        </h3>
-
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder={`Filter ${mangaChapters.length > 0 ? mangaChapters.length : episodeList.length} chapters by title or #...`}
+                        value={episodeSearchQuery}
+                        onChange={e => setEpisodeSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-8 py-2.5 rounded-xl bg-[#121628] border border-slate-800 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                      />
+                      {episodeSearchQuery && (
                         <button
                           type="button"
-                          onClick={() => setPlayingEpisode(null)}
-                          className="text-xs font-semibold text-slate-400 hover:text-white transition cursor-pointer"
+                          onClick={() => setEpisodeSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
                         >
-                          Close Player
+                          <X className="w-3.5 h-3.5" />
                         </button>
-                      </div>
-
-                      {/* Filter Search Bar */}
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="relative flex-1 max-w-md">
-                          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            placeholder="Filter episodes..."
-                            value={episodeSearchQuery}
-                            onChange={e => setEpisodeSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-8 py-2 rounded-xl bg-[#121628] border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-                          />
-                          {episodeSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setEpisodeSearchQuery('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Single Cycling Layout Toggle Button (Boxless Minimal Icon) */}
-                        <button
-                          type="button"
-                          onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
-                          className="p-2 text-slate-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
-                          title="Toggle Episode Layout"
-                        >
-                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-indigo-400" />}
-                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-indigo-400" />}
-                        </button>
-                      </div>
-
-                      {/* Episode List Rows with Highlighted Active Item */}
-                      <div className="space-y-3">
-                        {filteredEpisodes.map(ep => {
-                          const isCurrentPlaying = playingEpisode === ep.number;
-                          const isWatched = ep.number <= currentProgress;
-
-                          return (
-                            <div
-                              key={ep.number}
-                              onClick={() => {
-                                if (onPlayStream) {
-                                  onClose();
-                                  onPlayStream(currentAnime, ep.number, 0);
-                                } else {
-                                  setPlayingEpisode(ep.number);
-                                  playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                              }}
-                              className={`group flex items-center justify-between gap-4 p-3 rounded-2xl border transition cursor-pointer select-none ${
-                                isCurrentPlaying
-                                  ? 'bg-[#171b30] border-2 border-indigo-500/80 shadow-lg shadow-indigo-600/10'
-                                  : 'bg-[#101424] hover:bg-[#151a30] border-slate-800/80 hover:border-slate-700'
-                              }`}
-                            >
-                              {/* Thumbnail with EP badge */}
-                              <div className="relative w-36 sm:w-44 aspect-video rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-800/80">
-                                {ep.thumbnail ? (
-                                  <img
-                                    src={ep.thumbnail}
-                                    alt={ep.title}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                    referrerPolicy="no-referrer"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900">
-                                    <Film className="w-6 h-6" />
-                                  </div>
-                                )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                                <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/85 text-[10px] sm:text-xs font-bold text-white tracking-tight">
-                                  EP {ep.number}
-                                </div>
-                              </div>
-
-                              {/* Titles */}
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-xs sm:text-sm text-slate-100 group-hover:text-indigo-300 transition line-clamp-1 leading-snug">
-                                  {ep.title}
-                                </h4>
-                                <p className={`text-xs mt-1 font-semibold ${isCurrentPlaying ? 'text-indigo-400' : 'text-slate-400'}`}>
-                                  {isCurrentPlaying ? 'Now playing' : `Episode ${ep.number}`}
-                                </p>
-                              </div>
-
-                              </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* State 2: Episodes Browser */
-                  <div className="space-y-6">
-                    {/* Header and Filter Episodes Search Bar & List/Grid toggle (Screenshot 1 & 2) */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h3 id="modal-episodes-section-title" className="text-base sm:text-lg font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                          <Play className="w-4 h-4 text-orange-400 fill-orange-400" />
-                          <span>Episodes</span>
-                          <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-2.5 py-0.5 rounded-full ml-1 normal-case tracking-normal">
-                            {episodeList.length} total
-                          </span>
-                        </h3>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="relative flex-1 max-w-md">
-                          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            placeholder={`Filter ${episodeList.length} episodes by name or #...`}
-                            value={episodeSearchQuery}
-                            onChange={e => setEpisodeSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-8 py-2.5 rounded-xl bg-[#121628] border border-slate-800 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-                          />
-                          {episodeSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setEpisodeSearchQuery('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Single Cycling Layout Toggle Button (Boxless Minimal Icon) */}
-                        <button
-                          type="button"
-                          onClick={() => setEpisodeViewMode(prev => prev === 'list' ? 'grid' : 'list')}
-                          className="p-2 text-slate-300 hover:text-white transition active:scale-95 cursor-pointer shrink-0"
-                          title="Toggle Episode Layout"
-                        >
-                          {episodeViewMode === 'list' && <List className="w-4 h-4 text-indigo-400" />}
-                          {episodeViewMode === 'grid' && <LayoutGrid className="w-4 h-4 text-indigo-400" />}
-                        </button>
-                      </div>
-
-                      {/* Episode Range Filter Bar for Anime with >50 Episodes */}
-                      {episodeRanges.length > 0 && !episodeSearchQuery && (
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedEpisodeRange('all')}
-                            className={`px-3 py-1 rounded-lg font-bold transition shrink-0 ${
-                              selectedEpisodeRange === 'all'
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
-                            }`}
-                          >
-                            All ({episodeList.length})
-                          </button>
-                          {episodeRanges.map(r => (
-                            <button
-                              key={r.label}
-                              type="button"
-                              onClick={() => setSelectedEpisodeRange(r.label)}
-                              className={`px-3 py-1 rounded-lg font-bold transition shrink-0 ${
-                                selectedEpisodeRange === r.label
-                                  ? 'bg-indigo-600 text-white'
-                                  : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
-                              }`}
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
                       )}
                     </div>
+                  </div>
 
-                    {/* Episode Items Rendering (List & Grid Layouts) */}
-                    {filteredEpisodes.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-2xl bg-[#101424]/70 border border-slate-800/80">
-                        <Film className="w-10 h-10 text-slate-500 mb-3 opacity-60" />
-                        <p className="text-sm font-semibold text-slate-200">No episodes found</p>
-                        <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                          {episodeSearchQuery ? `No episodes match "${episodeSearchQuery}".` : 'No episodes match the selected filter.'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEpisodeSearchQuery('');
-                            setSelectedEpisodeRange('all');
-                          }}
-                          className="mt-4 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-md cursor-pointer"
-                        >
-                          Show All Episodes ({episodeList.length})
-                        </button>
-                      </div>
-                    ) : episodeViewMode === 'grid' ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
-                        {filteredEpisodes.map(ep => {
-                          const isWatched = ep.number <= currentProgress;
+                  {/* Chapter List Items Rendering */}
+                  {isLoadingChapters ? (
+                    <div className="p-12 text-center text-slate-400">
+                      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-xs font-semibold">Loading chapter catalog...</p>
+                    </div>
+                  ) : mangaChapters.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {filteredMangaChapters.map(ch => {
+                        const chNum = parseFloat(ch.chapterNumber) || 1;
+                        const isRead = chNum <= currentProgress;
 
-                          return (
-                            <div
-                              key={ep.number}
-                              onClick={() => {
-                                if (onPlayStream) {
-                                  onClose();
-                                  onPlayStream(currentAnime, ep.number, 0);
-                                } else {
-                                  setPlayingEpisode(ep.number);
-                                  setTimeout(() => {
-                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }, 100);
-                                }
-                              }}
-                              className="group relative flex flex-col bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-200 cursor-pointer shadow-md"
-                            >
-                              {/* 16:9 Thumbnail with Overlay badges */}
-                              <div className="relative aspect-video w-full bg-slate-900 overflow-hidden">
-                                {ep.thumbnail ? (
-                                  <img
-                                    src={ep.thumbnail}
-                                    alt={ep.title}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                    referrerPolicy="no-referrer"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-600 bg-slate-900">
-                                    <Film className="w-6 h-6" />
-                                  </div>
-                                )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-                                
-                                {/* Hover Play Overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
-                                  <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-xl shadow-indigo-600/40 transform group-hover:scale-110 transition-transform">
-                                    <Play className="w-4 h-4 fill-current ml-0.5" />
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-1.5 absolute top-2 left-2">
-                                  <div className="px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-sm text-[10px] font-black text-indigo-300 border border-indigo-500/20">
-                                    EP {ep.number}
-                                  </div>
-                                  {ep.filler && (
-                                    <div className="px-1.5 py-0.5 rounded-md bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shadow-sm">
-                                      FILLER
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-semibold text-slate-300">
-                                  {ep.duration}
-                                </div>
-
-                                {isWatched && (
-                                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-indigo-600/90 text-white flex items-center justify-center">
-                                    <Check className="w-3 h-3" />
-                                  </div>
-                                )}
+                        return (
+                          <div
+                            key={ch.id || ch.chapterNumber}
+                            onClick={() => {
+                              if (onPlayStream) {
+                                onClose();
+                                onPlayStream(currentAnime, chNum, 0);
+                              }
+                            }}
+                            className="group flex items-center justify-between p-3.5 bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 transition cursor-pointer shadow-md"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                              <div className="w-12 h-12 rounded-xl bg-indigo-950/60 border border-indigo-500/30 flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition">
+                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tight">CH</span>
+                                <span className="text-sm font-black text-white">{ch.chapterNumber}</span>
                               </div>
-
-                              {/* Content */}
-                              <div className="p-3 flex-1 flex flex-col justify-between gap-2">
-                                <div>
-                                  <h4 className="font-bold text-xs text-slate-200 group-hover:text-indigo-300 transition line-clamp-2 leading-snug">
-                                    {ep.title}
-                                  </h4>
-                                  <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                                    Episode {ep.number}
-                                  </p>
-                                </div>
-
-                                <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 mt-auto">
-                                  <span className={`text-[10px] font-medium ${isWatched ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                    {isWatched ? 'Completed' : 'Unwatched'}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {filteredEpisodes.map(ep => {
-                          const isWatched = ep.number <= currentProgress;
-
-                          return (
-                            <div
-                              key={ep.number}
-                              onClick={() => {
-                                if (onPlayStream) {
-                                  onClose();
-                                  onPlayStream(currentAnime, ep.number, 0);
-                                } else {
-                                  setPlayingEpisode(ep.number);
-                                  setTimeout(() => {
-                                    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }, 100);
-                                }
-                              }}
-                              className="group relative flex items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 overflow-hidden transition-all duration-300 cursor-pointer shadow-xl bg-[#080b18]"
-                            >
-                              {/* Full Embedded Background Thumbnail Image */}
-                              {(ep.thumbnail || coverUrl) && (
-                                <img
-                                  src={ep.thumbnail || coverUrl}
-                                  alt={ep.title}
-                                  className="absolute inset-0 w-full h-full object-cover object-center opacity-40 group-hover:opacity-65 transition-opacity duration-300 scale-105 pointer-events-none"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                />
-                              )}
-
-                              {/* Dark Gradient Overlay for Readability */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-[#08080c]/95 via-[#08080c]/80 to-[#08080c]/40 group-hover:via-[#08080c]/70 transition-colors pointer-events-none" />
-
-                              {/* Foreground Content sitting ON TOP of Background Image */}
-                              <div className="relative z-10 flex-1 min-w-0 pr-2">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <div className="px-2.5 py-0.5 rounded-md bg-indigo-600/90 text-white text-[10px] font-black uppercase tracking-wider shadow-md">
-                                    EP {ep.number}
-                                  </div>
-                                  {ep.filler && (
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black text-[9px] font-black tracking-wider uppercase shrink-0">
-                                      FILLER
-                                    </span>
-                                  )}
-                                  {isWatched && (
-                                    <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                                      Watched
-                                    </span>
-                                  )}
-                                </div>
-
-                                <h4 className="font-black text-sm sm:text-base text-white group-hover:text-indigo-300 transition line-clamp-1 leading-snug drop-shadow-md">
-                                  {ep.title}
+                              <div className="min-w-0 flex-1 text-left">
+                                <h4 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-orange-400 transition truncate">
+                                  {ch.title || `Chapter ${ch.chapterNumber}`}
                                 </h4>
-
-                                <p className="text-xs text-slate-300/80 font-medium mt-0.5">
-                                  Episode {ep.number} {ep.duration ? `• ${ep.duration}` : ''}
+                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                  {ch.volume ? `Volume ${ch.volume}` : `Chapter ${ch.chapterNumber}`}
                                 </p>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-                  </>
-                )}
+
+                            <div className="flex items-center gap-2 shrink-0 ml-3">
+                              {isRead && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                  Read
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md group-hover:scale-105"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Read</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Fallback to episodeList if no manga chapters returned */
+                    <div className="space-y-2.5">
+                      {filteredEpisodes.map(ep => {
+                        const isWatched = ep.number <= currentProgress;
+
+                        return (
+                          <div
+                            key={ep.number}
+                            onClick={() => {
+                              if (onPlayStream) {
+                                onClose();
+                                onPlayStream(currentAnime, ep.number, 0);
+                              }
+                            }}
+                            className="group flex items-center justify-between p-3.5 bg-[#101424] hover:bg-[#151a30] rounded-2xl border border-slate-800/80 hover:border-indigo-500/50 transition cursor-pointer shadow-md"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                              <div className="w-12 h-12 rounded-xl bg-indigo-950/60 border border-indigo-500/30 flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition">
+                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tight">CH</span>
+                                <span className="text-sm font-black text-white">{ep.number}</span>
+                              </div>
+                              <div className="min-w-0 flex-1 text-left">
+                                <h4 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-orange-400 transition truncate">
+                                  {ep.title}
+                                </h4>
+                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                  Chapter {ep.number}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 ml-3">
+                              {isWatched && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                  Read
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md group-hover:scale-105"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Read</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1986,6 +1780,49 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               </div>
             )}
 
+            {/* TAB COVERS & ARTWORKS */}
+            {activeTab === 'covers' && (
+              <div className="space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="text-base font-bold uppercase tracking-wider text-slate-200">
+                    Official Volume Covers & Artworks
+                  </h3>
+                  <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
+                    {mangaCovers.length} Artworks
+                  </span>
+                </div>
+
+                {mangaCovers.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    No volume covers found for this title.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {mangaCovers.map((cover) => (
+                      <div
+                        key={cover.id}
+                        className="group relative flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition duration-200 shadow-lg"
+                      >
+                        <div className="relative aspect-[2/3] w-full overflow-hidden">
+                          <img
+                            src={cover.url}
+                            alt={cover.volume || title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="p-2.5 bg-slate-950/90 text-center">
+                          <p className="text-xs font-bold text-slate-200 truncate">
+                            {cover.volume || 'Official Cover'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* TAB 5: RELATIONS & FRANCHISE */}
             {activeTab === 'relations' && (
               <div className="space-y-4 text-left">
@@ -1999,9 +1836,9 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                       <div key={i} className="aspect-[2/3] rounded-none bg-slate-900 animate-pulse" />
                     ))}
                   </div>
-                ) : details?.relations?.edges && details.relations.edges.length > 0 ? (
+                ) : filteredRelations.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-6">
-                    {details.relations.edges.map((rel, idx) => {
+                    {filteredRelations.map((rel, idx) => {
                       const relNode = rel.node;
                       const relTitle = relNode.title?.english || relNode.title?.romaji || 'Related Anime';
                       const relCover = relNode.coverImage?.large || relNode.coverImage?.medium;

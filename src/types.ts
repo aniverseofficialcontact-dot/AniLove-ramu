@@ -92,16 +92,28 @@ export interface StreamingEpisode {
   site?: string;
 }
 
+export interface StaffNode {
+  id: number;
+  name: {
+    full: string;
+    native?: string;
+  };
+  role?: string;
+}
+
 export interface Anime {
   id: number;
   idMal?: number;
   title: AnimeTitle;
   coverImage: AnimeCover;
   bannerImage?: string;
-  format?: string;
+  format?: string; // MANGA, MANHWA, MANHUA, ONE_SHOT, NOVEL, TV, MOVIE, etc.
+  countryOfOrigin?: string; // JP (Manga), KR (Manhwa), CN (Manhua)
   episodes?: number;
+  chapters?: number;
+  volumes?: number;
   duration?: number;
-  status?: string;
+  status?: string; // RELEASING, FINISHED, CANCELLED, HIATUS
   season?: string;
   seasonYear?: number;
   averageScore?: number;
@@ -113,12 +125,44 @@ export interface Anime {
   studios?: {
     nodes: StudioNode[];
   };
+  staff?: {
+    edges: {
+      role: string;
+      node: StaffNode;
+    }[];
+  };
   nextAiringEpisode?: AiringScheduleNode;
   trailer?: AnimeTrailer;
   isAdult?: boolean;
   siteUrl?: string;
   startDate?: FuzzyDate;
   endDate?: FuzzyDate;
+}
+
+export type Manga = Anime;
+export type MangaDetail = AnimeDetail;
+export type StreamLanguage = 'en' | 'sub' | 'dub' | string;
+export interface Episode {
+  number: number;
+  title?: string;
+  thumbnail?: string;
+}
+
+export interface MangaChapter {
+  id: string;
+  chapterNumber: string;
+  title?: string;
+  volume?: string;
+  language?: string;
+  pagesCount?: number;
+  publishAt?: string;
+  scanlationGroup?: string;
+  pages?: string[];
+}
+
+export interface MangaPage {
+  pageNumber: number;
+  url: string;
 }
 
 export interface AnimeDetail extends Anime {

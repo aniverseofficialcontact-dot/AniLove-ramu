@@ -32,6 +32,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
   const [selectedSubtitleLang, setSelectedSubtitleLang] = useState<string>('English');
   const [availableLanguages, setAvailableLanguages] = useState<StreamLanguage[]>(SUPPORTED_LANGUAGES.map(l => l.code));
+  const filteredLanguages = SUPPORTED_LANGUAGES;
   const [movieBoxLangQualMap, setMovieBoxLangQualMap] = useState<Record<string, string[]>>({});
   const [isProbingStream, setIsProbingStream] = useState(false);
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
@@ -78,12 +79,8 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const is18PlusMode = Boolean(getStoredSettings().is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
 
   useEffect(() => {
-    if (is18PlusMode) {
-      setSelectedServer('HentaiOcean Engine');
-    } else {
-      setSelectedServer('Multi-Lang');
-    }
-  }, [is18PlusMode]);
+    setSelectedServer('Multi-Lang');
+  }, []);
 
   const toggleEpisode = (epNum: number) => {
     setSelectedEpNumbers(prev => {
@@ -210,11 +207,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
               onChange={e => setSelectedServer(e.target.value)}
               className="bg-[#090b10] border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              {is18PlusMode ? (
-                <option value="HentaiOcean Engine">🔞 HentaiOcean Engine</option>
-              ) : (
-                <option value="Multi-Lang">🌐 Multi-Lang (MovieBox API)</option>
-              )}
+              <option value="Multi-Lang">🌐 Multi-Lang Engine</option>
             </select>
           </div>
 

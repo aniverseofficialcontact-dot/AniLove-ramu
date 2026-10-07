@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Minus, Check, Star, Edit3 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Anime, UserMediaListItem, MediaListStatus } from '../types';
+import { getKitsuMangaTypeBadge } from '../services/kitsuService';
 
 interface AnimeCardProps {
   anime: Anime;
@@ -93,7 +94,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     if (!currentStatus) return null;
     switch (currentStatus) {
       case 'CURRENT':
-        return <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-600 text-white">WATCHING</span>;
+        return <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-600 text-white">READING</span>;
       case 'COMPLETED':
         return <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-600 text-white">COMPLETED</span>;
       case 'PLANNING':
@@ -107,9 +108,11 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
     }
   };
 
-  const isFullyCompleted = typeof anime.episodes === 'number' && anime.episodes > 0 && currentProgress >= anime.episodes;
-  const progressPercent = typeof anime.episodes === 'number' && anime.episodes > 0
-    ? Math.min(100, Math.round((currentProgress / anime.episodes) * 100))
+  const totalChaptersCount = anime.chapters || anime.episodes;
+  const chaptersTotal = typeof totalChaptersCount === 'number' ? totalChaptersCount : '?';
+  const isFullyCompleted = typeof totalChaptersCount === 'number' && totalChaptersCount > 0 && currentProgress >= totalChaptersCount;
+  const progressPercent = typeof totalChaptersCount === 'number' && totalChaptersCount > 0
+    ? Math.min(100, Math.round((currentProgress / totalChaptersCount) * 100))
     : currentProgress > 0 ? 100 : 0;
 
   return (
@@ -158,7 +161,15 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
         <div className="text-[11px] sm:text-xs text-slate-400 font-medium flex items-center justify-between gap-1.5">
           <div className="flex items-center gap-1.5 truncate">
-            <span>{anime.format?.replace('_', ' ') || 'TV'}</span>
+            {(() => {
+              const badge = getKitsuMangaTypeBadge(anime);
+              return (
+                <span className="font-bold text-slate-300 flex items-center gap-1">
+                  <span>{badge.flag}</span>
+                  <span>{badge.label}</span>
+                </span>
+              );
+            })()}
             <span>·</span>
             <span>{anime.seasonYear || anime.startDate?.year || '2026'}</span>
           </div>
@@ -180,18 +191,18 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
 
               {isEditingProgress ? (
                 <div className="flex items-center justify-center gap-1 flex-1 min-w-0">
-                  <span className="text-[10px] text-slate-400 font-semibold">Ep:</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">Ch:</span>
                   <input
                     ref={inlineInputRef}
                     type="number"
                     min={0}
-                    max={typeof anime.episodes === 'number' ? anime.episodes : 9999}
+                    max={typeof totalChaptersCount === 'number' ? totalChaptersCount : 9999}
                     value={inlineProgressInput}
                     autoFocus
                     onChange={e => {
                       const val = e.target.value;
                       const num = parseInt(val, 10);
-                      const max = typeof anime.episodes === 'number' ? anime.episodes : 9999;
+                      const max = typeof totalChaptersCount === 'number' ? totalChaptersCount : 9999;
                       if (!isNaN(num) && num > max) setInlineProgressInput(String(max));
                       else setInlineProgressInput(val);
                     }}
@@ -203,7 +214,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                     onClick={e => e.stopPropagation()}
                     className="w-12 px-1 py-0.5 rounded bg-slate-900 border border-indigo-500 text-indigo-300 font-black text-center text-xs outline-none"
                   />
-                  <span className="text-[10px] text-slate-400 truncate">/ {episodesTotal}</span>
+                  <span className="text-[10px] text-slate-400 truncate">/ {chaptersTotal}</span>
                 </div>
               ) : (
                 <button
@@ -216,7 +227,7 @@ const AnimeCardComponent: React.FC<AnimeCardProps> = ({
                   className="group/ep flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-white/10 transition cursor-pointer flex-1 min-w-0"
                 >
                   <span className="font-bold text-slate-300 group-hover/ep:text-indigo-400 truncate text-[11px]">
-                    Ep {currentProgress} <span className="text-slate-500 font-normal">/ {episodesTotal}</span>
+                    Ch {currentProgress} <span className="text-slate-500 font-normal">/ {chaptersTotal}</span>
                   </span>
                   {isFullyCompleted ? (
                     <Check className="w-3 h-3 text-emerald-400 shrink-0" />

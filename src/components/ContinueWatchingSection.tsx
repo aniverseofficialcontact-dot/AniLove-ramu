@@ -114,7 +114,7 @@ export const ContinueWatchingSection: React.FC<ContinueWatchingSectionProps> = (
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-            Continue Watching
+            Continue Reading
           </h3>
           <span className="px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-slate-300 text-[11px] font-bold backdrop-blur-sm">
             {history.length}
@@ -180,9 +180,9 @@ export const ContinueWatchingSection: React.FC<ContinueWatchingSectionProps> = (
                 {/* Frosted Vignette Gradient */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a]/95 via-transparent to-black/30 opacity-80 group-hover:opacity-90 transition-opacity" />
 
-                {/* Episode Badge top-left */}
+                {/* Chapter Badge top-left */}
                 <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-white/15 text-[10px] font-black text-pink-400">
-                  EP {item.episodeNumber}
+                  CH {item.episodeNumber}
                 </div>
 
                 {/* Options button top-right */}

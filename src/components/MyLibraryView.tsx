@@ -182,13 +182,13 @@ export const MyLibraryView: React.FC<MyLibraryViewProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30 mb-2">
               <Bookmark className="w-3.5 h-3.5" />
-              <span>Personal Watchlist & Library</span>
+              <span>Personal Library & Bookmarks</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              My Anime Collection
+              My Manga Collection
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Track episodes, scores, and watching progress with real-time cloud sync.
+              Track chapters, scores, and reading progress with real-time cloud sync.
             </p>
           </div>
 

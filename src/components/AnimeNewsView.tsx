@@ -180,11 +180,12 @@ export const AnimeNewsView: React.FC<AnimeNewsViewProps> = ({
         onOpenDetails({
           id: newsItem.animeId,
           title: { userPreferred: newsItem.animeTitle || newsItem.title },
-          coverImage: newsItem.imageUrl,
+          coverImage: { extraLarge: newsItem.imageUrl, large: newsItem.imageUrl },
           bannerImage: newsItem.imageUrl,
           episodes: 12,
+          genres: [],
           status: 'RELEASING',
-          format: 'TV',
+          format: 'MANGA',
           description: newsItem.summary,
         } as Anime);
       }

@@ -56,8 +56,10 @@ const MEDIA_CARD_FRAGMENT = `
   }
   bannerImage
   format
+  countryOfOrigin
+  chapters
+  volumes
   episodes
-  duration
   status
   season
   seasonYear
@@ -67,6 +69,18 @@ const MEDIA_CARD_FRAGMENT = `
   genres
   description
   source
+  staff (perPage: 6) {
+    edges {
+      role
+      node {
+        id
+        name {
+          full
+          native
+        }
+      }
+    }
+  }
   studios(isMain: true) {
     nodes {
       id
@@ -84,11 +98,6 @@ const MEDIA_CARD_FRAGMENT = `
     episode
     airingAt
     timeUntilAiring
-  }
-  trailer {
-    id
-    site
-    thumbnail
   }
   siteUrl
 `;
@@ -236,47 +245,47 @@ export async function fetchHomeFeed(perPage: number = 12): Promise<HomeFeedData>
   const query = `
     query ($perPage: Int) {
       trending: Page (page: 1, perPage: $perPage) {
-        media (sort: TRENDING_DESC, type: ANIME, isAdult: false) {
+        media (sort: TRENDING_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       popular: Page (page: 1, perPage: $perPage) {
-        media (sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       topRated: Page (page: 1, perPage: $perPage) {
-        media (sort: SCORE_DESC, type: ANIME, isAdult: false) {
+        media (sort: SCORE_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       newest: Page (page: 1, perPage: $perPage) {
-        media (sort: START_DATE_DESC, type: ANIME, isAdult: false) {
+        media (sort: START_DATE_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       upcoming: Page (page: 1, perPage: $perPage) {
-        media (status: NOT_YET_RELEASED, sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (status: NOT_YET_RELEASED, sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       movies: Page (page: 1, perPage: $perPage) {
-        media (format: MOVIE, sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (countryOfOrigin: "KR", sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       action: Page (page: 1, perPage: $perPage) {
-        media (genre: "Action", sort: SCORE_DESC, type: ANIME, isAdult: false) {
+        media (genre: "Action", sort: SCORE_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       fantasy: Page (page: 1, perPage: $perPage) {
-        media (genre: "Fantasy", sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (genre: "Fantasy", sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       romcom: Page (page: 1, perPage: $perPage) {
-        media (genre_in: ["Romance", "Comedy"], sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (genre_in: ["Romance", "Comedy"], sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -340,7 +349,7 @@ export async function fetchTrendingAnime(page: number = 1, perPage: number = 18)
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (sort: TRENDING_DESC, type: ANIME, isAdult: false) {
+        media (sort: TRENDING_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -354,7 +363,7 @@ export async function fetchPopularAnime(page: number = 1, perPage: number = 18):
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -370,7 +379,7 @@ export async function fetchTopRatedAnime(page: number = 1, perPage: number = 18)
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (sort: SCORE_DESC, type: ANIME, isAdult: false) {
+        media (sort: SCORE_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -384,7 +393,7 @@ export async function fetchNewestAnime(page: number = 1, perPage: number = 18): 
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (sort: START_DATE_DESC, type: ANIME, isAdult: false) {
+        media (sort: START_DATE_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -398,7 +407,7 @@ export async function fetchUpcomingAnime(page: number = 1, perPage: number = 18)
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (status: NOT_YET_RELEASED, sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (status: NOT_YET_RELEASED, sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -412,7 +421,7 @@ export async function fetchTopMoviesAnime(page: number = 1, perPage: number = 18
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (format: MOVIE, sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (countryOfOrigin: "KR", sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -426,7 +435,7 @@ export async function fetchGenreAnime(genre: string, sort: string = 'POPULARITY_
   const query = `
     query ($genre: String, $sort: [MediaSort], $page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (genre: $genre, sort: $sort, type: ANIME, isAdult: false) {
+        media (genre: $genre, sort: $sort, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -502,7 +511,7 @@ export async function fetchRomComAnime(page: number = 1, perPage: number = 18): 
   const query = `
     query ($page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (genre_in: ["Romance", "Comedy"], sort: POPULARITY_DESC, type: ANIME, isAdult: false) {
+        media (genre_in: ["Romance", "Comedy"], sort: POPULARITY_DESC, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -523,7 +532,7 @@ export async function fetchSeasonalAnime(
   const query = `
     query ($season: MediaSeason, $seasonYear: Int, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (season: $season, seasonYear: $seasonYear, format: $format, sort: $sort, type: ANIME, isAdult: false) {
+        media (season: $season, seasonYear: $seasonYear, format: $format, sort: $sort, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -546,6 +555,101 @@ export async function fetchSeasonalAnime(
   return data.Page.media;
 }
 
+function stringToNumericId(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) + 100000;
+}
+
+async function fetchMangaDexFallback(queryStr: string): Promise<Anime[]> {
+  const dexUrl = `https://api.mangadex.org/manga?title=${encodeURIComponent(
+    queryStr
+  )}&limit=24&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const res = await fetch(dexUrl, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    if (!json?.data || !Array.isArray(json.data)) return [];
+
+    return json.data.map((item: any) => {
+      const attrs = item.attributes || {};
+      const titles = attrs.title || {};
+      const primaryTitle = titles.en || titles.ja || titles['ja-ro'] || titles.ko || titles.zh || queryStr;
+
+      const coverRel = item.relationships?.find((r: any) => r.type === 'cover_art');
+      const coverFile = coverRel?.attributes?.fileName;
+      const coverUrl = coverFile
+        ? `https://uploads.mangadex.org/covers/${item.id}/${coverFile}`
+        : 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80';
+
+      const authorRel = item.relationships?.find((r: any) => r.type === 'author');
+      const authorName = authorRel?.attributes?.name || 'Manga Creator';
+
+      const lang = (attrs.originalLanguage || 'ja').toLowerCase();
+      let countryOfOrigin = 'JP';
+      let format = 'MANGA';
+
+      if (lang === 'ko' || lang === 'kr') {
+        countryOfOrigin = 'KR';
+        format = 'MANHWA';
+      } else if (lang === 'zh' || lang === 'cn') {
+        countryOfOrigin = 'CN';
+        format = 'MANHUA';
+      }
+
+      const tags: string[] = (attrs.tags || [])
+        .map((t: any) => t.attributes?.name?.en)
+        .filter(Boolean)
+        .slice(0, 6);
+
+      const numericId = stringToNumericId(item.id);
+
+      return {
+        id: numericId,
+        idMal: numericId,
+        title: {
+          english: primaryTitle,
+          romaji: primaryTitle,
+          userPreferred: primaryTitle,
+        },
+        coverImage: {
+          extraLarge: coverUrl,
+          large: coverUrl,
+          medium: coverUrl,
+        },
+        bannerImage: coverUrl,
+        countryOfOrigin,
+        format,
+        chapters: attrs.lastChapter ? parseInt(attrs.lastChapter, 10) || 120 : 120,
+        status: attrs.status === 'completed' ? 'FINISHED' : 'RELEASING',
+        averageScore: 88,
+        meanScore: 88,
+        popularity: 9500,
+        genres: tags.length > 0 ? tags : ['Action', 'Fantasy'],
+        description: attrs.description?.en || 'Discover story, chapter releases, and ratings on MangaDex.',
+        source: 'MangaDex Provider',
+        studios: {
+          nodes: [{ id: 1, name: authorName, isAnimationStudio: false }],
+        },
+        startDate: attrs.year ? { year: attrs.year } : undefined,
+        siteUrl: `https://mangadex.org/title/${item.id}`,
+      };
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    return [];
+  }
+}
+
 export async function searchAnimeAdvanced({
   search,
   genres = [],
@@ -565,30 +669,54 @@ export async function searchAnimeAdvanced({
   page?: number;
   perPage?: number;
 }): Promise<Anime[]> {
-  const query = `
-    query ($search: String, $genre_in: [String], $status: MediaStatus, $format: MediaFormat, $seasonYear: Int, $sort: [MediaSort], $page: Int, $perPage: Int) {
-      Page (page: $page, perPage: $perPage) {
-        media (search: $search, genre_in: $genre_in, status: $status, format: $format, seasonYear: $seasonYear, sort: $sort, type: ANIME, isAdult: false) {
-          ${MEDIA_CARD_FRAGMENT}
+  const cleanSearch = search ? search.trim() : '';
+
+  try {
+    const query = `
+      query ($search: String, $genre_in: [String], $status: MediaStatus, $format: MediaFormat, $seasonYear: Int, $sort: [MediaSort], $page: Int, $perPage: Int) {
+        Page (page: $page, perPage: $perPage) {
+          media (search: $search, genre_in: $genre_in, status: $status, format: $format, seasonYear: $seasonYear, sort: $sort, type: MANGA, isAdult: false) {
+            ${MEDIA_CARD_FRAGMENT}
+          }
         }
       }
+    `;
+
+    const variables: Record<string, any> = {
+      page,
+      perPage,
+      sort: cleanSearch ? ['SEARCH_MATCH'] : [sort],
+    };
+
+    if (cleanSearch) variables.search = cleanSearch;
+    if (genres && genres.length > 0 && !genres.includes('All')) variables.genre_in = genres;
+    if (status && status !== 'All') variables.status = status;
+    if (format && format !== 'All') variables.format = format;
+    if (seasonYear && seasonYear > 0) variables.seasonYear = seasonYear;
+
+    const data = await executeQuery<{ Page: { media: Anime[] } }>(query, variables);
+    const media = data?.Page?.media || [];
+
+    if (media.length > 0) {
+      return media;
     }
-  `;
+  } catch (err) {
+    console.warn('AniList search notice, checking MangaDex fallback:', err);
+  }
 
-  const variables: Record<string, any> = {
-    page,
-    perPage,
-    sort: search && search.trim() ? ['SEARCH_MATCH'] : [sort],
-  };
+  // Fallback to MangaDex if search query is present and AniList returned 0 results or encountered an issue
+  if (cleanSearch) {
+    try {
+      const dexResults = await fetchMangaDexFallback(cleanSearch);
+      if (dexResults.length > 0) {
+        return dexResults;
+      }
+    } catch (e) {
+      console.warn('MangaDex fallback error:', e);
+    }
+  }
 
-  if (search && search.trim()) variables.search = search.trim();
-  if (genres && genres.length > 0 && !genres.includes('All')) variables.genre_in = genres;
-  if (status && status !== 'All') variables.status = status;
-  if (format && format !== 'All') variables.format = format;
-  if (seasonYear && seasonYear > 0) variables.seasonYear = seasonYear;
-
-  const data = await executeQuery<{ Page: { media: Anime[] } }>(query, variables);
-  return data.Page.media;
+  return [];
 }
 
 export async function searchAnime(
@@ -617,7 +745,7 @@ export async function searchAnime(
   const query = `
     query ($search: String, $genre: String, $status: MediaStatus, $sort: [MediaSort], $page: Int, $perPage: Int) {
       Page (page: $page, perPage: $perPage) {
-        media (search: $search, genre: $genre, status: $status, sort: $sort, type: ANIME, isAdult: false) {
+        media (search: $search, genre: $genre, status: $status, sort: $sort, type: MANGA, isAdult: false) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -702,7 +830,7 @@ export async function fetchAiringSchedule(airingAt_greater: number, airingAt_les
 export async function fetchAnimeDetails(id: number): Promise<AnimeDetail> {
   const query = `
     query ($id: Int) {
-      Media (id: $id, type: ANIME) {
+      Media (id: $id, type: MANGA) {
         ${MEDIA_CARD_FRAGMENT}
         relations {
           edges {
@@ -735,18 +863,6 @@ export async function fetchAnimeDetails(id: number): Promise<AnimeDetail> {
                 medium
               }
             }
-            voiceActors (language: JAPANESE) {
-              id
-              name {
-                full
-                native
-              }
-              image {
-                large
-                medium
-              }
-              language
-            }
           }
         }
         externalLinks {
@@ -756,12 +872,6 @@ export async function fetchAnimeDetails(id: number): Promise<AnimeDetail> {
           icon
           color
         }
-        streamingEpisodes {
-          title
-          thumbnail
-          url
-          site
-        }
       }
     }
   `;
@@ -769,102 +879,18 @@ export async function fetchAnimeDetails(id: number): Promise<AnimeDetail> {
   return data.Media;
 }
 
+export const fetchMangaDetails = fetchAnimeDetails;
+
 export async function fetchAnimeByStudio(studioName: string, page: number = 1, perPage: number = 40): Promise<Anime[]> {
   const cleanName = studioName.trim();
   if (!cleanName) return [];
 
-  // Strategy 1: Search studios list via Page
-  const pageStudioQuery = `
-    query ($studio: String, $perPage: Int) {
-      Page (page: 1, perPage: 10) {
-        studios (search: $studio, sort: SEARCH_MATCH) {
-          id
-          name
-          isAnimationStudio
-          media (sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, isAdult: false, perPage: $perPage) {
-            nodes {
-              ${MEDIA_CARD_FRAGMENT}
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  try {
-    const data = await executeQuery<{
-      Page?: {
-        studios?: {
-          id: number;
-          name: string;
-          isAnimationStudio?: boolean;
-          media?: {
-            nodes: Anime[];
-          };
-        }[];
-      };
-    }>(pageStudioQuery, { studio: cleanName, perPage });
-
-    const studios = data.Page?.studios || [];
-    const mediaMap = new Map<number, Anime>();
-    for (const st of studios) {
-      st.media?.nodes?.forEach(m => {
-        if (!mediaMap.has(m.id)) {
-          mediaMap.set(m.id, m);
-        }
-      });
-    }
-    if (mediaMap.size > 0) {
-      const list = Array.from(mediaMap.values());
-      list.sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0));
-      return list;
-    }
-  } catch (err) {
-    console.warn(`Page studios search query failed for "${cleanName}":`, err);
-  }
-
-  // Strategy 2: Search direct Studio by name
-  const singleStudioQuery = `
-    query ($studio: String, $page: Int, $perPage: Int) {
-      Studio (search: $studio) {
-        id
-        name
-        isAnimationStudio
-        media (sort: [SCORE_DESC, POPULARITY_DESC], type: ANIME, isAdult: false, page: $page, perPage: $perPage) {
-          nodes {
-            ${MEDIA_CARD_FRAGMENT}
-          }
-        }
-      }
-    }
-  `;
-
-  try {
-    const data = await executeQuery<{
-      Studio?: {
-        id: number;
-        name: string;
-        media?: {
-          nodes: Anime[];
-        };
-      };
-    }>(singleStudioQuery, { studio: cleanName, page, perPage });
-
-    if (data.Studio?.media?.nodes && data.Studio.media.nodes.length > 0) {
-      const list = [...data.Studio.media.nodes];
-      list.sort((a, b) => (b.averageScore || 0) - (a.averageScore || 0));
-      return list;
-    }
-  } catch (err) {
-    console.warn(`Single Studio search failed for "${cleanName}":`, err);
-  }
-
-  // Strategy 3: Fallback to keyword media search
+  // Search direct keyword media search
   try {
     const fallbackSearch = await searchAnimeAdvanced({ search: cleanName, sort: 'SCORE_DESC', page: 1, perPage });
     return fallbackSearch;
   } catch (err) {
-    console.error(`All studio search strategies failed for "${cleanName}":`, err);
+    console.error(`Search failed for "${cleanName}":`, err);
     return [];
   }
 }
@@ -873,7 +899,7 @@ export async function fetchAnimeByStudio(studioName: string, page: number = 1, p
 export async function fetchUserAnimeList(username: string): Promise<UserMediaListItem[]> {
   const query = `
     query ($username: String) {
-      MediaListCollection (userName: $username, type: ANIME) {
+      MediaListCollection (userName: $username, type: MANGA) {
         lists {
           name
           isCustomList

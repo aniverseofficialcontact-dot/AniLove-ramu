@@ -1044,11 +1044,12 @@ export function setStoredActiveCompanion(card: any | null): void {
 // =============================================================
 // HOME FEED CACHE ENGINE (24-HOUR AUTO EXPIRY)
 // =============================================================
-const HOME_CACHE_KEY = 'anilove_home_feed_cache_v1';
+const HOME_CACHE_KEY = 'manga_home_feed_cache_v3';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export function getHomeFeedCache(): any | null {
   try {
+    localStorage.removeItem('anilove_home_feed_cache_v1');
     const raw = localStorage.getItem(HOME_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);

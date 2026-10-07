@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, X, SlidersHorizontal, Camera, RotateCcw } from 'lucide-react';
 import { Anime, UserMediaListItem, MediaListStatus } from '../types';
 import { AnimeCard } from './AnimeCard';
-import { searchAnimeAdvanced, fetchAnimeDetails } from '../services/anilist';
-import { searchHentaiOcean } from '../services/hentaioceanService';
+import { fetchAnimeDetails, searchAnimeAdvanced } from '../services/anilist';
 import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
 
 interface SearchViewProps {
@@ -36,39 +35,20 @@ const ALL_GENRES = [
   'Thriller',
 ];
 
-const HENTAI_GENRES = [
-  'Uncensored',
-  'Milf',
-  'Ahegao',
-  'Harem',
-  '3D / CGI',
-  'Fantasy',
-  'Romance',
-  'School',
-  'Public',
-  'Teacher',
-  'Nurse',
-  'Maid',
-  'Incest',
-  'Mind Control',
-];
-
 const FORMAT_OPTIONS = [
   { label: 'All Formats', value: '' },
-  { label: 'TV Series', value: 'TV' },
-  { label: 'TV Short', value: 'TV_SHORT' },
-  { label: 'Movie', value: 'MOVIE' },
-  { label: 'Special', value: 'SPECIAL' },
-  { label: 'OVA', value: 'OVA' },
-  { label: 'ONA (Web)', value: 'ONA' },
-  { label: 'Music Video', value: 'MUSIC' },
+  { label: 'Manga (Japanese)', value: 'MANGA' },
+  { label: 'Manhwa (Korean Webtoon)', value: 'MANHWA' },
+  { label: 'Manhua (Chinese)', value: 'MANHUA' },
+  { label: 'Light Novel', value: 'NOVEL' },
+  { label: 'One Shot', value: 'ONE_SHOT' },
 ];
 
 const STATUS_OPTIONS = [
   { label: 'All Statuses', value: '' },
-  { label: 'Airing / Releasing', value: 'RELEASING' },
-  { label: 'Finished Airing', value: 'FINISHED' },
-  { label: 'Not Yet Aired', value: 'NOT_YET_RELEASED' },
+  { label: 'Publishing / Releasing', value: 'RELEASING' },
+  { label: 'Finished Publishing', value: 'FINISHED' },
+  { label: 'Not Yet Released', value: 'NOT_YET_RELEASED' },
   { label: 'Cancelled', value: 'CANCELLED' },
   { label: 'On Hiatus', value: 'HIATUS' },
 ];
@@ -150,29 +130,28 @@ export const SearchView: React.FC<SearchViewProps> = ({
     }
   };
 
-  const activeGenreList = useMemo(() => (is18PlusMode ? HENTAI_GENRES : ALL_GENRES), [is18PlusMode]);
+  const activeGenreList = ALL_GENRES;
 
   useEffect(() => {
     const timer = setTimeout(() => {
       const executeSearch = async () => {
         setIsLoading(true);
         try {
-          if (is18PlusMode) {
-            const searchData = await searchHentaiOcean(searchQuery.trim() || 'all', selectedGenres);
-            setResults(searchData);
-          } else {
-            const searchData = await searchAnimeAdvanced({
-              search: searchQuery.trim() || undefined,
-              genres: selectedGenres.length > 0 ? selectedGenres : undefined,
-              status: selectedStatus || undefined,
-              format: selectedFormat || undefined,
-              seasonYear: selectedYear ? parseInt(selectedYear, 10) : undefined,
-              sort: selectedSort,
-            });
-            setResults(searchData);
-          }
+          const searchData = await searchAnimeAdvanced({
+            search: searchQuery.trim() || undefined,
+            genres: selectedGenres.length > 0 ? selectedGenres : undefined,
+            status: selectedStatus || undefined,
+            format: selectedFormat || undefined,
+            seasonYear: selectedYear ? parseInt(selectedYear, 10) : undefined,
+            sort: selectedSort,
+            page: 1,
+            perPage: 36,
+          });
+
+          setResults(searchData || []);
         } catch (err) {
           console.error('Error fetching search results:', err);
+          setResults([]);
         } finally {
           setIsLoading(false);
         }
@@ -184,7 +163,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     return () => {
       clearTimeout(timer);
     };
-  }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort, is18PlusMode]);
+  }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5">
@@ -193,22 +172,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
         <div className="space-y-1 text-left">
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
             <Search className="w-6 h-6 text-pink-400" />
-            <span>Anime Search & Discovery</span>
+            <span>Manga Search & Discovery</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
-            Find anime by keywords, scene screenshots, or filter across genres, format, status, and release year.
+            Find manga, manhwa, and manhua by keywords or filter across genres, format, and status.
           </p>
         </div>
-
-        {/* Scene Finder Header Button */}
-        <button
-          type="button"
-          onClick={() => setIsSceneFinderOpen(true)}
-          className="px-4 py-2.5 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-xl flex items-center gap-2 self-start sm:self-auto transition-all cursor-pointer active:scale-95"
-        >
-          <Camera className="w-4 h-4" />
-          <span>Identify Anime Scene</span>
-        </button>
       </div>
 
       {/* Primary Search Bar Container */}
@@ -370,7 +339,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
       {isLoading ? (
         <div className="p-12 text-center text-slate-400">
           <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm">Searching anime catalog...</p>
+          <p className="text-sm">Searching manga catalog...</p>
         </div>
       ) : results.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -389,7 +358,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
       ) : (
         <div className="p-12 text-center text-slate-400 bg-white/5 rounded-3xl border border-white/10">
-          <p className="text-sm">No anime found matching your criteria.</p>
+          <p className="text-sm">No manga found matching your criteria.</p>
         </div>
       )}
 

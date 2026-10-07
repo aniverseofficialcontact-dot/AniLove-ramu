@@ -184,9 +184,7 @@ public class NativePlayerActivity extends AppCompatActivity {
     private final Map<String, Map<String, String>> activeLanguageQualityMap = new HashMap<>();
 
     public boolean is18PlusActive() {
-        return (currentLoadedStreamUrl != null && currentLoadedStreamUrl.contains("hentaiocean")) ||
-               (currentEmbedUrl != null && currentEmbedUrl.contains("hentaiocean")) ||
-               "HentaiOcean".equalsIgnoreCase(currentActiveSourceName);
+        return false;
     }
 
     private boolean isPlaying = true;

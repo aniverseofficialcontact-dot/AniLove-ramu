@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.anilove.app',
   appName: 'AniLove',
   webDir: 'dist',
-  bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
     cleartext: true,

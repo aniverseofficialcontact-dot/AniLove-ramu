@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
+const anikotoReferer = 'https://anikoto.com/';
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -15,6 +17,10 @@ async function startServer() {
     exposedHeaders: ['Content-Range', 'Content-Length', 'Accept-Ranges', 'Content-Disposition'],
   }));
   app.options('*', cors());
+
+  const epNum = 1;
+  const anikotoReferer = 'https://anikoto.com/';
+  async function resolveAnikotoInternal(_opts: any): Promise<any> { return null; }
 
   // Increase payload limit for sync, library backup, and cards data (default is 100kb)
   app.use(express.json({ limit: '50mb' }));

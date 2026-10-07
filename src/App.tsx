@@ -2,20 +2,17 @@ import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from
 import { Anime, UserMediaListItem, UserSettings, MediaListStatus, AnimeTrailer, AppNotification } from './types';
 import { API_BASE, apiFetch, apiUrl } from './services/api';
 import {
-  fetchHomeFeed,
-  fetchTrendingAnime,
-  fetchPopularAnime,
-  fetchTopRatedAnime,
-  fetchNewestAnime,
-  fetchUpcomingAnime,
-  fetchTopMoviesAnime,
-  fetchGenreAnime,
-  fetchRomComAnime,
   parseOAuthTokenFromHash,
   fetchAuthenticatedViewer,
   fetchUserMediaList,
-  saveMediaListEntry
+  saveMediaListEntry,
+  fetchAnimeDetails,
 } from './services/anilist';
+import {
+  fetchKitsuHomeFeed,
+  fetchKitsuTrendingManga,
+  searchKitsuManga,
+} from './services/kitsuService';
 import {
   getUserLibrary,
   saveUserLibrary,
@@ -48,7 +45,6 @@ import { DownloadsView } from './components/DownloadsView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AnimeGachaModal } from './components/AnimeGachaModal';
-import { getHentaiOceanHomeFeed } from './services/hentaioceanService';
 
 const ReelsView = lazy(() => import('./components/ReelsView').then(m => ({ default: m.ReelsView })));
 const ArcadeView = lazy(() => import('./components/ArcadeView').then(m => ({ default: m.ArcadeView })));
@@ -422,29 +418,9 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 2. Fetch Initial Catalog from AniList GraphQL (or HentaiOcean when in 18+ Secret Profile Mode)
+  // 2. Fetch Initial Catalog from AniList GraphQL
   const loadHomeContent = useCallback(async () => {
     setIsMainLoading(true);
-
-    if (settings.is18PlusMode) {
-      try {
-        const hentaiFeed = await getHentaiOceanHomeFeed();
-        setTrendingAnime(hentaiFeed.trending || []);
-        setPopularAnime(hentaiFeed.recent || []);
-        setTopRatedAnime(hentaiFeed.topRated || []);
-        setNewestAnime(hentaiFeed.recent || []);
-        setUpcomingAnime(hentaiFeed.uncensored || []);
-        setMoviesAnime(hentaiFeed.topRated || []);
-        setActionAnime(hentaiFeed.trending || []);
-        setFantasyAnime(hentaiFeed.recent || []);
-        setRomComAnime(hentaiFeed.uncensored || []);
-      } catch (err: any) {
-        console.error('Error loading 18+ HentaiOcean content:', err);
-      } finally {
-        setIsMainLoading(false);
-      }
-      return;
-    }
 
     const cachedFeed = getHomeFeedCache();
     if (cachedFeed && cachedFeed.trending && cachedFeed.trending.length > 0) {
@@ -462,7 +438,7 @@ export function App() {
     }
 
     try {
-      const feed = await fetchHomeFeed(12);
+      const feed = await fetchKitsuHomeFeed(14);
       if (feed && feed.trending && feed.trending.length > 0) {
         setTrendingAnime(feed.trending);
         setPopularAnime(feed.popular);
@@ -592,9 +568,9 @@ export function App() {
 
       const title = anime.title?.english || anime.title?.romaji || 'Anime';
       if (isCompleted && existingItem?.status !== 'COMPLETED') {
-        showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} eps)! 🎉`, 'Completed');
+        showToast('success', `Completed "${title}" (${clampedProgress}/${totalEps} ch)! 🎉`, 'Completed');
       } else if (clampedProgress > (existingItem?.progress || 0)) {
-        showToast('info', `Updated "${title}" progress to Episode ${clampedProgress}.`, 'Progress Saved');
+        showToast('info', `Updated "${title}" progress to Chapter ${clampedProgress}.`, 'Progress Saved');
       }
       performAniListSync(anime, { progress: clampedProgress, status: nextStatus || existingItem?.status });
       return updated;
@@ -1219,12 +1195,7 @@ export function App() {
 
                 {/* Home Content Container */}
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-                  {/* Quote of the Day Section (Normal Mode Only) */}
-                  {!settings.is18PlusMode && (
-                    <QuoteOfTheDay
-                      onOpenAnimeDetails={handleOpenDetails}
-                    />
-                  )}
+
 
                   {/* 1. Continue Watching / Watch History Section */}
                   <ContinueWatchingSection
@@ -1485,17 +1456,7 @@ export function App() {
                     try {
                       const fetchedAnime = await fetchAnimeDetails(anilistId);
                       if (fetchedAnime) {
-                        if (Capacitor.isNativePlatform()) {
-                          await launchNativePlayer({
-                            anime: fetchedAnime,
-                            episodeNumber: ep || 1,
-                            startTime: start || 0,
-                            audio: 'DUB',
-                            totalEpisodes: fetchedAnime.episodes,
-                          });
-                        } else {
-                          handleSelectAnime(fetchedAnime);
-                        }
+                        handleOpenDetails(fetchedAnime);
                       }
                     } catch {}
                   }}

@@ -1122,7 +1122,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {settings.is18PlusMode
-                          ? '18+ Mode Active: Showing HentaiOcean catalog, isolated 18+ library & watch history.'
+                          ? '18+ Mode Active: Showing isolated 18+ vault library & watch history.'
                           : 'Acts as two separate profiles. Switch ON to access private 18+ catalog & library.'}
                       </p>
                     </div>

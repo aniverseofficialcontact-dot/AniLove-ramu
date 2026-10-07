@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Info, ChevronLeft, ChevronRight, Rotate3d, Music, Calendar } from 'lucide-react';
+import { Play, Info, ChevronLeft, ChevronRight, Rotate3d, Music, Calendar, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anime, UserMediaListItem } from '../types';
 import { sanitizeDescription } from '../services/anilist';
@@ -203,8 +203,8 @@ export const HeroSpotlight: React.FC<HeroSpotlightProps> = ({
                     onClick={() => onPlayStream(currentAnime)}
                     className="flex items-center gap-2 px-5 sm:px-8 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm shadow-xl shadow-black/40 transition transform hover:scale-105 active:scale-95 cursor-pointer"
                   >
-                    <Play className="w-4 h-4 fill-slate-900 text-slate-900" />
-                    <span>Watch Now</span>
+                    <BookOpen className="w-4 h-4 text-slate-900" />
+                    <span>Start Reading</span>
                   </button>
                 )}
 
