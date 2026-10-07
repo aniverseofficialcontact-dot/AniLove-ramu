@@ -102,6 +102,11 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   const [themeLoading, setThemeLoading] = useState<string | null>(null);
   const [kitsuScores, setKitsuScores] = useState<KitsuPlatformScores | null>(null);
   const [mangaCovers, setMangaCovers] = useState<MangaCoverArt[]>([]);
+  const [isLoadingCovers, setIsLoadingCovers] = useState<boolean>(false);
+  const [coverTypeFilter, setCoverTypeFilter] = useState<string>('ALL');
+  const [coverLangFilter, setCoverLangFilter] = useState<string>('ALL');
+  const [coverSearchQuery, setCoverSearchQuery] = useState<string>('');
+  const [selectedCoverLightbox, setSelectedCoverLightbox] = useState<MangaCoverArt | null>(null);
   const [mangaChapters, setMangaChapters] = useState<MangaChapter[]>([]);
   const [isLoadingChapters, setIsLoadingChapters] = useState<boolean>(false);
 
@@ -196,8 +201,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
       if (isMounted) setKitsuScores(scores);
     });
 
+    setIsLoadingCovers(true);
     fetchMangaCovers(anime).then(covers => {
-      if (isMounted && covers && covers.length > 0) setMangaCovers(covers);
+      if (isMounted) {
+        setMangaCovers(covers || []);
+        setIsLoadingCovers(false);
+      }
+    }).catch(() => {
+      if (isMounted) setIsLoadingCovers(false);
     });
 
     setIsLoadingChapters(true);
@@ -255,6 +266,47 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
   const currentAnime = details || anime;
   const title = currentAnime?.title?.english || currentAnime?.title?.romaji || currentAnime?.title?.userPreferred || 'Unknown Title';
+
+  const filteredCovers = useMemo(() => {
+    return mangaCovers.filter(cover => {
+      // 1. Type Filter
+      if (coverTypeFilter !== 'ALL') {
+        const coverType = (cover.type || '').toUpperCase();
+        const desc = (cover.description || '').toUpperCase();
+        if (coverTypeFilter === 'FRONT' && coverType !== 'FRONT' && !desc.includes('FRONT')) return false;
+        if (coverTypeFilter === 'BACK' && coverType !== 'BACK' && !desc.includes('BACK')) return false;
+        if (coverTypeFilter === 'SPINE' && coverType !== 'SPINE' && !desc.includes('SPINE')) return false;
+        if (coverTypeFilter === 'VARIANT' && coverType !== 'VARIANT' && !desc.includes('VARIANT')) return false;
+        if (coverTypeFilter === 'BOX_SET' && coverType !== 'BOX SET' && !desc.includes('BOX')) return false;
+      }
+
+      // 2. Language Filter
+      if (coverLangFilter !== 'ALL') {
+        const locale = (cover.locale || '').toLowerCase();
+        const langName = (cover.languageName || '').toLowerCase();
+        if (coverLangFilter === 'EN' && !locale.includes('en') && !langName.includes('english')) return false;
+        if (coverLangFilter === 'JA' && !locale.includes('ja') && !langName.includes('japanese')) return false;
+        if (coverLangFilter === 'ES' && !locale.includes('es') && !langName.includes('spanish')) return false;
+        if (coverLangFilter === 'DE' && !locale.includes('de') && !langName.includes('german')) return false;
+        if (coverLangFilter === 'FR' && !locale.includes('fr') && !langName.includes('french')) return false;
+        if (coverLangFilter === 'IT' && !locale.includes('it') && !langName.includes('italian')) return false;
+        if (coverLangFilter === 'KO' && !locale.includes('ko') && !langName.includes('korean')) return false;
+        if (coverLangFilter === 'ZH' && !locale.includes('zh') && !langName.includes('chinese')) return false;
+        if (coverLangFilter === 'PT' && !locale.includes('pt') && !langName.includes('portuguese')) return false;
+        if (coverLangFilter === 'RU' && !locale.includes('ru') && !langName.includes('russian')) return false;
+      }
+
+      // 3. Search Query / Volume search
+      if (coverSearchQuery.trim()) {
+        const q = coverSearchQuery.toLowerCase().trim();
+        const volStr = (cover.volume || '').toLowerCase();
+        const descStr = (cover.description || '').toLowerCase();
+        if (!volStr.includes(q) && !descStr.includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [mangaCovers, coverTypeFilter, coverLangFilter, coverSearchQuery]);
   const nativeTitle = currentAnime?.title?.native;
   const romajiTitle = currentAnime?.title?.romaji;
   const coverUrl = currentAnime?.coverImage?.extraLarge || currentAnime?.coverImage?.large || currentAnime?.coverImage?.medium || undefined;
@@ -1019,7 +1071,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             {[
               { id: 'overview', label: 'Overview' },
               { id: 'episodes', label: 'Chapters' },
-              { id: 'covers', label: 'Covers' },
+              { id: 'covers', label: mangaCovers.length > 0 ? `Covers (${mangaCovers.length})` : 'Covers' },
               { id: 'relations', label: 'Relations' },
               { id: 'characters', label: 'Cast' },
             ].map(tab => {
@@ -1783,41 +1835,122 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             {/* TAB COVERS */}
             {activeTab === 'covers' && (
               <div className="space-y-4 text-left">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <h3 className="text-base font-bold uppercase tracking-wider text-slate-200">
-                    Volume Covers
-                  </h3>
-                  <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
-                    {mangaCovers.length} covers found
-                  </span>
+                {/* Header & Filter Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/90 pb-3">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-base font-bold uppercase tracking-wider text-slate-200">
+                      Volume Covers
+                    </h3>
+                    <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
+                      {isLoadingCovers ? 'Loading MangaBaka...' : `${filteredCovers.length} covers found`}
+                    </span>
+                  </div>
+
+                  {/* MangaBaka Style Filter Options */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {/* Type Filter */}
+                    <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 focus-within:border-indigo-500 transition">
+                      <span className="text-slate-400 font-medium">Type:</span>
+                      <select
+                        value={coverTypeFilter}
+                        onChange={(e) => setCoverTypeFilter(e.target.value)}
+                        className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                      >
+                        <option value="ALL" className="bg-slate-900 text-slate-200">All</option>
+                        <option value="FRONT" className="bg-slate-900 text-slate-200">Front</option>
+                        <option value="BACK" className="bg-slate-900 text-slate-200">Back</option>
+                        <option value="SPINE" className="bg-slate-900 text-slate-200">Spine</option>
+                        <option value="VARIANT" className="bg-slate-900 text-slate-200">Variant</option>
+                        <option value="BOX_SET" className="bg-slate-900 text-slate-200">Box Set</option>
+                      </select>
+                    </div>
+
+                    {/* Language Filter */}
+                    <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 focus-within:border-indigo-500 transition">
+                      <span className="text-slate-400 font-medium">Language:</span>
+                      <select
+                        value={coverLangFilter}
+                        onChange={(e) => setCoverLangFilter(e.target.value)}
+                        className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                      >
+                        <option value="ALL" className="bg-slate-900 text-slate-200">All</option>
+                        <option value="JA" className="bg-slate-900 text-slate-200">Japanese 🇯🇵</option>
+                        <option value="EN" className="bg-slate-900 text-slate-200">English 🇬🇧</option>
+                        <option value="ES" className="bg-slate-900 text-slate-200">Spanish 🇪🇸</option>
+                        <option value="DE" className="bg-slate-900 text-slate-200">German 🇩🇪</option>
+                        <option value="FR" className="bg-slate-900 text-slate-200">French 🇫🇷</option>
+                        <option value="IT" className="bg-slate-900 text-slate-200">Italian 🇮🇹</option>
+                        <option value="KO" className="bg-slate-900 text-slate-200">Korean 🇰🇷</option>
+                        <option value="ZH" className="bg-slate-900 text-slate-200">Chinese 🇨🇳</option>
+                        <option value="PT" className="bg-slate-900 text-slate-200">Portuguese 🇧🇷</option>
+                        <option value="RU" className="bg-slate-900 text-slate-200">Russian 🇷🇺</option>
+                      </select>
+                    </div>
+
+                    {/* Search / Volume Input */}
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 focus-within:border-indigo-500 transition">
+                      <Search className="w-3.5 h-3.5 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Volume..."
+                        value={coverSearchQuery}
+                        onChange={(e) => setCoverSearchQuery(e.target.value)}
+                        className="bg-transparent text-slate-200 font-medium placeholder-slate-500 focus:outline-none w-16 sm:w-20"
+                      />
+                      {coverSearchQuery && (
+                        <button
+                          onClick={() => setCoverSearchQuery('')}
+                          className="text-slate-400 hover:text-white cursor-pointer ml-1"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {mangaCovers.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400">
-                    No volume covers found for this title.
+                {isLoadingCovers ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i} className="animate-pulse bg-slate-900 border border-slate-800 rounded-2xl aspect-[2/3] w-full" />
+                    ))}
+                  </div>
+                ) : filteredCovers.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 bg-slate-900/40 rounded-2xl border border-slate-800/60 p-6">
+                    <p className="text-sm font-semibold text-slate-300">No volume covers found for selected criteria.</p>
+                    <button
+                      onClick={() => {
+                        setCoverTypeFilter('ALL');
+                        setCoverLangFilter('ALL');
+                        setCoverSearchQuery('');
+                      }}
+                      className="mt-2 text-xs font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                    >
+                      Reset Filters
+                    </button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {mangaCovers.map((cover) => (
+                    {filteredCovers.map((cover) => (
                       <div
                         key={cover.id}
-                        className="group relative flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition duration-200 shadow-lg"
+                        onClick={() => setSelectedCoverLightbox(cover)}
+                        className="group relative flex flex-col rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-indigo-500/60 transition duration-200 shadow-lg cursor-pointer"
                       >
-                        <div className="relative aspect-[2/3] w-full overflow-hidden">
+                        <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
                           <img
                             src={cover.url}
-                            alt={cover.volume || title}
+                            alt={cover.description || cover.volume || title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
-                          {cover.flag && (
-                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-sm text-xs font-bold shadow-md">
-                              {cover.flag} {cover.description || cover.volume}
-                            </div>
-                          )}
+                          <div className="absolute top-2 left-2 max-w-[88%] px-2 py-0.5 rounded-md bg-black/85 backdrop-blur-md text-[11px] font-bold text-white shadow-md border border-white/10 flex items-center gap-1.5 truncate">
+                            <span>{cover.flag || '🌐'}</span>
+                            <span className="truncate">{cover.description || cover.volume || 'Volume Cover'}</span>
+                          </div>
                         </div>
-                        <div className="p-2.5 bg-slate-950/90 text-center">
+                        <div className="p-2.5 bg-slate-950/90 text-center border-t border-slate-800/60">
                           <p className="text-xs font-bold text-slate-200 truncate">
                             {cover.volume || 'Volume Cover'}
                           </p>
@@ -1968,6 +2101,59 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             )}
           </div>
         </div>
+
+        {/* LIGHTBOX COVER MODAL */}
+        {selectedCoverLightbox && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn"
+            onClick={() => setSelectedCoverLightbox(null)}
+          >
+            <div
+              className="relative max-w-xl w-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-950 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-200 truncate">
+                  <span>{selectedCoverLightbox.flag || '🌐'}</span>
+                  <span className="truncate">{selectedCoverLightbox.description || selectedCoverLightbox.volume || 'Volume Cover'}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedCoverLightbox(null)}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Image */}
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/60">
+                <img
+                  src={selectedCoverLightbox.url}
+                  alt={selectedCoverLightbox.description || 'Volume Cover'}
+                  className="max-h-[68vh] w-auto object-contain rounded-xl shadow-2xl"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-950 border-t border-slate-800 text-xs">
+                <span className="text-slate-400 font-medium">
+                  {selectedCoverLightbox.languageName || 'Official Cover'} • {selectedCoverLightbox.volume || 'Volume Cover'}
+                </span>
+                <a
+                  href={selectedCoverLightbox.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open High-Res</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </AnimatePresence>
   );

@@ -13,27 +13,51 @@ const pagesCache = new Map<string, MangaPage[]>();
 export interface MangaCoverArt {
   id: string;
   volume?: string;
+  volumeNum?: number;
   url: string;
+  type?: string;
   description?: string;
   locale?: string;
   flag?: string;
+  languageName?: string;
+}
+
+export function getLanguageDetails(locale: string): { flag: string; name: string } {
+  if (!locale) return { flag: '🇯🇵', name: 'Japanese' };
+  const loc = locale.toLowerCase();
+  if (loc === 'en' || loc === 'en-us' || loc === 'en-gb' || loc === 'uk') return { flag: '🇬🇧', name: 'English' };
+  if (loc === 'ja' || loc === 'jp') return { flag: '🇯🇵', name: 'Japanese' };
+  if (loc.startsWith('es')) return { flag: '🇪🇸', name: 'Spanish' };
+  if (loc === 'de') return { flag: '🇩🇪', name: 'German' };
+  if (loc === 'fr') return { flag: '🇫🇷', name: 'French' };
+  if (loc === 'it') return { flag: '🇮🇹', name: 'Italian' };
+  if (loc === 'ko' || loc === 'kr') return { flag: '🇰🇷', name: 'Korean' };
+  if (loc.startsWith('zh') || loc === 'cn' || loc === 'zh-hk') return { flag: '🇨🇳', name: 'Chinese' };
+  if (loc === 'ru') return { flag: '🇷🇺', name: 'Russian' };
+  if (loc.startsWith('pt') || loc === 'br') return { flag: '🇧🇷', name: 'Portuguese' };
+  if (loc === 'ar') return { flag: '🇸🇦', name: 'Arabic' };
+  if (loc === 'pl') return { flag: '🇵🇱', name: 'Polish' };
+  if (loc === 'tr') return { flag: '🇹🇷', name: 'Turkish' };
+  if (loc === 'th') return { flag: '🇹🇭', name: 'Thai' };
+  if (loc === 'vi') return { flag: '🇻🇳', name: 'Vietnamese' };
+  if (loc === 'id') return { flag: '🇮🇩', name: 'Indonesian' };
+  return { flag: '🌐', name: locale.toUpperCase() };
 }
 
 function localeToFlag(locale: string): string {
-  if (!locale) return '🇯🇵';
-  const loc = locale.toLowerCase();
-  if (loc === 'en' || loc === 'uk') return '🇬🇧';
-  if (loc === 'ja' || loc === 'jp') return '🇯🇵';
-  if (loc === 'es' || loc === 'es-la') return '🇪🇸';
-  if (loc === 'de') return '🇩🇪';
-  if (loc === 'fr') return '🇫🇷';
-  if (loc === 'it') return '🇮🇹';
-  if (loc === 'ko' || loc === 'kr') return '🇰🇷';
-  if (loc === 'zh' || loc === 'cn' || loc === 'zh-hk') return '🇨🇳';
-  if (loc === 'ru') return '🇷🇺';
-  if (loc === 'pt' || loc === 'pt-br') return '🇧🇷';
-  if (loc === 'ar') return '🇸🇦';
-  return '🌐';
+  return getLanguageDetails(locale).flag;
+}
+
+function determineCoverType(description?: string): string {
+  if (!description) return 'Front';
+  const desc = description.toLowerCase();
+  if (desc.includes('back')) return 'Back';
+  if (desc.includes('spine')) return 'Spine';
+  if (desc.includes('variant') || desc.includes('alt')) return 'Variant';
+  if (desc.includes('box')) return 'Box Set';
+  if (desc.includes('inner')) return 'Inner';
+  if (desc.includes('extra')) return 'Extra';
+  return 'Front';
 }
 
 /**
@@ -144,9 +168,13 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
     covers.push({
       id: 'anilist_extralarge',
       volume: 'Volume 1',
+      volumeNum: 1,
       url: manga.coverImage.extraLarge,
-      description: 'Primary HD Poster Artwork',
+      type: 'Front',
+      description: 'Front (Volume) 1',
+      locale: 'ja',
       flag: '🇯🇵',
+      languageName: 'Japanese',
     });
   }
 
@@ -156,8 +184,11 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
       id: 'anilist_banner',
       volume: 'Banner Artwork',
       url: manga.bannerImage,
+      type: 'Variant',
       description: 'Official Wide Banner',
+      locale: 'ja',
       flag: '🇯🇵',
+      languageName: 'Japanese',
     });
   }
 
@@ -177,37 +208,71 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
   if (dexIdResult.status === 'fulfilled' && dexIdResult.value) {
     const dexId = dexIdResult.value;
     try {
-      const offsets = [0, 100];
-      for (const offset of offsets) {
-        const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`;
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-        }).catch(() => null);
+      // Step 1: Initial call to get total count & first batch (limit 100)
+      const initialUrl = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=0&order[volume]=asc`;
+      const res = await fetch(initialUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      }).catch(() => null);
 
-        if (res && res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
-            json.data.forEach((item: any, idx: number) => {
-              const vol = item.attributes?.volume;
-              const fileName = item.attributes?.fileName;
-              const locale = item.attributes?.locale || 'ja';
-              if (fileName) {
-                const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
-                if (!seenUrls.has(coverUrl)) {
-                  seenUrls.add(coverUrl);
-                  covers.push({
-                    id: item.id || `dex_cover_${offset}_${idx}`,
-                    volume: vol ? `Volume ${vol}` : `Volume ${idx + 1}`,
-                    url: coverUrl,
-                    description: vol ? `Front (Volume) ${vol}` : 'Official Volume Cover',
-                    locale,
-                    flag: localeToFlag(locale),
-                  });
-                }
-              }
-            });
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        const total = json?.total || 0;
+        const allItems: any[] = json?.data && Array.isArray(json.data) ? json.data : [];
+
+        // If total > 100, fetch remaining offsets concurrently
+        if (total > 100) {
+          const remainingOffsets: number[] = [];
+          for (let offset = 100; offset < Math.min(total, 800); offset += 100) {
+            remainingOffsets.push(offset);
           }
+
+          const fetchPromises = remainingOffsets.map((offset) =>
+            fetch(`${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          );
+
+          const batchResults = await Promise.allSettled(fetchPromises);
+          batchResults.forEach((bRes) => {
+            if (bRes.status === 'fulfilled' && bRes.value?.data && Array.isArray(bRes.value.data)) {
+              allItems.push(...bRes.value.data);
+            }
+          });
         }
+
+        // Process all collected items
+        allItems.forEach((item: any, idx: number) => {
+          const vol = item.attributes?.volume;
+          const fileName = item.attributes?.fileName;
+          const locale = item.attributes?.locale || 'ja';
+          const descRaw = item.attributes?.description || '';
+
+          if (fileName) {
+            const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
+            if (!seenUrls.has(coverUrl)) {
+              seenUrls.add(coverUrl);
+
+              const coverType = determineCoverType(descRaw);
+              const langInfo = getLanguageDetails(locale);
+              const volNum = vol ? parseFloat(vol) : undefined;
+              const formattedDesc = `${coverType} ${vol ? `(Volume) ${vol}` : ''}`.trim();
+
+              covers.push({
+                id: item.id || `dex_cover_${idx}`,
+                volume: vol ? `Volume ${vol}` : `Volume ${idx + 1}`,
+                volumeNum: volNum,
+                url: coverUrl,
+                type: coverType,
+                description: formattedDesc,
+                locale,
+                flag: langInfo.flag,
+                languageName: langInfo.name,
+              });
+            }
+          }
+        });
       }
     } catch (err) {
       console.warn('[MangaDex Provider] Fetch covers notice:', err);
@@ -230,7 +295,10 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
           id: `kitsu_poster_${idx}`,
           volume: `Volume ${covers.length + 1}`,
           url: poster,
+          type: 'Front',
+          description: `Front (Volume) ${covers.length + 1}`,
           flag: '🇰🇷',
+          languageName: 'Korean',
         });
       }
 
@@ -240,7 +308,10 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
           id: `kitsu_cover_${idx}`,
           volume: `Volume ${covers.length + 1}`,
           url: cover,
+          type: 'Variant',
+          description: `Variant Cover ${covers.length + 1}`,
           flag: '🇰🇷',
+          languageName: 'Korean',
         });
       }
     });

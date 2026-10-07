@@ -373,3 +373,6 @@ export async function fetchMangaBakaDetails(id: number): Promise<MangaDetail> {
   const list = await fetchMangaBakaTrending(1, 30);
   return (list.find((m) => m.id === id) || list[0]) as MangaDetail;
 }
+
+export { fetchMangaCovers as fetchMangaBakaCovers } from './mangaProvider';
+
