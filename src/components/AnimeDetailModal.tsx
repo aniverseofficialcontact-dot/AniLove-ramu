@@ -1019,7 +1019,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             {[
               { id: 'overview', label: 'Overview' },
               { id: 'episodes', label: 'Chapters' },
-              { id: 'covers', label: 'Covers & Artworks' },
+              { id: 'covers', label: 'Covers' },
               { id: 'relations', label: 'Relations' },
               { id: 'characters', label: 'Cast' },
             ].map(tab => {
@@ -1780,15 +1780,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB COVERS & ARTWORKS */}
+            {/* TAB COVERS */}
             {activeTab === 'covers' && (
               <div className="space-y-4 text-left">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <h3 className="text-base font-bold uppercase tracking-wider text-slate-200">
-                    Official Volume Covers & Artworks
+                    Volume Covers
                   </h3>
                   <span className="text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">
-                    {mangaCovers.length} Artworks
+                    {mangaCovers.length} covers found
                   </span>
                 </div>
 
@@ -1811,10 +1811,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
+                          {cover.flag && (
+                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-sm text-xs font-bold shadow-md">
+                              {cover.flag} {cover.description || cover.volume}
+                            </div>
+                          )}
                         </div>
                         <div className="p-2.5 bg-slate-950/90 text-center">
                           <p className="text-xs font-bold text-slate-200 truncate">
-                            {cover.volume || 'Official Cover'}
+                            {cover.volume || 'Volume Cover'}
                           </p>
                         </div>
                       </div>

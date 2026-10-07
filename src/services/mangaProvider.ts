@@ -12,10 +12,29 @@ export interface MangaCoverArt {
   volume?: string;
   url: string;
   description?: string;
+  locale?: string;
+  flag?: string;
+}
+
+function localeToFlag(locale: string): string {
+  if (!locale) return '🇯🇵';
+  const loc = locale.toLowerCase();
+  if (loc === 'en' || loc === 'uk') return '🇬🇧';
+  if (loc === 'ja' || loc === 'jp') return '🇯🇵';
+  if (loc === 'es' || loc === 'es-la') return '🇪🇸';
+  if (loc === 'de') return '🇩🇪';
+  if (loc === 'fr') return '🇫🇷';
+  if (loc === 'it') return '🇮🇹';
+  if (loc === 'ko' || loc === 'kr') return '🇰🇷';
+  if (loc === 'zh' || loc === 'cn' || loc === 'zh-hk') return '🇨🇳';
+  if (loc === 'ru') return '🇷🇺';
+  if (loc === 'pt' || loc === 'pt-br') return '🇧🇷';
+  if (loc === 'ar') return '🇸🇦';
+  return '🌐';
 }
 
 /**
- * Resolves MangaDex UUID for any title with title variants
+ * Resolves MangaDex UUID for any title
  */
 export async function getMangaDexId(manga: Manga): Promise<string | null> {
   if (!manga) return null;
@@ -24,28 +43,27 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
     return mangaDexIdCache.get(cacheKey)!;
   }
 
-  const titlesToTry = [
+  const cleanTitles = [
     manga.title?.english,
     manga.title?.romaji,
     manga.title?.userPreferred,
   ]
     .filter(Boolean)
-    .map((t) => t!.trim().replace(/[!?:;]/g, ''))
+    .map((t) => t!.trim().replace(/\(.*?\)/g, '').replace(/[^a-z0-9\s]/gi, ' ').trim())
     .filter(Boolean);
 
-  const uniqueTitles = Array.from(new Set(titlesToTry));
+  const uniqueTitles = Array.from(new Set(cleanTitles));
 
   for (const titleStr of uniqueTitles) {
     try {
       const url = `${MANGADEX_BASE_URL}/manga?title=${encodeURIComponent(titleStr)}&limit=5`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MangaLove/1.0 (Mobile App)' },
+      }).catch(() => null);
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
           const dexId = json.data[0].id;
           mangaDexIdCache.set(cacheKey, dexId);
           return dexId;
@@ -62,63 +80,46 @@ export async function getMangaDexId(manga: Manga): Promise<string | null> {
 export const getMangaBakaId = getMangaDexId;
 
 /**
- * Fetches official volume covers & artwork variants for a Manga title via MangaDex & AniList
+ * Fetches all official volume covers & artwork variants for a Manga title via MangaDex
  */
 export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
   const covers: MangaCoverArt[] = [];
   const seenUrls = new Set<string>();
 
-  // 1. Always include AniList Primary Poster Artwork
-  if (manga?.coverImage?.extraLarge) {
-    seenUrls.add(manga.coverImage.extraLarge);
-    covers.push({
-      id: 'anilist_extralarge',
-      volume: 'Official Poster Art',
-      url: manga.coverImage.extraLarge,
-      description: 'Primary HD Poster Artwork',
-    });
-  }
-
-  // 2. Add Banner Image if available
-  if (manga?.bannerImage && !seenUrls.has(manga.bannerImage)) {
-    seenUrls.add(manga.bannerImage);
-    covers.push({
-      id: 'anilist_banner',
-      volume: 'Banner Art',
-      url: manga.bannerImage,
-      description: 'Official Wide Banner Artwork',
-    });
-  }
-
-  // 3. Fetch Volume Covers from MangaDex
   try {
     const dexId = await getMangaDexId(manga);
     if (dexId) {
-      const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&order[volume]=asc`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
+      // Fetch up to 200 covers across 2 paginated requests
+      const offsets = [0, 100];
+      for (const offset of offsets) {
+        const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'MangaLove/1.0 (Mobile App)' },
+        }).catch(() => null);
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          json.data.forEach((item: any, idx: number) => {
-            const vol = item.attributes?.volume;
-            const fileName = item.attributes?.fileName;
-            if (fileName) {
-              const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
-              if (!seenUrls.has(coverUrl)) {
-                seenUrls.add(coverUrl);
-                covers.push({
-                  id: item.id || `dex_cover_${idx}`,
-                  volume: vol ? `Volume ${vol} Cover` : `Volume Cover ${idx + 1}`,
-                  url: coverUrl,
-                  description: item.attributes?.description || '',
-                });
+        if (res && res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
+            json.data.forEach((item: any, idx: number) => {
+              const vol = item.attributes?.volume;
+              const fileName = item.attributes?.fileName;
+              const locale = item.attributes?.locale || 'ja';
+              if (fileName) {
+                const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
+                if (!seenUrls.has(coverUrl)) {
+                  seenUrls.add(coverUrl);
+                  covers.push({
+                    id: item.id || `dex_cover_${offset}_${idx}`,
+                    volume: vol ? `Volume ${vol}` : `Volume Variant ${idx + 1}`,
+                    url: coverUrl,
+                    description: vol ? `Front (Volume) ${vol}` : 'Official Cover',
+                    locale,
+                    flag: localeToFlag(locale),
+                  });
+                }
               }
-            }
-          });
+            });
+          }
         }
       }
     }
@@ -126,12 +127,26 @@ export async function fetchMangaCovers(manga: Manga): Promise<MangaCoverArt[]> {
     console.warn('[MangaDex Provider] Fetch covers notice:', err);
   }
 
-  if (manga?.coverImage?.large && !seenUrls.has(manga.coverImage.large)) {
-    covers.push({
-      id: 'anilist_large',
-      volume: 'Alternative Cover',
-      url: manga.coverImage.large,
-    });
+  // Fallback to AniList primary poster and banner if MangaDex returned no covers
+  if (covers.length === 0 && manga) {
+    if (manga.coverImage?.extraLarge) {
+      covers.push({
+        id: 'anilist_extralarge',
+        volume: 'Volume 1',
+        url: manga.coverImage.extraLarge,
+        flag: '🇯🇵',
+        description: 'Official Poster Art',
+      });
+    }
+    if (manga.bannerImage) {
+      covers.push({
+        id: 'anilist_banner',
+        volume: 'Banner Art',
+        url: manga.bannerImage,
+        flag: '🇯🇵',
+        description: 'Wide Banner Artwork',
+      });
+    }
   }
 
   return covers;
@@ -150,14 +165,13 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
     const dexId = await getMangaDexId(manga);
     if (dexId) {
       const url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=250`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MangaLove/1.0 (Mobile App)' },
+      }).catch(() => null);
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
           const chaptersMap = new Map<string, MangaChapter>();
 
           json.data.forEach((item: any) => {
@@ -210,16 +224,15 @@ export async function fetchChapterPages(chapterId: string, fallbackManga?: Manga
   if (chapterId && !chapterId.startsWith('fallback_')) {
     try {
       const url = `${MANGADEX_BASE_URL}/at-home/server/${chapterId}`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MangaLove/1.0 (Mobile App)' },
+      }).catch(() => null);
 
-      if (res.ok) {
-        const json = await res.json();
-        const baseUrl = json.baseUrl;
-        const hash = json.chapter?.hash;
-        const pageFiles = json.chapter?.data;
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        const baseUrl = json?.baseUrl;
+        const hash = json?.chapter?.hash;
+        const pageFiles = json?.chapter?.data;
 
         if (baseUrl && hash && Array.isArray(pageFiles) && pageFiles.length > 0) {
           const pages: MangaPage[] = pageFiles.map((filename: string, idx: number) => ({
