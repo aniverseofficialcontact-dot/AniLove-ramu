@@ -444,13 +444,12 @@ export function App() {
     }
 
     try {
-      let feed = await fetchKitsuHomeFeed(14).catch(() => null);
+      // Direct Native Comix.to Home Feed (Primary API Source)
+      const comixFeed = await fetchComixCatalogForHome().catch(() => null);
+      let feed = comixFeed;
+
       if (!feed || !feed.trending || feed.trending.length === 0) {
-        // Direct Native Comix.to Home Feed Fallback
-        const comixFeed = await fetchComixCatalogForHome().catch(() => null);
-        if (comixFeed && comixFeed.trending && comixFeed.trending.length > 0) {
-          feed = comixFeed;
-        }
+        feed = await fetchKitsuHomeFeed(14).catch(() => null);
       }
 
       if (feed && feed.trending && feed.trending.length > 0) {

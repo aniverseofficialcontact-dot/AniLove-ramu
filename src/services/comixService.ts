@@ -1,9 +1,8 @@
 import { Manga, MangaChapter, MangaPage } from '../types';
 
 /**
- * High-Performance Native Client-Side Service for Comix.to
- * Executes direct network requests from the user's mobile device (native IP address)
- * bypassing Cloudflare datacenter IP blocks entirely.
+ * Direct Client-Side Service for Comix.to API
+ * Executes network requests directly from the user's mobile device (native IP)
  */
 
 const HEADERS: Record<string, string> = {
@@ -15,7 +14,7 @@ const HEADERS: Record<string, string> = {
 };
 
 /**
- * Fetch HTML directly from Comix.to using native mobile fetch
+ * Fetch HTML directly from Comix.to
  */
 export async function fetchHtmlNative(targetUrl: string): Promise<string> {
   const res = await fetch(targetUrl, {
@@ -53,7 +52,39 @@ export function parseInitialData(html: string): any | null {
 export function extractChapterImages(html: string): { pageNumber: number; url: string }[] {
   const pages: { pageNumber: number; url: string }[] = [];
 
-  // 1. Look for images array in embedded JSON or script
+  // 1. Check embedded initial-data read object
+  const initData = parseInitialData(html);
+  if (initData && initData.read) {
+    const readInfo = initData.read;
+    const pagesData = readInfo.pages || readInfo.images || readInfo.items;
+
+    if (Array.isArray(pagesData)) {
+      pagesData.forEach((img: any, i: number) => {
+        const imgUrl = typeof img === 'string' ? img : img.url || img.src || img.path;
+        if (imgUrl) {
+          pages.push({
+            pageNumber: i + 1,
+            url: imgUrl.startsWith('http') ? imgUrl : `https://static.comix.to${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`,
+          });
+        }
+      });
+      if (pages.length > 0) return pages;
+    } else if (pagesData && typeof pagesData === 'object' && Array.isArray(pagesData.items)) {
+      const baseUrl = pagesData.baseUrl || 'https://static.comix.to/';
+      pagesData.items.forEach((item: any, i: number) => {
+        const urlPart = item.url || item.path || item.src;
+        if (urlPart) {
+          pages.push({
+            pageNumber: i + 1,
+            url: urlPart.startsWith('http') ? urlPart : `${baseUrl.replace(/\/$/, '')}/${urlPart.replace(/^\//, '')}`,
+          });
+        }
+      });
+      if (pages.length > 0) return pages;
+    }
+  }
+
+  // 2. Look for "images": [...] in any script tag
   const jsonMatches = html.match(/"images":\s*(\[[^\]]+\])/);
   if (jsonMatches) {
     try {
@@ -71,10 +102,12 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
     } catch (e) {}
   }
 
-  // 2. Look for static.comix.to image URLs in HTML
+  // 3. Look for static.comix.to image URLs in HTML
   const imgMatches = html.match(/https:\/\/static\.comix\.to\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp)/gi);
   if (imgMatches && imgMatches.length > 0) {
-    const uniqueImgs = [...new Set(imgMatches)].filter((img) => !img.includes('@280'));
+    const uniqueImgs = [...new Set(imgMatches)].filter(
+      (img) => !img.includes('@280') && !img.includes('avatar') && !img.includes('poster')
+    );
     uniqueImgs.forEach((url, i) => {
       pages.push({
         pageNumber: i + 1,
@@ -201,7 +234,6 @@ export async function fetchComixGenresAndFilters(): Promise<ComixFilterOptions> 
     console.warn('[comixService] Filter options fallback:', err);
   }
 
-  // Fallback defaults
   return {
     genres: [
       { id: 6, label: 'Action', slug: 'action' },
@@ -266,7 +298,6 @@ export async function searchComix(
       }
     }
 
-    // Fallback: If empty query on browse, use trending
     if (items.length === 0 && !query) {
       const homeFeed = await fetchComixHomeFeed();
       return homeFeed.trending;
@@ -335,10 +366,16 @@ export async function fetchComixTitleDetails(titleId: string): Promise<any | nul
 // ==========================================
 
 export async function fetchComixChapters(comixIdOrHash: string, page: number = 1): Promise<MangaChapter[]> {
-  const hashId = comixIdOrHash.split('-')[0];
+  const cleanId = comixIdOrHash.startsWith('comix_') ? comixIdOrHash.replace('comix_', '') : comixIdOrHash;
+  let titleSlug = cleanId;
+
+  if (/^\d+$/.test(cleanId)) {
+    const hid = await getComixHidForManga({ id: cleanId } as any);
+    if (hid) titleSlug = hid;
+  }
 
   try {
-    const targetUrl = `https://comix.to/title/${comixIdOrHash}?page=${page}`;
+    const targetUrl = `https://comix.to/title/${titleSlug}?page=${page}`;
     const html = await fetchHtmlNative(targetUrl);
     const initData = parseInitialData(html);
 
@@ -375,10 +412,10 @@ export async function fetchComixChapters(comixIdOrHash: string, page: number = 1
     return chaptersList.map((item: any) => {
       const chNum = String(item.number || item.chapter || item.chap || '1');
       const chTitle = item.title ? String(item.title).trim() : '';
-      const chapId = item.id || item.hid || item.number || chNum;
+      const slugPart = item.url ? item.url.split('/').pop() : `${item.id || item.hid || 'ch'}-chapter-${chNum}`;
 
       return {
-        id: `comix_${comixIdOrHash}_${chapId}`,
+        id: `comix_${titleSlug}___${slugPart}`,
         chapterNumber: chNum,
         title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
         volume: item.vol ? String(item.vol) : undefined,
@@ -400,13 +437,15 @@ export async function fetchComixChapters(comixIdOrHash: string, page: number = 1
 
 export async function fetchComixChapterPages(chapterId: string): Promise<MangaPage[]> {
   try {
-    // Expected chapterId format: comix_titleId_chapterSlug or titleId/chapterSlug
     let cleanId = chapterId.startsWith('comix_') ? chapterId.replace('comix_', '') : chapterId;
 
     let targetUrl = `https://comix.to/title/${cleanId}`;
-    if (cleanId.includes('_')) {
-      const [titleId, chapSlug] = cleanId.split('_');
-      targetUrl = `https://comix.to/title/${titleId}/${chapSlug}`;
+    if (cleanId.includes('___')) {
+      const [titleSlug, chapSlug] = cleanId.split('___');
+      targetUrl = `https://comix.to/title/${titleSlug}/${chapSlug}`;
+    } else if (cleanId.includes('_')) {
+      const parts = cleanId.split('_');
+      targetUrl = `https://comix.to/title/${parts[0]}/${parts[1]}`;
     }
 
     const html = await fetchHtmlNative(targetUrl);
@@ -463,6 +502,8 @@ export function comixToAnime(item: ComixMangaItem, idx?: number): any {
 
   return {
     id: numericId,
+    hid: item.id || item.hid,
+    slug: item.id || item.hid,
     title: {
       userPreferred: item.title,
       english: item.title,
@@ -504,7 +545,6 @@ export async function fetchComixCatalogForHome(): Promise<{
   const newest = comixFeed.newestAdditions.map((item, idx) => comixToAnime(item, idx));
   const hot = comixFeed.hotUpdates.map((item, idx) => comixToAnime(item, idx));
 
-  // Action / Fantasy / RomCom filters from available items
   const action = trending.filter((a) => a.genres.some((g: string) => /action|martial/i.test(g)));
   const fantasy = trending.filter((a) => a.genres.some((g: string) => /fantasy|isekai/i.test(g)));
   const romcom = trending.filter((a) => a.genres.some((g: string) => /romance|comedy/i.test(g)));
@@ -527,6 +567,9 @@ export async function fetchComixCatalogForHome(): Promise<{
  */
 export async function getComixHidForManga(manga: Manga): Promise<string | null> {
   if (!manga) return null;
+  if ((manga as any).hid) return (manga as any).hid;
+  if (typeof manga.id === 'string' && manga.id.includes('-')) return manga.id;
+
   const titleStr = (manga.title?.english || manga.title?.romaji || manga.title?.userPreferred || '').trim();
   if (!titleStr) return null;
 

@@ -595,6 +595,19 @@ export async function searchAnimeAdvanced({
 }): Promise<Anime[]> {
   const cleanSearch = search ? search.trim() : '';
 
+  // Direct Comix.to Native Search
+  try {
+    const comixResults = await searchComix(cleanSearch, {
+      genres: genres.length > 0 && !genres.includes('All') ? genres.join(',') : undefined,
+      page,
+    });
+    if (comixResults && comixResults.length > 0) {
+      return comixResults.map((item, idx) => comixToAnime(item, idx));
+    }
+  } catch (e) {
+    console.warn('Comix search notice:', e);
+  }
+
   try {
     const query = `
       query ($search: String, $genre_in: [String], $status: MediaStatus, $format: MediaFormat, $seasonYear: Int, $sort: [MediaSort], $page: Int, $perPage: Int) {
