@@ -12,18 +12,8 @@ import confetti from 'canvas-confetti';
 import { Anime, AnimeDetail, UserMediaListItem, MediaListStatus, AnimeTrailer, ThumbnailAppearance, MangaChapter, Manga } from '../types';
 import { fetchAnimeDetails, sanitizeDescription } from '../services/anilist';
 import { API_BASE, apiFetch, apiUrl } from '../services/api';
-import { ProVideoPlayer } from './ProVideoPlayer';
-import { AnimeWatchOrderTab } from './AnimeWatchOrderTab';
-import { computeTotalEpisodes, generateEpisodeRanges } from '../services/episodeHelper';
 import { getAnimeReleaseStatus } from '../services/releaseHelper';
 import { getStoredSettings } from '../services/storage';
-import {
-  checkIsFillerEpisode,
-  getArcOrFormattedTitle,
-  fetchExtendedEpisodesFromJikanOrKitsu,
-  getCanonicalEpisodeArtwork,
-  ExtendedEpisodeInfo,
-} from '../services/episodeMetadataService';
 import { getKitsuMangaTypeBadge, fetchKitsuScores, KitsuPlatformScores } from '../services/kitsuService';
 import { fetchMangaBakaDetails, fetchMangaBakaRelations, fetchMangaBakaScores, getMangaTypeBadge } from '../services/mangabakaService';
 import { fetchMangaCovers, fetchMangaChapters, MangaCoverArt } from '../services/mangaProvider';
@@ -553,84 +543,23 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   const [selectedEpisodeRange, setSelectedEpisodeRange] = useState<string>('all');
   const [extraEpisodeData, setExtraEpisodeData] = useState<Record<number, ExtendedEpisodeInfo>>({});
 
-  // Background fetcher for extended metadata for long anime
-  useEffect(() => {
-    if (!currentAnime) return;
-    let isMounted = true;
-    const targetEp = playingEpisode || currentProgress || 1;
-    const page = Math.floor((targetEp - 1) / 25) + 1;
-
-    fetchExtendedEpisodesFromJikanOrKitsu(currentAnime, page).then(data => {
-      if (isMounted && data && Object.keys(data).length > 0) {
-        setExtraEpisodeData(prev => ({ ...prev, ...data }));
-      }
-    });
-
-    if (page !== 1) {
-      fetchExtendedEpisodesFromJikanOrKitsu(currentAnime, 1).then(data => {
-        if (isMounted && data && Object.keys(data).length > 0) {
-          setExtraEpisodeData(prev => ({ ...prev, ...data }));
-        }
-      });
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentAnime?.id, currentAnime?.idMal, playingEpisode, selectedEpisodeRange]);
-
   const relStatus = useMemo(() => getAnimeReleaseStatus(currentAnime, details), [currentAnime, details]);
 
-  // Generate complete episodes catalog synchronized with AniList (with franchise sequel offset detection)
+  // Generate complete episodes catalog synchronized with AniList
   const episodeList = useMemo(() => {
     if (!currentAnime || !relStatus.isReleased) return [];
 
     const rawStreaming = details?.streamingEpisodes || (currentAnime as any).streamingEpisodes || [];
-    const total = computeTotalEpisodes(currentAnime, details);
+    const total = currentAnime?.chapters || details?.chapters || currentAnime?.episodes || details?.episodes || (rawStreaming.length > 0 ? rawStreaming.length : 12);
     const banner = currentAnime.bannerImage || currentAnime.coverImage?.extraLarge || bannerUrl || coverUrl;
-
-    const titleLower = (title || '').toLowerCase();
-    const isSequel =
-      titleLower.includes('season 2') ||
-      titleLower.includes('2nd season') ||
-      titleLower.includes('season 3') ||
-      titleLower.includes('3rd season') ||
-      titleLower.includes('season 4') ||
-      titleLower.includes('final season') ||
-      titleLower.includes('part 2') ||
-      (total < rawStreaming.length && rawStreaming.length >= total + 10);
-
-    const offset = isSequel && rawStreaming.length > total ? rawStreaming.length - total : 0;
-    const seasonStreaming = isSequel && offset > 0 ? rawStreaming.slice(offset) : rawStreaming;
-
-    // Quick lookup map for rawStreaming by title/number to avoid O(N^2) scans
-    const streamMap = new Map<number, any>();
-    if (rawStreaming && rawStreaming.length > 0) {
-      rawStreaming.forEach((s: any) => {
-        if (s?.title) {
-          const match = s.title.match(/(?:episode|ep|ep\.)\s*(\d+)/i) || s.title.match(/^(\d+)[\.\s]/);
-          if (match) {
-            const parsed = parseInt(match[1], 10);
-            if (!isNaN(parsed) && !streamMap.has(parsed)) {
-              streamMap.set(parsed, s);
-            }
-          }
-        }
-      });
-    }
 
     return Array.from({ length: Math.max(1, total) }, (_, i) => {
       const epNum = i + 1;
-      const absoluteEpNum = epNum + offset;
-
-      // 1. Direct index in slice or map lookup
-      let streamInfo = seasonStreaming[i] || streamMap.get(epNum) || streamMap.get(absoluteEpNum);
+      let streamInfo = rawStreaming[i];
       const extra = extraEpisodeData[epNum];
 
-      // Check if matched stream is from Season 1 while this is Season 2
       let rawTitle = streamInfo?.title;
       if (rawTitle) {
-        // Clean title prefixes
         rawTitle = rawTitle
           .replace(/^Episode\s*\d+\s*[-:]\s*/i, '')
           .replace(/^EP\s*\d+\s*[-:]\s*/i, '')
@@ -638,9 +567,9 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
           .trim();
       }
 
-      const epTitle = extra?.title || getArcOrFormattedTitle(title, epNum, rawTitle);
-      const epThumb = extra?.thumbnail || streamInfo?.thumbnail || getCanonicalEpisodeArtwork(title, epNum, currentAnime) || banner || coverUrl;
-      const isFiller = extra?.filler !== undefined ? extra.filler : checkIsFillerEpisode(title, epNum);
+      const epTitle = extra?.title || rawTitle || `Chapter ${epNum}`;
+      const epThumb = extra?.thumbnail || streamInfo?.thumbnail || banner || coverUrl;
+      const isFiller = extra?.filler !== undefined ? extra.filler : false;
 
       return {
         number: epNum,
@@ -1199,8 +1128,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                           <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.mangaUpdates}</div>
                         </div>
                         <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center col-span-2 sm:col-span-1">
-                          <div className="text-[10px] text-slate-400 font-semibold">MangaDex</div>
-                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.mangadex}</div>
+                          <div className="text-[10px] text-slate-400 font-semibold">Comix.to</div>
+                          <div className="font-bold text-slate-100 mt-0.5">{kitsuScores.comix || kitsuScores.mangadex}</div>
                         </div>
                       </div>
                     </div>
@@ -1641,27 +1570,6 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                   )}
                 </div>
               </div>
-            )}
-
-            {/* TAB: FRANCHISE WATCH ORDER (3rd Tab beside Episodes) */}
-            {activeTab === 'watch_order' && (
-              <AnimeWatchOrderTab
-                currentAnime={currentAnime}
-                details={details}
-                onNavigateToAnime={onNavigateToAnime}
-                onPlayStream={onPlayStream}
-                onOpenEpisodesTab={(targetAnime, targetEp) => {
-                  if (targetAnime.id !== currentAnime.id) {
-                    onNavigateToAnime(targetAnime);
-                  }
-                  setSelectedEpisodeRange('all');
-                  setEpisodeSearchQuery('');
-                  setActiveTab('episodes');
-                  if (targetEp) {
-                    setPlayingEpisode(targetEp);
-                  }
-                }}
-              />
             )}
 
             {/* TAB: FEATURED MUSIC */}

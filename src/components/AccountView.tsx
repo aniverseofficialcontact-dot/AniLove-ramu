@@ -48,7 +48,7 @@ import { UserSettings, UserMediaListItem, UserProfile, GachaCard, StreamServerId
 import { fetchUserMediaList, fetchAniListUserProfile, fetchViewerProfile, getAniListAuthUrl } from '../services/anilist';
 import { getStoredGachaVault, getCardAwakeningLevel } from '../services/storage';
 import { getSafeCharacterImage, getFallbackAvatarSvg } from '../services/characterPool';
-import { STREAM_PROVIDERS } from '../services/streamingProviders';
+
 
 interface AccountViewProps {
   settings: UserSettings;

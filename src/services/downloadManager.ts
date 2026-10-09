@@ -1,7 +1,5 @@
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { resolveEpisodeSource, STREAM_PROVIDERS, StreamLanguage, SUPPORTED_LANGUAGES } from './streamingProviders';
-import { fetchUnifiedSubtitles, anonymizeAndSortSubtitleTracks } from './subtitleService';
 
 export interface DownloadItemInfo {
   id: string;
@@ -184,58 +182,6 @@ export async function queueBatchEpisodeDownloads(
       let effectiveQuality = quality;
       let subtitleUrl = '';
       let subtitleUrl2 = '';
-
-      // Concurrent fetch: Subtitles + Stream URL
-      const [subs, streamRes] = await Promise.all([
-        fetchUnifiedSubtitles(anime.id, ep.number, 2500).catch(() => []),
-        resolveEpisodeSource({
-          anime,
-          episodeNumber: ep.number,
-          providerId: 'anime-world-v1',
-          language: audio,
-          resolution: (effectiveQuality as any) || '1080p',
-          serverName,
-        }).catch(() => null),
-      ]);
-
-      if (streamRes && streamRes.status === 'available' && streamRes.source?.url) {
-        streamUrl = streamRes.source.url;
-        selectedServerName = streamRes.source.selectedServerName || serverName;
-      }
-
-      // Format Subtitles
-      if (subs && subs.length > 0) {
-        const formatted = anonymizeAndSortSubtitleTracks(subs, subtitleLang, `${subtitleLang} 2`);
-        if (formatted && formatted.length > 0) {
-          const targetLangClean = (subtitleLang || 'English').toLowerCase().trim();
-          const matchingLang = formatted.filter(t => {
-            const l = (t.language || '').toLowerCase().trim();
-            const d = (t.displayLabel || '').toLowerCase().trim();
-            return l === targetLangClean || d.startsWith(targetLangClean) || targetLangClean.includes(l);
-          });
-
-          if (matchingLang.length > 0) {
-            subtitleUrl = matchingLang[0].url;
-            if (matchingLang.length > 1) {
-              subtitleUrl2 = matchingLang[1].url;
-            }
-          } else {
-            subtitleUrl = formatted[0].url;
-            if (formatted.length > 1) subtitleUrl2 = formatted[1].url;
-          }
-        }
-      }
-
-      if (!streamUrl) {
-        errors.push(`EP ${ep.number}: Could not resolve stream URL`);
-        return;
-      }
-
-      const isMovieBox =
-        streamUrl.includes('hakunaymatata') ||
-        streamUrl.includes('bcdnxw') ||
-        selectedServerName.toLowerCase().includes('moviebox') ||
-        selectedServerName.toLowerCase().includes('multi-lang');
 
       const downloadId = `${anime.id}_ep_${ep.number}_${audio.toLowerCase()}_${effectiveQuality}`;
 

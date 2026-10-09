@@ -13,6 +13,7 @@ import {
   fetchKitsuTrendingManga,
   searchKitsuManga,
 } from './services/kitsuService';
+import { fetchComixCatalogForHome } from './services/comixService';
 import {
   getUserLibrary,
   saveUserLibrary,
@@ -36,11 +37,10 @@ import { AnimeCard } from './components/AnimeCard';
 import { HorizontalAnimeRow } from './components/HorizontalAnimeRow';
 import { ContinueWatchingSection } from './components/ContinueWatchingSection';
 import { SearchView } from './components/SearchView';
+import { ExtensionsView } from './components/ExtensionsView';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
-import { TrailerModal } from './components/TrailerModal';
 import { MyLibraryView } from './components/MyLibraryView';
 import { AccountView } from './components/AccountView';
-import { WatchView } from './components/WatchView';
 import { DownloadsView } from './components/DownloadsView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -57,7 +57,6 @@ import { InteractiveAnime3DCardModal } from './components/InteractiveAnime3DCard
 import { PinUnlockModal } from './components/PinUnlockModal';
 import { QuoteOfTheDay } from './components/QuoteOfTheDay';
 import { AniListSyncBar } from './components/AniListSyncBar';
-import { launchNativePlayer } from './services/nativePlayer';
 import { Capacitor } from '@capacitor/core';
 import GlobalThemePlayer, { ThemeSongPayload } from './components/GlobalThemePlayer';
 import AmbientParticles from './components/AmbientParticles';
@@ -216,12 +215,18 @@ export function App() {
     soundEffects.setVolume(settings.soundVolume ?? 0.8);
   }, [settings.theme, settings.soundEffectsEnabled, settings.soundVolume]);
 
-  // Clean up the global HTML loading splash instantly once data is ready
+  // Clean up the global HTML loading splash instantly & signal native splash screen
   useEffect(() => {
-    if (!isMainLoading) {
-      const globalLoader = document.getElementById('app-global-loader');
-      if (globalLoader) {
-        globalLoader.remove();
+    (window as any).isWebReady = true;
+    const globalLoader = document.getElementById('app-global-loader');
+    if (globalLoader) {
+      globalLoader.remove();
+    }
+    if ((window as any).NativeApp && typeof (window as any).NativeApp.setWebReady === 'function') {
+      try {
+        (window as any).NativeApp.setWebReady();
+      } catch (e) {
+        console.warn('NativeApp.setWebReady call warning:', e);
       }
     }
   }, [isMainLoading]);
@@ -438,7 +443,15 @@ export function App() {
     }
 
     try {
-      const feed = await fetchKitsuHomeFeed(14);
+      let feed = await fetchKitsuHomeFeed(14).catch(() => null);
+      if (!feed || !feed.trending || feed.trending.length === 0) {
+        // Direct Native Comix.to Home Feed Fallback
+        const comixFeed = await fetchComixCatalogForHome().catch(() => null);
+        if (comixFeed && comixFeed.trending && comixFeed.trending.length > 0) {
+          feed = comixFeed;
+        }
+      }
+
       if (feed && feed.trending && feed.trending.length > 0) {
         setTrendingAnime(feed.trending);
         setPopularAnime(feed.popular);
@@ -455,7 +468,7 @@ export function App() {
       console.error('Error loading home content:', err);
       // Only notify if we don't already have catalog in state
       if (trendingAnime.length === 0) {
-        showToast('error', 'AniList rate limit or network issue. Serving cached catalog.', 'Catalog Notice');
+        showToast('error', 'Rate limit or network issue. Serving cached catalog.', 'Catalog Notice');
       }
     } finally {
       setIsMainLoading(false);
@@ -682,28 +695,9 @@ export function App() {
     }
   }, [activeWatchEpisode]);
 
-  // Handle native Android player back button navigation -> Redirect to Anime Details Modal (Image 3)
+  // Handle navigateToHome event
   useEffect(() => {
-    const handleNativeBack = () => {
-      const target = activeWatchEpisodeRef.current?.anime || currentWatchingAnimeRef.current || selectedAnimeRef.current;
-      setActiveWatchEpisode(null);
-      if (target) {
-        handleOpenDetails(target);
-      }
-    };
-
-    (window as any).closeNativePlayerAndOpenDetails = handleNativeBack;
-    window.addEventListener('nativePlayerBackButtonPressed', handleNativeBack);
-
-    return () => {
-      delete (window as any).closeNativePlayerAndOpenDetails;
-      window.removeEventListener('nativePlayerBackButtonPressed', handleNativeBack);
-    };
-  }, []);
-
-  // Handle native Android player home button navigation -> Close player & modals, redirect to Home tab
-  useEffect(() => {
-    const handleNativeHome = () => {
+    const handleHome = () => {
       setActiveWatchEpisode(null);
       setIsDetailModalOpen(false);
       setSelectedAnime(null);
@@ -711,12 +705,9 @@ export function App() {
       handleSelectTab('home');
     };
 
-    window.addEventListener('nativePlayerHomeButtonPressed', handleNativeHome);
-    window.addEventListener('navigateToHome', handleNativeHome);
-
+    window.addEventListener('navigateToHome', handleHome);
     return () => {
-      window.removeEventListener('nativePlayerHomeButtonPressed', handleNativeHome);
-      window.removeEventListener('navigateToHome', handleNativeHome);
+      window.removeEventListener('navigateToHome', handleHome);
     };
   }, []);
 
@@ -1148,36 +1139,7 @@ export function App() {
 
       {/* Main View Container */}
       <main className="flex-1 relative z-10 pt-0">
-        {/* VIEW 0: DEDICATED FULL-PAGE WATCH VIEW */}
-        {activeWatchEpisode ? (
-          <WatchView
-            anime={activeWatchEpisode.anime}
-            episodeNumber={activeWatchEpisode.episodeNumber}
-            initialTime={activeWatchEpisode.startTime || 0}
-            onBack={() => {
-              const currentAnime = activeWatchEpisode.anime;
-              setActiveWatchEpisode(null);
-              handleOpenDetails(currentAnime);
-            }}
-            onEpisodeChange={ep => {
-              setActiveWatchEpisode(prev => (prev ? { ...prev, episodeNumber: ep, startTime: 0 } : null));
-            }}
-            onNavigateToAnime={targetAnime => {
-              setActiveWatchEpisode({ anime: targetAnime, episodeNumber: 1, startTime: 0 });
-            }}
-            onUpdateStatus={handleUpdateStatus}
-            onUpdateProgress={handleUpdateProgress}
-            onOpenDetails={anime => handleOpenDetails(anime)}
-            userItem={library.find(item => item.mediaId === activeWatchEpisode.anime.id)}
-            isTwoWaySyncActive={Boolean(settings.twoWaySyncEnabled && settings.anilistToken)}
-            settings={settings}
-            onOpenDownloadsView={() => {
-              setActiveWatchEpisode(null);
-              handleSelectTab('downloads');
-            }}
-          />
-        ) : (
-          <>
+        <>
             {/* VIEW 1: HOME (Hero Spotlight, Continue Watching, Categories: Trending, Popular, Top Rated, Newest) */}
             {currentTab === 'home' && (
               <div className="space-y-8 pb-12">
@@ -1438,6 +1400,11 @@ export function App() {
               />
             )}
 
+            {/* VIEW 2.1: MIHON EXTENSIONS / SOURCES MANAGER */}
+            {currentTab === 'extensions' && (
+              <ExtensionsView />
+            )}
+
             {/* VIEW 2.5: INSTAGRAM-STYLE ANIME EDIT REELS */}
             {currentTab === 'reels' && (
               <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>}>
@@ -1585,8 +1552,7 @@ export function App() {
               </Suspense>
             )}
           </>
-        )}
-      </main>
+        </main>
     </div>
 
       {/* Mobile Bottom Bar (Hidden on Watch Page, Anime Details & Reels Tab) */}

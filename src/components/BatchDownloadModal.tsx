@@ -2,10 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Download, Check, X, Film, CheckSquare, Square, HardDrive, AlertCircle } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Anime, Episode } from '../types';
-import { StreamLanguage, STREAM_PROVIDERS, SUPPORTED_LANGUAGES, resolveEpisodeSource, probeMovieBoxAvailability } from '../services/streamingProviders';
 import { queueBatchEpisodeDownloads, isEpisodeDownloaded } from '../services/downloadManager';
-import { verifyBatchSubtitleAvailability } from '../services/subtitleService';
-import { NativePlayer } from '../services/nativePlayer';
 import { getStoredSettings } from '../services/storage';
 
 interface BatchDownloadModalProps {
@@ -27,12 +24,12 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   onClose,
   onOpenDownloadsView,
 }) => {
-  const [selectedAudio, setSelectedAudio] = useState<StreamLanguage>(initialAudio);
+  const [selectedAudio, setSelectedAudio] = useState<string>(initialAudio);
   const [selectedServer, setSelectedServer] = useState<string>(initialServer);
   const [selectedQuality, setSelectedQuality] = useState<string>('1080p');
   const [selectedSubtitleLang, setSelectedSubtitleLang] = useState<string>('English');
-  const [availableLanguages, setAvailableLanguages] = useState<StreamLanguage[]>(SUPPORTED_LANGUAGES.map(l => l.code));
-  const filteredLanguages = SUPPORTED_LANGUAGES;
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>(['en']);
+  const filteredLanguages = [{ code: 'en', name: 'English' }];
   const [movieBoxLangQualMap, setMovieBoxLangQualMap] = useState<Record<string, string[]>>({});
   const [isProbingStream, setIsProbingStream] = useState(false);
   const [selectedEpNumbers, setSelectedEpNumbers] = useState<Set<number>>(() => {
@@ -42,20 +39,7 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
   const displayTitle =
-    anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-
-  // Probe live MovieBox API for available languages & qualities
-  useEffect(() => {
-    let isMounted = true;
-    setIsProbingStream(true);
-    probeMovieBoxAvailability(displayTitle, currentEpisodeNumber)
-      .then(res => {
-        if (isMounted && res) {
-          if (res.availableLanguages && res.availableLanguages.length > 0) {
-            setAvailableLanguages(res.availableLanguages);
-          }
-          if (res.languageQualityMap) {
-            setMovieBoxLangQualMap(res.languageQualityMap);
+    anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Manga';
           }
         }
       })
@@ -65,17 +49,6 @@ export const BatchDownloadModal: React.FC<BatchDownloadModalProps> = ({
     return () => { isMounted = false; };
   }, [displayTitle, currentEpisodeNumber]);
 
-  // Hide floating Native Player overlay while modal is open so UI is fully visible
-  useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      NativePlayer.updatePosition({ y: -9999 }).catch(() => {});
-    }
-    return () => {
-      if (Capacitor.isNativePlatform()) {
-        NativePlayer.updatePosition({ y: 0 }).catch(() => {});
-      }
-    };
-  }, []);
   const is18PlusMode = Boolean(getStoredSettings().is18PlusMode || (anime as any)?.is18Plus || (anime as any)?.slug || anime?.isAdult);
 
   useEffect(() => {

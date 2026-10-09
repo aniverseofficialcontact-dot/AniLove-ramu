@@ -1,4 +1,5 @@
 import { Anime, AnimeDetail, AiringScheduleItem, AniListUser, MediaListStatus, UserMediaListItem } from '../types';
+import { searchComix, comixToAnime } from './comixService';
 
 export const ANILIST_API_URL = 'https://graphql.anilist.co';
 export const ANILIST_CLIENT_ID = '49024';
@@ -564,88 +565,11 @@ function stringToNumericId(str: string): number {
   return Math.abs(hash) + 100000;
 }
 
-async function fetchMangaDexFallback(queryStr: string): Promise<Anime[]> {
-  const dexUrl = `https://api.mangadex.org/manga?title=${encodeURIComponent(
-    queryStr
-  )}&limit=24&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive`;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3500);
-
+async function fetchComixFallback(queryStr: string): Promise<Anime[]> {
   try {
-    const res = await fetch(dexUrl, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-
-    const json = await res.json();
-    if (!json?.data || !Array.isArray(json.data)) return [];
-
-    return json.data.map((item: any) => {
-      const attrs = item.attributes || {};
-      const titles = attrs.title || {};
-      const primaryTitle = titles.en || titles.ja || titles['ja-ro'] || titles.ko || titles.zh || queryStr;
-
-      const coverRel = item.relationships?.find((r: any) => r.type === 'cover_art');
-      const coverFile = coverRel?.attributes?.fileName;
-      const coverUrl = coverFile
-        ? `https://uploads.mangadex.org/covers/${item.id}/${coverFile}`
-        : 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80';
-
-      const authorRel = item.relationships?.find((r: any) => r.type === 'author');
-      const authorName = authorRel?.attributes?.name || 'Manga Creator';
-
-      const lang = (attrs.originalLanguage || 'ja').toLowerCase();
-      let countryOfOrigin = 'JP';
-      let format = 'MANGA';
-
-      if (lang === 'ko' || lang === 'kr') {
-        countryOfOrigin = 'KR';
-        format = 'MANHWA';
-      } else if (lang === 'zh' || lang === 'cn') {
-        countryOfOrigin = 'CN';
-        format = 'MANHUA';
-      }
-
-      const tags: string[] = (attrs.tags || [])
-        .map((t: any) => t.attributes?.name?.en)
-        .filter(Boolean)
-        .slice(0, 6);
-
-      const numericId = stringToNumericId(item.id);
-
-      return {
-        id: numericId,
-        idMal: numericId,
-        title: {
-          english: primaryTitle,
-          romaji: primaryTitle,
-          userPreferred: primaryTitle,
-        },
-        coverImage: {
-          extraLarge: coverUrl,
-          large: coverUrl,
-          medium: coverUrl,
-        },
-        bannerImage: coverUrl,
-        countryOfOrigin,
-        format,
-        chapters: attrs.lastChapter ? parseInt(attrs.lastChapter, 10) || 120 : 120,
-        status: attrs.status === 'completed' ? 'FINISHED' : 'RELEASING',
-        averageScore: 88,
-        meanScore: 88,
-        popularity: 9500,
-        genres: tags.length > 0 ? tags : ['Action', 'Fantasy'],
-        description: attrs.description?.en || 'Discover story, chapter releases, and ratings on MangaDex.',
-        source: 'MangaDex Provider',
-        studios: {
-          nodes: [{ id: 1, name: authorName, isAnimationStudio: false }],
-        },
-        startDate: attrs.year ? { year: attrs.year } : undefined,
-        siteUrl: `https://mangadex.org/title/${item.id}`,
-      };
-    });
+    const results = await searchComix(queryStr);
+    return results.map((item, idx) => comixToAnime(item, idx));
   } catch (e) {
-    clearTimeout(timer);
     return [];
   }
 }
@@ -701,18 +625,18 @@ export async function searchAnimeAdvanced({
       return media;
     }
   } catch (err) {
-    console.warn('AniList search notice, checking MangaDex fallback:', err);
+    console.warn('AniList search notice, checking Comix fallback:', err);
   }
 
-  // Fallback to MangaDex if search query is present and AniList returned 0 results or encountered an issue
+  // Fallback to Comix if search query is present and AniList returned 0 results
   if (cleanSearch) {
     try {
-      const dexResults = await fetchMangaDexFallback(cleanSearch);
-      if (dexResults.length > 0) {
-        return dexResults;
+      const comixResults = await fetchComixFallback(cleanSearch);
+      if (comixResults.length > 0) {
+        return comixResults;
       }
     } catch (e) {
-      console.warn('MangaDex fallback error:', e);
+      console.warn('Comix fallback error:', e);
     }
   }
 

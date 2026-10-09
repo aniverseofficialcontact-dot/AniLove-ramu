@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, X, SlidersHorizontal, Camera, RotateCcw } from 'lucide-react';
+import { Search, X, SlidersHorizontal, Camera, RotateCcw, Puzzle, Globe } from 'lucide-react';
 import { Anime, UserMediaListItem, MediaListStatus } from '../types';
 import { AnimeCard } from './AnimeCard';
 import { fetchAnimeDetails, searchAnimeAdvanced } from '../services/anilist';
-import { AnimeSceneFinderModal } from './AnimeSceneFinderModal';
+import { mihonService, MihonSource } from '../services/mihonService';
 
 interface SearchViewProps {
   userLibrary: UserMediaListItem[];
@@ -79,6 +79,17 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [selectedSort, setSelectedSort] = useState<string>('POPULARITY_DESC');
 
+  const [mihonSources, setMihonSources] = useState<MihonSource[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
+
+  useEffect(() => {
+    mihonService.getSources().then(sources => {
+      if (sources && sources.length > 0) {
+        setMihonSources(sources);
+      }
+    });
+  }, []);
+
   const [results, setResults] = useState<Anime[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
@@ -137,6 +148,23 @@ export const SearchView: React.FC<SearchViewProps> = ({
       const executeSearch = async () => {
         setIsLoading(true);
         try {
+          if (selectedSourceId && selectedSourceId !== 'all') {
+            const mihonResult = await mihonService.searchManga(selectedSourceId, searchQuery.trim());
+            if (mihonResult && mihonResult.mangas && mihonResult.mangas.length > 0) {
+              const mappedManga: Anime[] = mihonResult.mangas.map((m, idx) => ({
+                id: Math.abs((m.url + m.sourceId).split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a|0},0)) || (idx + 100000),
+                title: { english: m.title, romaji: m.title, userPreferred: m.title },
+                coverImage: { extraLarge: m.thumbnailUrl || '', large: m.thumbnailUrl || '', medium: m.thumbnailUrl || '' },
+                format: 'MANGA',
+                status: 'RELEASING',
+                siteUrl: m.url,
+                sourceId: m.sourceId,
+              } as any));
+              setResults(mappedManga);
+              return;
+            }
+          }
+
           const searchData = await searchAnimeAdvanced({
             search: searchQuery.trim() || undefined,
             genres: selectedGenres.length > 0 ? selectedGenres : undefined,
@@ -163,7 +191,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
     return () => {
       clearTimeout(timer);
     };
-  }, [searchQuery, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort]);
+  }, [searchQuery, selectedSourceId, selectedGenres, selectedStatus, selectedFormat, selectedYear, selectedSort]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 space-y-5">
@@ -179,6 +207,51 @@ export const SearchView: React.FC<SearchViewProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Mihon Extension Source Selector Bar */}
+      {mihonSources.length > 0 && (
+        <div className="bg-slate-900/90 border border-indigo-500/30 rounded-2xl p-3.5 backdrop-blur-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Puzzle className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                Mihon Extension Source:
+              </span>
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+              {mihonSources.length} Scrapers Active
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setSelectedSourceId('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                selectedSourceId === 'all'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border border-white/5'
+              }`}
+            >
+              All / Default
+            </button>
+            {mihonSources.map((source) => (
+              <button
+                key={source.id}
+                onClick={() => setSelectedSourceId(source.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  selectedSourceId === source.id
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 border border-white/5'
+                }`}
+              >
+                <Globe className="w-3 h-3 text-indigo-400" />
+                <span>{source.name}</span>
+                <span className="text-[9px] uppercase opacity-75 font-mono">({source.lang})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Primary Search Bar Container */}
       <div className="p-4 sm:p-5 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl shadow-2xl space-y-4">
@@ -361,13 +434,6 @@ export const SearchView: React.FC<SearchViewProps> = ({
           <p className="text-sm">No manga found matching your criteria.</p>
         </div>
       )}
-
-      {/* Trace.moe Scene Finder Modal */}
-      <AnimeSceneFinderModal
-        isOpen={isSceneFinderOpen}
-        onClose={() => setIsSceneFinderOpen(false)}
-        onSelectAnime={handleSelectAnimeFromSceneFinder}
-      />
     </div>
   );
 };

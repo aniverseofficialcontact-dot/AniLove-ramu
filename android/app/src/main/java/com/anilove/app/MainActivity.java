@@ -32,7 +32,6 @@ public class MainActivity extends BridgeActivity {
     private static final int NOTIFICATION_PERMISSION_REQ_CODE = 101;
 
     public static MainActivity instance;
-    public static boolean pendingBackToDetails = false;
     public static boolean isWebReady = false;
 
     private String pendingDeepLinkToken = null;
@@ -46,9 +45,6 @@ public class MainActivity extends BridgeActivity {
 
         // Keep native splash screen visible until web code signals it's ready
         splashScreen.setKeepOnScreenCondition(() -> !isWebReady);
-
-        registerPlugin(NativePlayerPlugin.class);
-        registerPlugin(DownloadPlugin.class);
 
         super.onCreate(savedInstanceState);
 
@@ -233,11 +229,6 @@ public class MainActivity extends BridgeActivity {
         forcePortraitOrientation();
         hideSystemBars();
 
-        if (pendingBackToDetails) {
-            pendingBackToDetails = false;
-            dispatchBackToDetails();
-        }
-
         // Process any deep link intent on activity resume
         if (getIntent() != null && getIntent().getData() != null) {
             handleDeepLinkIntent(getIntent());
@@ -308,18 +299,6 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Failed to inject AniList token", e);
             }
-        }
-    }
-
-    public void dispatchBackToDetails() {
-        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
-        if (webView != null) {
-            String js = "if (window.closeNativePlayerAndOpenDetails) { " +
-                        "  window.closeNativePlayerAndOpenDetails(); " +
-                        "} else { " +
-                        "  window.dispatchEvent(new CustomEvent('nativePlayerBackButtonPressed')); " +
-                        "}";
-            webView.evaluateJavascript(js, null);
         }
     }
 

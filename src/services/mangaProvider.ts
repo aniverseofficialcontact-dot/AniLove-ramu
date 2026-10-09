@@ -1,12 +1,7 @@
 import { Manga, MangaChapter, MangaPage } from '../types';
+import { mihonService } from './mihonService';
+import { fetchComixChapters, fetchComixChapterPages, getComixHidForManga } from './comixService';
 
-const MANGADEX_BASE_URL = 'https://api.mangadex.org';
-const MANGADEX_UPLOADS_URL = 'https://uploads.mangadex.org';
-const COMICK_BASE_URL = 'https://api.comick.cc';
-const COMICK_IMAGES_URL = 'https://meo.comick.pictures';
-
-const mangaDexIdCache = new Map<number | string, string>();
-const comickHidCache = new Map<number | string, string>();
 const chapterListCache = new Map<string, MangaChapter[]>();
 const pagesCache = new Map<string, MangaPage[]>();
 
@@ -43,133 +38,6 @@ export function getLanguageDetails(locale: string): { flag: string; name: string
   if (loc === 'id') return { flag: '🇮🇩', name: 'Indonesian' };
   return { flag: '🌐', name: locale.toUpperCase() };
 }
-
-function localeToFlag(locale: string): string {
-  return getLanguageDetails(locale).flag;
-}
-
-function determineCoverType(description?: string): string {
-  if (!description) return 'Front';
-  const desc = description.toLowerCase();
-  if (desc.includes('back')) return 'Back';
-  if (desc.includes('spine')) return 'Spine';
-  if (desc.includes('variant') || desc.includes('alt')) return 'Variant';
-  if (desc.includes('box')) return 'Box Set';
-  if (desc.includes('inner')) return 'Inner';
-  if (desc.includes('extra')) return 'Extra';
-  return 'Front';
-}
-
-/**
- * Resolves Comick HID for any title
- */
-export async function getComickHid(manga: Manga): Promise<string | null> {
-  if (!manga) return null;
-  const cacheKey = manga.id || manga.title?.english || manga.title?.romaji || manga.title?.userPreferred;
-  if (comickHidCache.has(cacheKey)) {
-    return comickHidCache.get(cacheKey)!;
-  }
-
-  const cleanTitles = [
-    manga.title?.english,
-    manga.title?.romaji,
-    manga.title?.userPreferred,
-  ]
-    .filter(Boolean)
-    .map((t) => t!.trim().replace(/\(.*?\)/g, '').replace(/[^a-z0-9\s]/gi, ' ').trim())
-    .filter(Boolean);
-
-  for (const titleStr of Array.from(new Set(cleanTitles))) {
-    try {
-      const url = `${COMICK_BASE_URL}/v1.0/search?q=${encodeURIComponent(titleStr)}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
-
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        if (Array.isArray(json) && json.length > 0) {
-          const hid = json[0].hid;
-          comickHidCache.set(cacheKey, hid);
-          return hid;
-        }
-      }
-    } catch (e) {
-      console.warn('[Comick Provider] Search ID notice:', e);
-    }
-  }
-
-  return null;
-}
-
-function isTitleMatch(dexItem: any, targetTitles: string[]): boolean {
-  if (!dexItem || !targetTitles || targetTitles.length === 0) return true;
-  const dexTitles: string[] = [];
-  const attrs = dexItem.attributes || {};
-  if (attrs.title) {
-    Object.values(attrs.title).forEach((t: any) => dexTitles.push(String(t).toLowerCase()));
-  }
-  if (Array.isArray(attrs.altTitles)) {
-    attrs.altTitles.forEach((altObj: any) => {
-      Object.values(altObj).forEach((t: any) => dexTitles.push(String(t).toLowerCase()));
-    });
-  }
-
-  for (const target of targetTitles) {
-    const tNorm = target.toLowerCase();
-    for (const dexT of dexTitles) {
-      if (dexT === tNorm || dexT.includes(tNorm) || tNorm.includes(dexT)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-/**
- * Resolves MangaDex UUID for any title
- */
-export async function getMangaDexId(manga: Manga): Promise<string | null> {
-  if (!manga) return null;
-  const cacheKey = manga.id || manga.title?.english || manga.title?.romaji || manga.title?.userPreferred;
-  if (mangaDexIdCache.has(cacheKey)) {
-    return mangaDexIdCache.get(cacheKey)!;
-  }
-
-  const cleanTitles = [
-    manga.title?.english,
-    manga.title?.romaji,
-    manga.title?.userPreferred,
-  ]
-    .filter(Boolean)
-    .map((t) => t!.trim().replace(/\(.*?\)/g, '').replace(/[^a-z0-9\s]/gi, ' ').trim())
-    .filter(Boolean);
-
-  for (const titleStr of Array.from(new Set(cleanTitles))) {
-    try {
-      const url = `${MANGADEX_BASE_URL}/manga?title=${encodeURIComponent(titleStr)}&limit=10&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
-
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
-          const match = json.data.find((item: any) => isTitleMatch(item, cleanTitles)) || json.data[0];
-          const dexId = match.id;
-          mangaDexIdCache.set(cacheKey, dexId);
-          return dexId;
-        }
-      }
-    } catch (err) {
-      console.warn('[MangaDex Provider] ID search notice:', err);
-    }
-  }
-
-  return null;
-}
-
-export const getMangaBakaId = getMangaDexId;
 
 /**
  * Fetches all official volume covers & artwork variants with live incremental streaming
@@ -226,47 +94,9 @@ export async function fetchMangaCovers(
     });
   }
 
-  // Emit initial primary cover immediately (<10ms)
   emitChunk();
 
-  const processItems = (items: any[], dexId: string) => {
-    let addedCount = 0;
-    items.forEach((item: any, idx: number) => {
-      const vol = item.attributes?.volume;
-      const fileName = item.attributes?.fileName;
-      const locale = item.attributes?.locale || 'ja';
-      const descRaw = item.attributes?.description || '';
-
-      if (fileName) {
-        const coverUrl = `${MANGADEX_UPLOADS_URL}/covers/${dexId}/${fileName}`;
-        if (!seenUrls.has(coverUrl)) {
-          seenUrls.add(coverUrl);
-
-          const coverType = determineCoverType(descRaw);
-          const langInfo = getLanguageDetails(locale);
-          const volNum = vol ? parseFloat(vol) : undefined;
-          const formattedDesc = `${coverType} ${vol ? `(Volume) ${vol}` : ''}`.trim();
-
-          covers.push({
-            id: item.id || `dex_cover_${covers.length}_${idx}`,
-            volume: vol ? `Volume ${vol}` : `Volume ${covers.length + 1}`,
-            volumeNum: volNum,
-            url: coverUrl,
-            type: coverType,
-            description: formattedDesc,
-            locale,
-            flag: langInfo.flag,
-            languageName: langInfo.name,
-          });
-          addedCount++;
-        }
-      }
-    });
-    return addedCount;
-  };
-
-  // 2. Query MangaDex + Kitsu
-  const dexIdPromise = getMangaDexId(manga);
+  // 2. Query Kitsu for Covers
   const kitsuSearchPromise = titleStr
     ? fetch(`https://kitsu.io/api/edge/manga?filter[text]=${encodeURIComponent(titleStr)}&page[limit]=10`, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
@@ -275,65 +105,7 @@ export async function fetchMangaCovers(
         .catch(() => null)
     : Promise.resolve(null);
 
-  // Process MangaDex as soon as ID resolves
-  const dexProcessPromise = dexIdPromise.then(async (dexId) => {
-    if (!dexId) return;
-    try {
-      // Step 1: Fetch offset 0 (first 100 covers)
-      const initialUrl = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=0&order[volume]=asc`;
-      const res = await fetch(initialUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
-
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        const total = json?.total || 0;
-        const initialItems = json?.data && Array.isArray(json.data) ? json.data : [];
-
-        if (initialItems.length > 0) {
-          processItems(initialItems, dexId);
-          // Emit immediately so user sees initial ~100 covers in ~200ms!
-          emitChunk();
-        }
-
-        // If total > 100, fetch remaining offsets concurrently, streaming live updates
-        if (total > 100) {
-          const remainingOffsets: number[] = [];
-          for (let offset = 100; offset < Math.min(total, 800); offset += 100) {
-            remainingOffsets.push(offset);
-          }
-
-          const offsetPromises = remainingOffsets.map(async (offset) => {
-            try {
-              const url = `${MANGADEX_BASE_URL}/cover?manga[]=${dexId}&limit=100&offset=${offset}&order[volume]=asc`;
-              const oRes = await fetch(url, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-              }).catch(() => null);
-
-              if (oRes && oRes.ok) {
-                const oJson = await oRes.json().catch(() => null);
-                if (oJson?.data && Array.isArray(oJson.data) && oJson.data.length > 0) {
-                  const added = processItems(oJson.data, dexId);
-                  if (added > 0) {
-                    emitChunk(); // Live stream chunk to UI!
-                  }
-                }
-              }
-            } catch (err) {
-              // ignore offset error
-            }
-          });
-
-          await Promise.allSettled(offsetPromises);
-        }
-      }
-    } catch (err) {
-      console.warn('[MangaDex Provider] Fetch covers notice:', err);
-    }
-  });
-
-  // Process Kitsu as soon as search completes
-  const kitsuProcessPromise = kitsuSearchPromise.then((kitsuResult) => {
+  await kitsuSearchPromise.then((kitsuResult) => {
     if (kitsuResult?.data && Array.isArray(kitsuResult.data)) {
       let added = false;
       kitsuResult.data.forEach((kitsuItem: any, idx: number) => {
@@ -352,8 +124,8 @@ export async function fetchMangaCovers(
             url: poster,
             type: 'Front',
             description: `Front (Volume) ${covers.length + 1}`,
-            flag: '🇰🇷',
-            languageName: 'Korean',
+            flag: '🇯🇵',
+            languageName: 'Japanese',
           });
           added = true;
         }
@@ -366,8 +138,8 @@ export async function fetchMangaCovers(
             url: cover,
             type: 'Variant',
             description: `Variant Cover ${covers.length + 1}`,
-            flag: '🇰🇷',
-            languageName: 'Korean',
+            flag: '🇯🇵',
+            languageName: 'Japanese',
           });
           added = true;
         }
@@ -376,12 +148,11 @@ export async function fetchMangaCovers(
     }
   });
 
-  await Promise.allSettled([dexProcessPromise, kitsuProcessPromise]);
   return covers;
 }
 
 /**
- * Fetches available chapters for a Manga title via Comick + MangaDex Engines concurrently
+ * Fetches available chapters for a Manga title directly via Comix Engine & Mihon Engine
  */
 export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> {
   const cacheKey = `chapters_${manga.id}`;
@@ -391,93 +162,22 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
 
   const chaptersMap = new Map<string, MangaChapter>();
 
-  // Run Comick & MangaDex requests concurrently
-  const comickPromise = (async () => {
-    try {
-      const comickHid = await getComickHid(manga);
-      if (comickHid) {
-        const url = `${COMICK_BASE_URL}/comic/${comickHid}/chapters?lang=en&limit=300`;
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-        }).catch(() => null);
-
-        if (res && res.ok) {
-          const json = await res.json().catch(() => null);
-          const list = json?.chapters || json;
-          if (Array.isArray(list) && list.length > 0) {
-            list.forEach((item: any) => {
-              const chNum = String(item.chap || item.chapterNumber || '1');
-              const chTitle = item.title ? String(item.title).trim() : '';
-
-              if (!chaptersMap.has(chNum)) {
-                chaptersMap.set(chNum, {
-                  id: `comick_${item.hid}`,
-                  chapterNumber: chNum,
-                  title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
-                  volume: item.vol ? String(item.vol) : undefined,
-                  language: 'en',
-                  scanlationGroup: item.group_name?.[0] || 'Official Release',
-                });
-              }
-            });
+  // Run Comix Engine request
+  try {
+    const comixHid = await getComixHidForManga(manga);
+    if (comixHid) {
+      const comixChaps = await fetchComixChapters(comixHid);
+      if (Array.isArray(comixChaps) && comixChaps.length > 0) {
+        comixChaps.forEach((ch) => {
+          if (!chaptersMap.has(ch.chapterNumber)) {
+            chaptersMap.set(ch.chapterNumber, ch);
           }
-        }
+        });
       }
-    } catch (e) {
-      console.warn('[Comick Provider] Chapter list error:', e);
     }
-  })();
-
-  const dexPromise = (async () => {
-    try {
-      const dexId = await getMangaDexId(manga);
-      if (dexId) {
-        let url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?translatedLanguage[]=en&order[chapter]=asc&limit=500&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-        let res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-        }).catch(() => null);
-
-        let json = res && res.ok ? await res.json().catch(() => null) : null;
-        let items = json?.data || [];
-
-        // Fallback: If English filter returns 0 chapters, try without language filter
-        if (!Array.isArray(items) || items.length === 0) {
-          url = `${MANGADEX_BASE_URL}/manga/${dexId}/feed?order[chapter]=asc&limit=500&includes[]=scanlation_group&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-          res = await fetch(url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-          }).catch(() => null);
-          json = res && res.ok ? await res.json().catch(() => null) : null;
-          items = json?.data || [];
-        }
-
-        if (Array.isArray(items) && items.length > 0) {
-          items.forEach((item: any) => {
-            const chNum = String(item.attributes?.chapter || '1');
-            const chTitle = item.attributes?.title ? String(item.attributes.title).trim() : '';
-            const groupRel = item.relationships?.find((r: any) => r.type === 'scanlation_group');
-            const groupName = groupRel?.attributes?.name || 'MangaDex Group';
-
-            if (!chaptersMap.has(chNum)) {
-              chaptersMap.set(chNum, {
-                id: `mangadex_${item.id}`,
-                chapterNumber: chNum,
-                title: chTitle ? `Chapter ${chNum}: ${chTitle}` : `Chapter ${chNum}`,
-                volume: item.attributes?.volume ? String(item.attributes.volume) : undefined,
-                language: item.attributes?.translatedLanguage || 'en',
-                scanlationGroup: groupName,
-                publishAt: item.attributes?.publishAt || item.attributes?.readableAt,
-                pagesCount: typeof item.attributes?.pages === 'number' ? item.attributes.pages : undefined,
-              });
-            }
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('[MangaDex Provider] Fetch chapters notice:', err);
-    }
-  })();
-
-  await Promise.allSettled([comickPromise, dexPromise]);
+  } catch (e) {
+    console.warn('[Comix Provider] Chapter list notice:', e);
+  }
 
   const sorted = Array.from(chaptersMap.values()).sort((a, b) => {
     const numA = parseFloat(a.chapterNumber) || 0;
@@ -496,110 +196,66 @@ export async function fetchMangaChapters(manga: Manga): Promise<MangaChapter[]> 
 }
 
 /**
- * Fetches REAL page image URLs for a chapter via Comick & MangaDex APIs
+ * Fetches page image URLs for a chapter via Comix Engine & Mihon Plugin
  */
 export async function fetchChapterPages(chapterId: string, fallbackManga?: Manga, chapterNumber?: number): Promise<MangaPage[]> {
   if (pagesCache.has(chapterId)) {
     return pagesCache.get(chapterId)!;
   }
 
-  // 1. Fetch from Comick Engine
-  if (chapterId && chapterId.startsWith('comick_')) {
-    const hid = chapterId.replace('comick_', '');
+  // 1. Fetch from Mihon Engine Plugin
+  if (chapterId && chapterId.startsWith('mihon_')) {
     try {
-      const url = `${COMICK_BASE_URL}/chapter/${hid}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
-
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        const images = json?.chapter?.images;
-        if (Array.isArray(images) && images.length > 0) {
-          const pages: MangaPage[] = images.map((img: any, idx: number) => ({
+      const parts = chapterId.replace('mihon_', '').split('_chapter_');
+      const sourceId = parts[0];
+      const chapterUrl = parts[1];
+      if (sourceId && chapterUrl) {
+        const pageUrls = await mihonService.getChapterPages(sourceId, chapterUrl);
+        if (pageUrls && pageUrls.length > 0) {
+          const pages: MangaPage[] = pageUrls.map((url, idx) => ({
             pageNumber: idx + 1,
-            url: img.url || `${COMICK_IMAGES_URL}/${img.b2key}`,
+            url,
           }));
-
           pagesCache.set(chapterId, pages);
           return pages;
         }
       }
     } catch (e) {
-      console.warn('[Comick Provider] Fetch chapter pages notice:', e);
+      console.warn('[Mihon Provider] Fetch chapter pages notice:', e);
     }
   }
 
-  // 2. Fetch from MangaDex Engine
-  const dexChapId = chapterId.startsWith('mangadex_') ? chapterId.replace('mangadex_', '') : chapterId;
-  if (dexChapId && !dexChapId.startsWith('fallback_')) {
+  // 2. Fetch from Comix Engine
+  if (chapterId && (chapterId.startsWith('comix_') || chapterId.includes('-chapter-'))) {
     try {
-      const url = `${MANGADEX_BASE_URL}/at-home/server/${dexChapId}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      }).catch(() => null);
-
-      if (res && res.ok) {
-        const json = await res.json().catch(() => null);
-        const baseUrl = json?.baseUrl;
-        const hash = json?.chapter?.hash;
-        const pageFiles = json?.chapter?.data;
-
-        if (baseUrl && hash && Array.isArray(pageFiles) && pageFiles.length > 0) {
-          const pages: MangaPage[] = pageFiles.map((filename: string, idx: number) => ({
-            pageNumber: idx + 1,
-            url: `${baseUrl}/data/${hash}/${filename}`,
-          }));
-
-          pagesCache.set(chapterId, pages);
-          return pages;
-        }
+      const pages = await fetchComixChapterPages(chapterId);
+      if (Array.isArray(pages) && pages.length > 0) {
+        pagesCache.set(chapterId, pages);
+        return pages;
       }
-    } catch (err) {
-      console.warn('[MangaDex Provider] Fetch pages notice:', err);
+    } catch (e) {
+      console.warn('[Comix Provider] Fetch chapter pages notice:', e);
     }
   }
 
-  // 3. Dynamic Live Chapter Page Search Fallback
+  // Fallback: If fallbackManga is provided, try searching Comix directly
   if (fallbackManga) {
     try {
-      const comickHid = await getComickHid(fallbackManga);
-      if (comickHid) {
-        const searchChUrl = `${COMICK_BASE_URL}/comic/${comickHid}/chapters?lang=en&limit=100`;
-        const chRes = await fetch(searchChUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-        }).catch(() => null);
-
-        if (chRes && chRes.ok) {
-          const chJson = await chRes.json().catch(() => null);
-          const list = chJson?.chapters || chJson;
-          if (Array.isArray(list)) {
-            const targetNum = chapterNumber || 1;
-            const match = list.find((c: any) => parseFloat(c.chap) === targetNum);
-            if (match && match.hid) {
-              const pageRes = await fetch(`${COMICK_BASE_URL}/chapter/${match.hid}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-              }).catch(() => null);
-
-              if (pageRes && pageRes.ok) {
-                const pageJson = await pageRes.json().catch(() => null);
-                const images = pageJson?.chapter?.images;
-                if (Array.isArray(images) && images.length > 0) {
-                  const pages: MangaPage[] = images.map((img: any, idx: number) => ({
-                    pageNumber: idx + 1,
-                    url: img.url || `${COMICK_IMAGES_URL}/${img.b2key}`,
-                  }));
-
-                  pagesCache.set(chapterId, pages);
-                  return pages;
-                }
-              }
-            }
+      const comixHid = await getComixHidForManga(fallbackManga);
+      if (comixHid) {
+        const comixChaps = await fetchComixChapters(comixHid);
+        const targetNum = String(chapterNumber || 1);
+        const match = comixChaps.find((c) => c.chapterNumber === targetNum) || comixChaps[0];
+        if (match) {
+          const pages = await fetchComixChapterPages(match.id);
+          if (Array.isArray(pages) && pages.length > 0) {
+            pagesCache.set(chapterId, pages);
+            return pages;
           }
         }
       }
     } catch (e) {
-      console.warn('[Manga Provider] Live chapter page search error:', e);
+      console.warn('[Manga Provider] Comix live fallback search notice:', e);
     }
   }
 

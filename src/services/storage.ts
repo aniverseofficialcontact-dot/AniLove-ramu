@@ -1,6 +1,5 @@
 import { UserMediaListItem, UserSettings, Anime, EpisodeNote, AppTheme, WatchHistoryEntry, GachaCard, MediaListStatus } from '../types';
 import { API_BASE, apiFetch, apiUrl } from './api';
-import { evictSubtitleCache } from './subtitleService';
 
 const SETTINGS_KEY = 'anilove_settings_v3';
 const SETTINGS_KEY_LEGACY = 'anilove_settings_legacy';
@@ -637,14 +636,8 @@ export function removeWatchHistoryItem(animeId: number, episodeNumber?: number):
   const updated = current.filter(item => {
     if (item.animeId !== animeId) return true;
     if (episodeNumber !== undefined && item.episodeNumber !== episodeNumber) return true;
-    if (episodeNumber !== undefined) evictSubtitleCache(animeId, episodeNumber);
     return false;
   });
-  if (episodeNumber === undefined) {
-    current.forEach(item => {
-      if (item.animeId === animeId) evictSubtitleCache(item.animeId, item.episodeNumber);
-    });
-  }
   saveStoredWatchHistory(updated);
   return updated;
 }

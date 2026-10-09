@@ -9,7 +9,6 @@ import {
 import { UserSettings, UserMediaListItem, MediaListStatus, StreamServerId, MALUser } from '../types';
 import { getAniListAuthUrl, fetchUserMediaList, fetchAuthenticatedViewer } from '../services/anilist';
 import { fetchMALUserAnimelist, fetchMALUserProfile, getMALAuthUrl } from '../services/myanimelist';
-import { STREAM_PROVIDERS, SUPPORTED_LANGUAGES } from '../services/streamingProviders';
 
 interface SettingsViewProps {
   settings: UserSettings;
