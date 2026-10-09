@@ -452,24 +452,73 @@ export function App() {
         feed = await fetchKitsuHomeFeed(14).catch(() => null);
       }
 
+      const FALLBACK_TITLES: Anime[] = [
+        {
+          id: 999101,
+          title: { english: 'The Beginning After the End', userPreferred: 'The Beginning After the End', romaji: 'The Beginning After the End' },
+          coverImage: { extraLarge: 'https://static.comix.to/4ec7/i/4/4d/poster@280.jpg', large: 'https://static.comix.to/4ec7/i/4/4d/poster@280.jpg', medium: 'https://static.comix.to/4ec7/i/4/4d/poster@280.jpg' },
+          bannerImage: 'https://static.comix.to/4ec7/i/4/4d/poster@280.jpg',
+          description: 'King Grey has unrivaled strength, wealth, and prestige in a world governed by martial ability. However, solitude lingers closely behind those with great power.',
+          averageScore: 92,
+          status: 'RELEASING',
+          genres: ['Action', 'Fantasy', 'Isekai'],
+          format: 'MANGA',
+          chapters: 180,
+          hid: '6e6jz-the-beginning-after-the-end',
+        },
+        {
+          id: 999102,
+          title: { english: 'Solo Leveling', userPreferred: 'Solo Leveling', romaji: 'Na Honza Man Level Up' },
+          coverImage: { extraLarge: 'https://upload.wikimedia.org/wikipedia/en/9/99/Solo_Leveling_Webtoon_cover.png', large: 'https://upload.wikimedia.org/wikipedia/en/9/99/Solo_Leveling_Webtoon_cover.png', medium: 'https://upload.wikimedia.org/wikipedia/en/9/99/Solo_Leveling_Webtoon_cover.png' },
+          bannerImage: 'https://upload.wikimedia.org/wikipedia/en/9/99/Solo_Leveling_Webtoon_cover.png',
+          description: '10 years ago, after "the Gate" that connected the real world with the monster world opened, some of the ordinary, everyday people received the power to hunt monsters within the Gate.',
+          averageScore: 95,
+          status: 'FINISHED',
+          genres: ['Action', 'Fantasy'],
+          format: 'MANGA',
+          chapters: 200,
+          hid: 'solo-leveling',
+        },
+        {
+          id: 999103,
+          title: { english: 'Omniscient Reader', userPreferred: 'Omniscient Reader', romaji: 'Omniscient Reader' },
+          coverImage: { extraLarge: 'https://upload.wikimedia.org/wikipedia/en/1/1b/Omniscient_Reader%27s_Viewpoint_cover.jpg', large: 'https://upload.wikimedia.org/wikipedia/en/1/1b/Omniscient_Reader%27s_Viewpoint_cover.jpg', medium: 'https://upload.wikimedia.org/wikipedia/en/1/1b/Omniscient_Reader%27s_Viewpoint_cover.jpg' },
+          bannerImage: 'https://upload.wikimedia.org/wikipedia/en/1/1b/Omniscient_Reader%27s_Viewpoint_cover.jpg',
+          description: 'Dokja was an average office worker whose sole interest was reading his favorite web novel. When the novel becomes reality, he is the only person who knows how the world will end.',
+          averageScore: 94,
+          status: 'RELEASING',
+          genres: ['Action', 'Fantasy'],
+          format: 'MANGA',
+          chapters: 190,
+          hid: 'omniscient-readers-viewpoint',
+        }
+      ];
+
+      const activeTrending = (feed && feed.trending && feed.trending.length > 0) ? feed.trending : FALLBACK_TITLES;
+      const activePopular = (feed && feed.popular && feed.popular.length > 0) ? feed.popular : activeTrending;
+      const activeTopRated = (feed && feed.topRated && feed.topRated.length > 0) ? feed.topRated : activeTrending;
+      const activeNewest = (feed && feed.newest && feed.newest.length > 0) ? feed.newest : activeTrending;
+      const activeUpcoming = (feed && feed.upcoming && feed.upcoming.length > 0) ? feed.upcoming : activeTrending;
+      const activeMovies = (feed && feed.movies && feed.movies.length > 0) ? feed.movies : activeTrending;
+      const activeAction = (feed && feed.action && feed.action.length > 0) ? feed.action : activeTrending;
+      const activeFantasy = (feed && feed.fantasy && feed.fantasy.length > 0) ? feed.fantasy : activeTrending;
+      const activeRomCom = (feed && feed.romcom && feed.romcom.length > 0) ? feed.romcom : activeTrending;
+
+      setTrendingAnime(activeTrending);
+      setPopularAnime(activePopular);
+      setTopRatedAnime(activeTopRated);
+      setNewestAnime(activeNewest);
+      setUpcomingAnime(activeUpcoming);
+      setMoviesAnime(activeMovies);
+      setActionAnime(activeAction);
+      setFantasyAnime(activeFantasy);
+      setRomComAnime(activeRomCom);
+
       if (feed && feed.trending && feed.trending.length > 0) {
-        setTrendingAnime(feed.trending);
-        setPopularAnime(feed.popular);
-        setTopRatedAnime(feed.topRated);
-        setNewestAnime(feed.newest);
-        setUpcomingAnime(feed.upcoming);
-        setMoviesAnime(feed.movies);
-        setActionAnime(feed.action);
-        setFantasyAnime(feed.fantasy);
-        setRomComAnime(feed.romcom);
         saveHomeFeedCache(feed);
       }
     } catch (err: any) {
       console.error('Error loading home content:', err);
-      // Only notify if we don't already have catalog in state
-      if (trendingAnime.length === 0) {
-        showToast('error', 'Rate limit or network issue. Serving cached catalog.', 'Catalog Notice');
-      }
     } finally {
       setIsMainLoading(false);
     }
@@ -1157,9 +1206,10 @@ export function App() {
             {currentTab === 'home' && (
               <div className="space-y-8 pb-12">
                 {/* Hero Carousel Spotlight */}
-                {trendingAnime.length > 0 && (
+                {(trendingAnime.length > 0 || isMainLoading) && (
                   <HeroSpotlight
                     animeList={trendingAnime.slice(0, 5)}
+                    isLoading={isMainLoading}
                     onOpenDetails={handleOpenDetails}
                     onPlayStream={handlePlayStream}
                     onQuickTrack={handleQuickAdd}
@@ -1186,7 +1236,7 @@ export function App() {
                   {settings.is18PlusMode ? (
                     <div className="space-y-8 pt-2">
                       {/* 🔥 18+ Trending Hits */}
-                      {trendingAnime.length > 0 && (
+                      {(trendingAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="🔥 18+ Trending Hits"
                           category="trending"
@@ -1202,7 +1252,7 @@ export function App() {
                       )}
 
                       {/* 🌟 Latest 18+ Releases */}
-                      {newestAnime.length > 0 && (
+                      {(newestAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="🌟 Latest 18+ Releases"
                           category="newest"
@@ -1218,7 +1268,7 @@ export function App() {
                       )}
 
                       {/* 💎 Uncensored Masterpieces */}
-                      {upcomingAnime.length > 0 && (
+                      {(upcomingAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="💎 Uncensored Masterpieces"
                           category="uncensored"
@@ -1234,7 +1284,7 @@ export function App() {
                       )}
 
                       {/* 🏆 Top Rated 18+ Catalog */}
-                      {topRatedAnime.length > 0 && (
+                      {(topRatedAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="🏆 Top Rated 18+ Catalog"
                           category="topRated"
@@ -1252,7 +1302,7 @@ export function App() {
                   ) : (
                     <div className="space-y-8 pt-2">
                       {/* Trending Now */}
-                      {trendingAnime.length > 0 && (
+                      {(trendingAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Trending Now"
                           category="trending"
@@ -1268,7 +1318,7 @@ export function App() {
                       )}
 
                       {/* Most Popular */}
-                      {popularAnime.length > 0 && (
+                      {(popularAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Most Popular Anime"
                           category="popular"
@@ -1284,7 +1334,7 @@ export function App() {
                       )}
 
                       {/* Top Rated All-Time */}
-                      {topRatedAnime.length > 0 && (
+                      {(topRatedAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Top Rated of All Time"
                           category="topRated"
@@ -1300,7 +1350,7 @@ export function App() {
                       )}
 
                       {/* Newest Releases & Episodes */}
-                      {newestAnime.length > 0 && (
+                      {(newestAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Newest Releases & Episodes"
                           category="newest"
@@ -1316,7 +1366,7 @@ export function App() {
                       )}
 
                       {/* Highly Anticipated & Upcoming */}
-                      {upcomingAnime.length > 0 && (
+                      {(upcomingAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Upcoming & Most Anticipated"
                           category="upcoming"
@@ -1332,7 +1382,7 @@ export function App() {
                       )}
 
                       {/* Anime Movies & Feature Films */}
-                      {moviesAnime.length > 0 && (
+                      {(moviesAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Anime Movies & Films"
                           category="movies"
@@ -1348,7 +1398,7 @@ export function App() {
                       )}
 
                       {/* Top Action & Battle Shonen */}
-                      {actionAnime.length > 0 && (
+                      {(actionAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Top Action & Battle Anime"
                           category="action"
@@ -1364,7 +1414,7 @@ export function App() {
                       )}
 
                       {/* Top Fantasy & Supernatural */}
-                      {fantasyAnime.length > 0 && (
+                      {(fantasyAnime.length > 0 || isMainLoading) && (
                         <HorizontalAnimeRow
                           title="Top Fantasy & Magic"
                           category="fantasy"

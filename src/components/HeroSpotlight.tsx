@@ -8,6 +8,7 @@ import { getAnimeReleaseStatus } from '../services/releaseHelper';
 interface HeroSpotlightProps {
   animeList?: Anime[];
   featuredAnime?: Anime | null;
+  isLoading?: boolean;
   onOpenDetails: (anime: Anime) => void;
   onPlayStream: (anime: Anime) => void;
   onQuickTrack?: (anime: Anime) => void;
@@ -19,6 +20,7 @@ interface HeroSpotlightProps {
 export const HeroSpotlight: React.FC<HeroSpotlightProps> = ({
   animeList = [],
   featuredAnime,
+  isLoading = false,
   onOpenDetails,
   onPlayStream,
   onQuickTrack,
@@ -51,7 +53,17 @@ export const HeroSpotlight: React.FC<HeroSpotlightProps> = ({
     return () => clearInterval(interval);
   }, [list.length]);
 
-  if (list.length === 0) return null;
+  if (isLoading || list.length === 0) {
+    return (
+      <div className="relative w-full h-[380px] sm:h-[480px] bg-slate-900/60 animate-pulse border-b border-white/10 flex items-end p-6">
+        <div className="space-y-3 max-w-xl w-full">
+          <div className="h-8 w-2/3 bg-white/10 rounded-lg animate-pulse" />
+          <div className="h-4 w-1/2 bg-white/10 rounded animate-pulse" />
+          <div className="h-10 w-32 bg-pink-600/30 rounded-xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
