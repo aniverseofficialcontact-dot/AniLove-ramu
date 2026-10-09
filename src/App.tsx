@@ -33,6 +33,7 @@ import {
 
 import { Navbar, TabType } from './components/Navbar';
 import { HeroSpotlight } from './components/HeroSpotlight';
+import { ReaderView } from './components/ReaderView';
 import { AnimeCard } from './components/AnimeCard';
 import { HorizontalAnimeRow } from './components/HorizontalAnimeRow';
 import { ContinueWatchingSection } from './components/ContinueWatchingSection';
@@ -1139,7 +1140,20 @@ export function App() {
 
       {/* Main View Container */}
       <main className="flex-1 relative z-10 pt-0">
-        <>
+        {activeWatchEpisode ? (
+          <ReaderView
+            manga={activeWatchEpisode.anime}
+            initialChapterNumber={activeWatchEpisode.episodeNumber}
+            onBack={() => setActiveWatchEpisode(null)}
+            onChapterChange={(chNum) => {
+              setActiveWatchEpisode((prev) => (prev ? { ...prev, episodeNumber: chNum } : null));
+            }}
+            onUpdateProgress={handleUpdateProgress}
+            onUpdateStatus={handleUpdateStatus}
+            settings={settings}
+          />
+        ) : (
+          <>
             {/* VIEW 1: HOME (Hero Spotlight, Continue Watching, Categories: Trending, Popular, Top Rated, Newest) */}
             {currentTab === 'home' && (
               <div className="space-y-8 pb-12">
@@ -1552,6 +1566,7 @@ export function App() {
               </Suspense>
             )}
           </>
+        )}
         </main>
     </div>
 
