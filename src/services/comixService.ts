@@ -13,6 +13,14 @@ const HEADERS: Record<string, string> = {
   'Referer': 'https://comix.to/',
 };
 
+export function formatComixImageUrl(urlOrObj: any): string | null {
+  if (!urlOrObj) return null;
+  const raw = typeof urlOrObj === 'string' ? urlOrObj : urlOrObj.large || urlOrObj.medium || urlOrObj.url || urlOrObj.src || urlOrObj.path;
+  if (!raw) return null;
+  if (raw.startsWith('http')) return raw;
+  return `https://static.comix.to${raw.startsWith('/') ? '' : '/'}${raw}`;
+}
+
 /**
  * Fetch HTML directly from Comix.to with prominent Logcat logging
  */
@@ -72,11 +80,11 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
 
     if (Array.isArray(pagesData)) {
       pagesData.forEach((img: any, i: number) => {
-        const imgUrl = typeof img === 'string' ? img : img.url || img.src || img.path;
+        const imgUrl = formatComixImageUrl(img);
         if (imgUrl) {
           pages.push({
             pageNumber: i + 1,
-            url: imgUrl.startsWith('http') ? imgUrl : `https://static.comix.to${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`,
+            url: imgUrl,
           });
         }
       });
@@ -89,9 +97,10 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
       pagesData.items.forEach((item: any, i: number) => {
         const urlPart = item.url || item.path || item.src;
         if (urlPart) {
+          const finalUrl = urlPart.startsWith('http') ? urlPart : `${baseUrl.replace(/\/$/, '')}/${urlPart.replace(/^\//, '')}`;
           pages.push({
             pageNumber: i + 1,
-            url: urlPart.startsWith('http') ? urlPart : `${baseUrl.replace(/\/$/, '')}/${urlPart.replace(/^\//, '')}`,
+            url: finalUrl,
           });
         }
       });
@@ -113,9 +122,10 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
           pList.items.forEach((item: any, i: number) => {
             const urlPart = item.url || item.path || item.src;
             if (urlPart) {
+              const finalUrl = urlPart.startsWith('http') ? urlPart : `${baseUrl.replace(/\/$/, '')}/${urlPart.replace(/^\//, '')}`;
               pages.push({
                 pageNumber: i + 1,
-                url: urlPart.startsWith('http') ? urlPart : `${baseUrl.replace(/\/$/, '')}/${urlPart.replace(/^\//, '')}`,
+                url: finalUrl,
               });
             }
           });
@@ -125,11 +135,11 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
           }
         } else if (Array.isArray(pList) && pList.length > 0) {
           pList.forEach((img: any, i: number) => {
-            const imgUrl = typeof img === 'string' ? img : img.url || img.src || img.path;
+            const imgUrl = formatComixImageUrl(img);
             if (imgUrl) {
               pages.push({
                 pageNumber: i + 1,
-                url: imgUrl.startsWith('http') ? imgUrl : `https://static.comix.to${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`,
+                url: imgUrl,
               });
             }
           });
@@ -148,11 +158,11 @@ export function extractChapterImages(html: string): { pageNumber: number; url: s
     try {
       const parsed = JSON.parse(jsonMatches[1]);
       parsed.forEach((img: any, i: number) => {
-        const imgUrl = typeof img === 'string' ? img : img.url || img.src;
+        const imgUrl = formatComixImageUrl(img);
         if (imgUrl) {
           pages.push({
             pageNumber: i + 1,
-            url: imgUrl.startsWith('http') ? imgUrl : `https://static.comix.to${imgUrl}`,
+            url: imgUrl,
           });
         }
       });
@@ -234,8 +244,8 @@ export async function fetchComixHomeFeed(): Promise<ComixHomeSections> {
     let newAdditionsRaw: any[] = [];
 
     for (const [k, v] of Object.entries(queries)) {
-      if (k.includes('"trending"')) trendingRaw = Array.isArray(v) ? v : [];
-      else if (k.includes('"follows"')) mostFollowedRaw = Array.isArray(v) ? v : [];
+      if (k.includes('"trending"')) trendingRaw = Array.isArray(v) ? v : (v as any)?.items || [];
+      else if (k.includes('"follows"')) mostFollowedRaw = Array.isArray(v) ? v : (v as any)?.items || [];
       else if (k.includes('"scope":"hot"')) hotUpdatesRaw = Array.isArray(v) ? v : (v as any)?.items || [];
       else if (k.includes('"created_at":"desc"')) newAdditionsRaw = Array.isArray(v) ? v : (v as any)?.items || [];
     }
@@ -243,19 +253,21 @@ export async function fetchComixHomeFeed(): Promise<ComixHomeSections> {
     const mapItem = (item: any): ComixMangaItem => {
       const hid = item.hid || item.hash_id || '';
       const slug = item.slug || '';
-      const id = item.url ? item.url.replace('/title/', '') : `${hid}-${slug}`;
+      const id = item.url ? item.url.replace('/title/', '') : `${hid}-${slug}`.replace(/^-/, '');
+      const posterUrl = formatComixImageUrl(item.poster);
+
       return {
-        id,
-        hid,
+        id: id || hid,
+        hid: hid || id,
         title: item.title || 'Untitled',
         slug,
-        poster: item.poster?.large || item.poster?.medium || null,
+        poster: posterUrl,
         type: item.type,
         latestChapter: item.latestChapter !== undefined ? `Ch.${item.latestChapter}` : undefined,
         status: item.status,
         score: item.ratedAvg || item.rated_avg,
         synopsis: item.synopsis,
-        genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.title || g.label) : [],
+        genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.title || g.label || g.name || g) : [],
       };
     };
 
@@ -378,7 +390,7 @@ export async function searchComix(
             hid: hid || `${item.id}`,
             title: item.title || 'Untitled',
             slug,
-            poster: item.poster?.large || item.poster?.medium || (typeof item.poster === 'string' ? item.poster : null),
+            poster: formatComixImageUrl(item.poster),
             type: item.type,
             latestChapter: item.latestChapter !== undefined ? `Ch.${item.latestChapter}` : undefined,
             status: item.status,
@@ -430,7 +442,7 @@ export async function searchComix(
         hid: hid || `${item.id}`,
         title: item.title || 'Untitled',
         slug,
-        poster: item.poster?.large || item.poster?.medium || (typeof item.poster === 'string' ? item.poster : null),
+        poster: formatComixImageUrl(item.poster),
         type: item.type,
         latestChapter: item.latestChapter !== undefined ? `Ch.${item.latestChapter}` : undefined,
         status: item.status,
@@ -505,7 +517,7 @@ export async function fetchComixChapters(comixIdOrHash: string, page: number = 1
 
     for (const [k, v] of Object.entries(queries)) {
       if (k.includes('"chapters"')) {
-        chaptersList = Array.isArray(v) ? v : (v as any)?.items || [];
+        chaptersList = Array.isArray(v) ? v : (v as any)?.items || (v as any)?.data || [];
         break;
       }
     }
