@@ -1,28 +1,29 @@
-import { registerPlugin, Capacitor } from '@capacitor/core';
-import { Anime, Episode } from '../types';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Anime, StreamingEpisode } from '../types';
 
 export interface DownloadItemInfo {
   id: string;
   anilistId: number;
   animeTitle: string;
   episodeNumber: number;
-  audio: StreamLanguage;
+  episodeTitle: string;
   quality: string;
-  serverName: string;
-  status: 'QUEUED' | 'DOWNLOADING' | 'PAUSED' | 'COMPLETED' | 'ERROR';
+  audio: string;
+  downloadUrl: string;
+  status: 'QUEUED' | 'DOWNLOADING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   progress: number;
   bytesDownloaded: number;
   totalBytes: number;
+  speed: number;
+  error?: string;
   localFilePath?: string;
   localSubPath?: string;
+  subtitlesJson?: string;
   thumbnail?: string;
-  speed?: string;
-  error?: string;
 }
 
 export interface DownloadPluginInterface {
   startDownload(options: { item: any }): Promise<void>;
-  downloadImage(options: { imageUrl: string; fileName?: string }): Promise<{ success: boolean; filePath: string }>;
   pauseDownload(options: { downloadId: string }): Promise<void>;
   resumeDownload(options: { downloadId: string }): Promise<void>;
   cancelDownload(options: { downloadId: string }): Promise<void>;
@@ -31,16 +32,13 @@ export interface DownloadPluginInterface {
     localFilePath: string;
     localSubPath?: string;
     title: string;
-    animeTitle?: string;
+    animeTitle: string;
     episodeNumber: number;
-    audio?: string;
-    quality?: string;
+    audio: string;
+    quality: string;
   }): Promise<void>;
-  exportToPublicStorage(options: {
-    localFilePath: string;
-    animeTitle?: string;
-    episodeNumber: number;
-  }): Promise<{ success: boolean; exportPath: string; fileName: string }>;
+  exportToPublicStorage(options: { downloadId: string }): Promise<{ publicPath: string }>;
+  downloadImage(options: { imageUrl: string; fileName: string }): Promise<{ success: boolean; path?: string }>;
   addListener(
     eventName: 'onDownloadProgress',
     listenerFunc: (data: {
@@ -48,7 +46,7 @@ export interface DownloadPluginInterface {
       progress: number;
       bytesDownloaded: number;
       totalBytes: number;
-      speed: string;
+      speed: number;
     }) => void
   ): Promise<any>;
   addListener(
@@ -70,35 +68,40 @@ const subscribers = new Set<DownloadSubscriber>();
 
 let downloadsCache: DownloadItemInfo[] = [];
 
-// Initialize listeners on mobile
-if (Capacitor.isNativePlatform()) {
-  DownloadPlugin.addListener('onDownloadProgress', data => {
-    const item = downloadsCache.find(d => d.id === data.downloadId);
-    if (item) {
-      item.progress = data.progress;
-      item.bytesDownloaded = data.bytesDownloaded;
-      item.totalBytes = data.totalBytes;
-      item.speed = data.speed;
-      notifySubscribers();
-    }
-  });
+const isPluginAvailable = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('DownloadPlugin');
 
-  DownloadPlugin.addListener('onDownloadStatusChange', async data => {
-    const item = downloadsCache.find(d => d.id === data.downloadId);
-    if (item) {
-      item.status = data.status as any;
-      if (data.error) item.error = data.error;
-      if (data.localFilePath) item.localFilePath = data.localFilePath;
-      if (data.localSubPath) item.localSubPath = data.localSubPath;
-      notifySubscribers();
-    }
-    if (data.status === 'COMPLETED') {
-      await refreshDownloadsList();
-    }
-  });
+// Safe Initialization of plugin listeners on mobile
+if (isPluginAvailable()) {
+  try {
+    DownloadPlugin.addListener('onDownloadProgress', data => {
+      const item = downloadsCache.find(d => d.id === data.downloadId);
+      if (item) {
+        item.progress = data.progress;
+        item.bytesDownloaded = data.bytesDownloaded;
+        item.totalBytes = data.totalBytes;
+        item.speed = data.speed;
+        notifySubscribers();
+      }
+    }).catch(() => {});
 
-  // Initial fetch
-  refreshDownloadsList();
+    DownloadPlugin.addListener('onDownloadStatusChange', async data => {
+      const item = downloadsCache.find(d => d.id === data.downloadId);
+      if (item) {
+        item.status = data.status as any;
+        if (data.error) item.error = data.error;
+        if (data.localFilePath) item.localFilePath = data.localFilePath;
+        if (data.localSubPath) item.localSubPath = data.localSubPath;
+        notifySubscribers();
+      }
+      if (data.status === 'COMPLETED') {
+        await refreshDownloadsList().catch(() => {});
+      }
+    }).catch(() => {});
+
+    refreshDownloadsList().catch(() => {});
+  } catch (e) {
+    console.warn('DownloadPlugin setup notice:', e);
+  }
 }
 
 function notifySubscribers() {
@@ -106,16 +109,15 @@ function notifySubscribers() {
 }
 
 export async function refreshDownloadsList(): Promise<DownloadItemInfo[]> {
-  if (!Capacitor.isNativePlatform()) {
+  if (!isPluginAvailable()) {
     return downloadsCache;
   }
   try {
     const result = await DownloadPlugin.getDownloads();
-    downloadsCache = result.downloads || [];
+    downloadsCache = result?.downloads || [];
     notifySubscribers();
     return downloadsCache;
   } catch (err) {
-    console.warn('Error fetching downloads from plugin:', err);
     return downloadsCache;
   }
 }
@@ -128,83 +130,79 @@ export function subscribeToDownloads(callback: DownloadSubscriber): () => void {
   };
 }
 
-function getMovieBoxAudioLabel(audio: StreamLanguage): string {
-  switch (audio) {
-    case 'SUB': return 'Japanese';
-    case 'DUB': return 'English';
-    case 'HIN': return 'Hindi';
-    case 'TAM': return 'Tamil';
-    case 'TEL': return 'Telugu';
-    case 'MAL': return 'Malayalam';
-    case 'KAN': return 'Kannada';
-    case 'BEN': return 'Bengali';
-    default: return 'English';
-  }
-}
+export async function queueEpisodeDownload(
+  anime: Anime,
+  ep: StreamingEpisode & { number: number },
+  quality: string = '1080p',
+  audio: string = 'sub'
+): Promise<void> {
+  const downloadId = `${anime.id}_ep_${ep.number}_${quality}_${audio}`;
 
-function getSubLangCode(lang: string): string {
-  const lower = lang.toLowerCase();
-  if (lower.includes('eng')) return 'en';
-  if (lower.includes('spa') || lower.includes('spanish')) return 'es';
-  if (lower.includes('fre') || lower.includes('french')) return 'fr';
-  if (lower.includes('ger') || lower.includes('german')) return 'de';
-  if (lower.includes('ita') || lower.includes('italian')) return 'it';
-  if (lower.includes('por') || lower.includes('portuguese')) return 'pt';
-  if (lower.includes('rus') || lower.includes('russian')) return 'ru';
-  if (lower.includes('ara') || lower.includes('arabic')) return 'ar';
-  if (lower.includes('jap') || lower.includes('japanese')) return 'ja';
-  if (lower.includes('hin') || lower.includes('hindi')) return 'hi';
-  return 'en';
+  const item: any = {
+    id: downloadId,
+    anilistId: anime.id,
+    animeTitle: anime.title?.english || anime.title?.romaji || 'Anime',
+    episodeNumber: ep.number,
+    episodeTitle: ep.title || `Episode ${ep.number}`,
+    quality,
+    audio,
+    downloadUrl: ep.url || '',
+    thumbnail: ep.thumbnail || anime.coverImage?.large || '',
+  };
+
+  if (isPluginAvailable()) {
+    try {
+      await DownloadPlugin.startDownload({ item });
+    } catch (e) {}
+  }
+
+  const existing = downloadsCache.find(d => d.id === downloadId);
+  if (!existing) {
+    downloadsCache.push({
+      ...item,
+      status: 'QUEUED',
+      progress: 0,
+      bytesDownloaded: 0,
+      totalBytes: 0,
+    });
+  } else {
+    existing.status = 'QUEUED';
+  }
+
+  notifySubscribers();
 }
 
 export async function queueBatchEpisodeDownloads(
   anime: Anime,
-  episodes: Episode[],
-  audio: StreamLanguage = 'DUB',
-  serverName: string = 'Server 1',
+  episodes: (StreamingEpisode & { number: number })[],
   quality: string = '1080p',
-  subtitleLang: string = 'English'
+  audio: string = 'sub'
 ): Promise<{ queuedCount: number; errors: string[] }> {
   let queuedCount = 0;
   const errors: string[] = [];
 
-  const displayTitle =
-    anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Anime';
-
-  const targetEpNumbers = episodes.map(e => e.number);
-  const epsListStr = targetEpNumbers.join(',');
-
-  // Process all episodes concurrently in parallel
-  const tasks = episodes.map(async (ep) => {
+  const tasks = episodes.map(async ep => {
     try {
-      let streamUrl = '';
-      let selectedServerName = serverName;
-      let effectiveQuality = quality;
-      let subtitleUrl = '';
-      let subtitleUrl2 = '';
-
-      const downloadId = `${anime.id}_ep_${ep.number}_${audio.toLowerCase()}_${effectiveQuality}`;
+      const downloadId = `${anime.id}_ep_${ep.number}_${quality}_${audio}`;
 
       const item: any = {
         id: downloadId,
         anilistId: anime.id,
-        animeTitle: displayTitle,
+        animeTitle: anime.title?.english || anime.title?.romaji || 'Anime',
         episodeNumber: ep.number,
-        streamUrl,
-        pageUrl: isMovieBox ? 'https://netfilm.world/' : streamUrl,
-        subtitleUrl: subtitleUrl || '',
-        subtitleUrl2: subtitleUrl2 || '',
+        episodeTitle: ep.title || `Episode ${ep.number}`,
+        quality,
         audio,
-        serverName: selectedServerName,
-        quality: effectiveQuality,
+        downloadUrl: ep.url || '',
         thumbnail: ep.thumbnail || anime.coverImage?.large || '',
       };
 
-      if (Capacitor.isNativePlatform()) {
-        await DownloadPlugin.startDownload({ item });
+      if (isPluginAvailable()) {
+        try {
+          await DownloadPlugin.startDownload({ item });
+        } catch (e) {}
       }
 
-      // Add to local cache if not present
       const existing = downloadsCache.find(d => d.id === downloadId);
       if (!existing) {
         downloadsCache.push({
@@ -230,8 +228,10 @@ export async function queueBatchEpisodeDownloads(
 }
 
 export async function pauseDownload(downloadId: string): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    await DownloadPlugin.pauseDownload({ downloadId });
+  if (isPluginAvailable()) {
+    try {
+      await DownloadPlugin.pauseDownload({ downloadId });
+    } catch (e) {}
   }
   const item = downloadsCache.find(d => d.id === downloadId);
   if (item) {
@@ -241,8 +241,10 @@ export async function pauseDownload(downloadId: string): Promise<void> {
 }
 
 export async function resumeDownload(downloadId: string): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    await DownloadPlugin.resumeDownload({ downloadId });
+  if (isPluginAvailable()) {
+    try {
+      await DownloadPlugin.resumeDownload({ downloadId });
+    } catch (e) {}
   }
   const item = downloadsCache.find(d => d.id === downloadId);
   if (item) {
@@ -253,8 +255,10 @@ export async function resumeDownload(downloadId: string): Promise<void> {
 }
 
 export async function cancelDownload(downloadId: string): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    await DownloadPlugin.cancelDownload({ downloadId });
+  if (isPluginAvailable()) {
+    try {
+      await DownloadPlugin.cancelDownload({ downloadId });
+    } catch (e) {}
   }
   downloadsCache = downloadsCache.filter(d => d.id !== downloadId);
   notifySubscribers();
@@ -264,9 +268,8 @@ export async function playOfflineEpisode(download: DownloadItemInfo): Promise<vo
   let filePath = download.localFilePath;
   let subPath = download.localSubPath;
 
-  // If localFilePath is missing in the passed object, attempt to refresh and find it
-  if (!filePath && Capacitor.isNativePlatform()) {
-    const latest = await refreshDownloadsList();
+  if (!filePath && isPluginAvailable()) {
+    const latest = await refreshDownloadsList().catch(() => []);
     const matched = latest.find(
       d => d.id === download.id || (d.anilistId === download.anilistId && d.episodeNumber === download.episodeNumber)
     );
@@ -280,7 +283,7 @@ export async function playOfflineEpisode(download: DownloadItemInfo): Promise<vo
     throw new Error('Local file path is missing');
   }
 
-  if (Capacitor.isNativePlatform()) {
+  if (isPluginAvailable()) {
     await DownloadPlugin.playOffline({
       localFilePath: filePath,
       localSubPath: subPath,
@@ -299,58 +302,34 @@ export function isEpisodeDownloaded(anilistId: number, episodeNumber: number): b
   );
 }
 
-export function getEpisodeDownloadItem(
-  anilistId: number,
-  episodeNumber: number
-): DownloadItemInfo | undefined {
-  return downloadsCache.find(d => d.anilistId === anilistId && d.episodeNumber === episodeNumber);
+export function getDownloadedEpisodes(anilistId: number): DownloadItemInfo[] {
+  return downloadsCache.filter(d => d.anilistId === anilistId && d.status === 'COMPLETED');
 }
 
-export async function exportDownloadToPublicStorage(
-  download: DownloadItemInfo
-): Promise<{ success: boolean; exportPath: string; fileName: string }> {
-  let filePath = download.localFilePath;
-
-  if (!filePath && Capacitor.isNativePlatform()) {
-    const latest = await refreshDownloadsList();
-    const matched = latest.find(
-      d => d.id === download.id || (d.anilistId === download.anilistId && d.episodeNumber === download.episodeNumber)
-    );
-    if (matched && matched.localFilePath) {
-      filePath = matched.localFilePath;
+export async function exportDownloadToPublic(downloadId: string): Promise<string | null> {
+  if (isPluginAvailable()) {
+    try {
+      const result = await DownloadPlugin.exportToPublicStorage({ downloadId });
+      return result?.publicPath || null;
+    } catch (e) {
+      return null;
     }
   }
-
-  if (!filePath) {
-    throw new Error('Local file path is missing or file not found.');
-  }
-
-  if (Capacitor.isNativePlatform()) {
-    return await DownloadPlugin.exportToPublicStorage({
-      localFilePath: filePath,
-      animeTitle: download.animeTitle,
-      episodeNumber: download.episodeNumber,
-    });
-  } else {
-    throw new Error('Exporting to device storage is only supported on Android native devices.');
-  }
+  return null;
 }
 
-export async function downloadFanArtImage(imageUrl: string, fileName?: string): Promise<{ success: boolean; filePath: string }> {
-  if (Capacitor.isNativePlatform()) {
-    return await DownloadPlugin.downloadImage({ imageUrl, fileName });
-  } else {
-    // Web Browser Fallback
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = fileName || `AniLove_FanArt_${Date.now()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-    return { success: true, filePath: '' };
+export const exportDownloadToPublicStorage = exportDownloadToPublic;
+
+export async function downloadCoverImageToGallery(imageUrl: string, fileName: string): Promise<boolean> {
+  if (isPluginAvailable()) {
+    try {
+      const res = await DownloadPlugin.downloadImage({ imageUrl, fileName });
+      return Boolean(res?.success);
+    } catch (e) {
+      return false;
+    }
   }
+  return false;
 }
+
+export const downloadFanArtImage = downloadCoverImageToGallery;

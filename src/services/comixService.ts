@@ -278,10 +278,50 @@ export async function searchComix(
   query: string = '',
   options?: { genres?: string; sort?: string; page?: number }
 ): Promise<ComixMangaItem[]> {
+  const page = options?.page || 1;
+  const cleanQuery = query ? query.trim() : '';
+
+  // Method 1: Try Comix REST API Endpoint (/api/v1/manga)
   try {
-    const page = options?.page || 1;
+    let apiUrl = `https://comix.to/api/v1/manga?page=${page}`;
+    if (cleanQuery) apiUrl += `&keyword=${encodeURIComponent(cleanQuery)}`;
+    if (options?.genres) apiUrl += `&genres=${encodeURIComponent(options.genres)}`;
+    if (options?.sort) apiUrl += `&sort=${encodeURIComponent(options.sort)}`;
+
+    const res = await fetch(apiUrl, { method: 'GET', headers: HEADERS }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      const items = data?.result?.items || data?.items || data?.result || [];
+      if (Array.isArray(items) && items.length > 0) {
+        return items.map((item: any) => {
+          const hid = item.hid || item.hash_id || '';
+          const slug = item.slug || '';
+          const id = item.url ? item.url.replace('/title/', '') : `${hid}-${slug}`.replace(/^-/, '');
+
+          return {
+            id: id || `${item.id}`,
+            hid: hid || `${item.id}`,
+            title: item.title || 'Untitled',
+            slug,
+            poster: item.poster?.large || item.poster?.medium || (typeof item.poster === 'string' ? item.poster : null),
+            type: item.type,
+            latestChapter: item.latestChapter !== undefined ? `Ch.${item.latestChapter}` : undefined,
+            status: item.status,
+            score: item.ratedAvg || item.rated_avg,
+            synopsis: item.synopsis,
+            genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.title || g.label || g.name || g) : [],
+          };
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[comixService] JSON search notice, trying HTML browse fallback:', err);
+  }
+
+  // Method 2: Fetch HTML from /browse or /manga page with embedded initial-data
+  try {
     let targetUrl = `https://comix.to/browse?page=${page}`;
-    if (query) targetUrl += `&keyword=${encodeURIComponent(query)}`;
+    if (cleanQuery) targetUrl += `&keyword=${encodeURIComponent(cleanQuery)}`;
     if (options?.genres) targetUrl += `&genres=${encodeURIComponent(options.genres)}`;
     if (options?.sort) targetUrl += `&sort=${encodeURIComponent(options.sort)}`;
 
@@ -298,7 +338,7 @@ export async function searchComix(
       }
     }
 
-    if (items.length === 0 && !query) {
+    if (items.length === 0 && !cleanQuery) {
       const homeFeed = await fetchComixHomeFeed();
       return homeFeed.trending;
     }
@@ -306,20 +346,20 @@ export async function searchComix(
     return items.map((item: any) => {
       const hid = item.hid || item.hash_id || '';
       const slug = item.slug || '';
-      const id = item.url ? item.url.replace('/title/', '') : `${hid}-${slug}`;
+      const id = item.url ? item.url.replace('/title/', '') : `${hid}-${slug}`.replace(/^-/, '');
 
       return {
-        id,
-        hid,
+        id: id || `${item.id}`,
+        hid: hid || `${item.id}`,
         title: item.title || 'Untitled',
         slug,
-        poster: item.poster?.large || item.poster?.medium || null,
+        poster: item.poster?.large || item.poster?.medium || (typeof item.poster === 'string' ? item.poster : null),
         type: item.type,
         latestChapter: item.latestChapter !== undefined ? `Ch.${item.latestChapter}` : undefined,
         status: item.status,
         score: item.ratedAvg || item.rated_avg,
         synopsis: item.synopsis,
-        genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.title || g.label) : [],
+        genres: Array.isArray(item.genres) ? item.genres.map((g: any) => g.title || g.label || g.name || g) : [],
       };
     });
   } catch (err) {
